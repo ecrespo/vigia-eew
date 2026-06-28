@@ -1,0 +1,79 @@
+# pyproject.toml — Vigía-eew
+# Gestor de dependencias: uv · Build backend: hatchling (ADR-007, RF-27)
+# Trazabilidad: RF-26 (entry point de consola), RF-27 (paquete PyPI, versionado semántico)
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vigia-eew"
+version = "0.1.0"                       # versionado semántico (RF-27)
+description = "Agente de escritorio de alerta sísmica en tiempo real, imposible de ignorar (EMSC push + USGS respaldo)."
+readme = "README.md"
+requires-python = ">=3.11"             # uso de tomllib de la stdlib (RNF-11)
+license = { file = "LICENSE" }
+authors = [{ name = "Ernesto Crespo", email = "ecrespo@gmail.com" }]
+keywords = ["earthquake", "sismo", "alerta", "eew", "emsc", "usgs", "venezuela"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+# Dependencias de runtime (ver IMPLEMENTATION-PLAN §5).
+dependencies = [
+    "websockets>=12.0",        # WS EMSC con keepalive nativo (RF-01/ADR-009)
+    "httpx>=0.27",             # REST USGS async (RF-05/ADR-009)
+    "pydantic>=2.6",           # validación de modelos y config (RF-07/RF-24)
+    "desktop-notifier>=5.0",   # toast multiplataforma (RF-14)
+    "platformdirs>=4.0",       # rutas de estado/config por SO (RF-06/RF-10)
+    "tzdata>=2024.1",          # zona America/Caracas en Win/macOS (RF-18/RNF-12)
+]
+
+[project.urls]
+Homepage = "https://github.com/ecrespo/vigia-eew"
+Repository = "https://github.com/ecrespo/vigia-eew"
+Issues = "https://github.com/ecrespo/vigia-eew/issues"
+
+# Entry point de consola (RF-26). El módulo cli se completa en la Fase 5.
+[project.scripts]
+vigia-eew = "vigia_eew.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+# --- Configuración de herramientas ---
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vigia_eew"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/vigia_eew", "docs", "ARCHITECTURE.md", "config.toml.example"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
