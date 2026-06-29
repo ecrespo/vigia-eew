@@ -1,21 +1,24 @@
-"""Punto de entrada de consola `vigia-eew` (RF-26).
+"""Punto de entrada de consola `vigia-eew` (RF-26, RF-21).
 
-NOTA: Este módulo es un *stub* de la Fase 1. La CLI completa (arranque del agente,
-`--simulate`, instalación de autoarranque) se implementa en la Fase 5
-(ver `docs/IMPLEMENTATION-PLAN.md`). Por ahora solo expone versión y carga de config
-para verificar que el empaquetado y el entry point funcionan.
+Arranca el agente completo (`vigia-eew`) o la prueba de notificación (`--simulate`),
+admite una ruta de config (`--config`) y una verificación rápida (`--check-config`).
+La instalación/desinstalación de autoarranque se añade en la Fase 6.
+
+La factoría de la aplicación (`crear_app`) es inyectable para poder probar el despacho
+de la CLI sin arrancar la GUI ni la red.
 """
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
+from typing import Any
 
 from . import __version__
-from .config import cargar_config
+from .config import Settings, cargar_config
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Entrada de consola. Devuelve un código de salida estándar."""
+def _construir_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vigia-eew",
         description="Agente de alerta sísmica en tiempo real (EMSC push + USGS respaldo).",
@@ -27,7 +30,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Carga y valida la configuración, e imprime el punto de referencia.",
     )
-    args = parser.parse_args(argv)
+    parser.add_argument(
+        "--simulate",
+        action="store_true",
+        help="Inyecta un sismo simulado (M6.1 La Guaira) para probar la alerta (RF-21).",
+    )
+    return parser
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    crear_app: Callable[[Settings], Any] | None = None,
+) -> int:
+    """Entrada de consola. Devuelve un código de salida estándar."""
+    args = _construir_parser().parse_args(argv)
 
     if args.check_config:
         cfg = cargar_config(args.config)
@@ -38,7 +55,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    print("vigia-eew: la ejecución del agente se habilita en la Fase 5. Usa --help.")
+    cfg = cargar_config(args.config)
+    if crear_app is None:
+        from .app import Aplicacion
+
+        crear_app = Aplicacion
+    app = crear_app(cfg)
+
+    if args.simulate:
+        app.simular()
+    else:
+        app.ejecutar()
     return 0
 
 

@@ -29,12 +29,14 @@ vigia-eew/
 │   └── IMPLEMENTATION-PLAN.md
 ├── src/vigia_eew/
 │   ├── __init__.py
-│   ├── cli.py                  # entry point, flags, --simulate
+│   ├── cli.py                  # entry point, flags, --simulate (despacha a Aplicacion)
+│   ├── app.py                  # Aplicacion: ensamblaje ejecutar()/simular() (ADR-006)
+│   ├── simulacion.py           # evento_simulado (M6.1 La Guaira)
 │   ├── config.py               # Settings (pydantic) + carga config.toml
 │   ├── models.py               # SeismicEvent, AppState, firmas
 │   ├── geo.py                  # haversine_km (compartido por normalize y dedup)
 │   ├── backoff.py              # exponential_backoff (compartido por ws_emsc y supervisor)
-│   ├── supervisor.py           # orquestador asyncio (tasks + watchdog)
+│   ├── supervisor.py           # orquestador asyncio (tasks + reinicio con backoff)
 │   ├── ingest/
 │   │   ├── __init__.py         # RawMessage (envoltorio crudo fuente→pipeline)
 │   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconexión)
@@ -43,13 +45,15 @@ vigia-eew/
 │   │   ├── __init__.py         # docstring del pipeline
 │   │   ├── normalize.py        # Normalizer (mapeo por fuente, geo.haversine_km, severidad)
 │   │   ├── filtro.py           # GeoFilter (radio + magnitud, límites inclusivos)
-│   │   └── dedup.py            # Deduplicator (nuevo/actualizar/duplicado)
+│   │   ├── dedup.py            # Deduplicator (nuevo/actualizar/duplicado)
+│   │   └── procesador.py       # Procesador (pipeline_task: normalize→filtro→dedup)
 │   ├── notify/
 │   │   ├── __init__.py         # docstring de la capa de notificación
 │   │   ├── presentacion.py     # formato legible + color por severidad (puro)
 │   │   ├── toast.py            # desktop-notifier (urgencia por severidad)
 │   │   ├── alert_window.py     # ventana Tkinter no descartable + política
 │   │   ├── queue.py            # AlertQueue + puente asyncio↔Tk
+│   │   ├── controlador.py      # ControladorAlertas (cola + ventana + sonido + toast)
 │   │   └── sound.py            # capa de audio por severidad
 │   ├── state.py                # StateStore (JSON atómico, platformdirs)
 │   ├── logging_conf.py         # logging estructurado + rotativo
@@ -115,8 +119,10 @@ vigia-eew/
 ### Fase 5 — CLI + modo simulación
 | ID | Tarea | Depende de | RF |
 |---|---|---|---|
-| F5-1 | `cli.py`: arranque, `--config`, subcomandos | F1-3, F2-3, F4-* | RF-26 |
-| F5-2 | `--simulate` (M6.1 La Guaira) | F4-*, F5-1 | RF-21 |
+| F5-a | `pipeline/procesador.py`: `pipeline_task` (normalize→filtro→dedup→alertar) | F3-* | RF-07..RF-13 |
+| F5-b | `app.py`: `Aplicacion` (ensamblaje ingestión+pipeline+notificación, hilos asyncio/Tk) + `notify/controlador.py` | F2-3, F4-*, F5-a | RF-26, RNF-04 |
+| F5-1 | `cli.py`: arranque, `--config`, `--check-config`, despacho a `Aplicacion` | F5-b | RF-26 |
+| F5-2 | `simulacion.py` + `--simulate` (M6.1 La Guaira) | F5-b, F5-1 | RF-21 |
 
 ### Fase 6 — Autoarranque
 | ID | Tarea | Depende de | RF |
@@ -157,12 +163,12 @@ vigia-eew/
 | RF-14 | `notify/toast.py`, `notify/presentacion.py` | F4 |
 | RF-15..RF-19 | `notify/alert_window.py` | F4 |
 | RF-18 | `notify/presentacion.py`, `notify/alert_window.py` | F4 |
-| RF-20 | `notify/queue.py` | F4 |
-| RF-21 | `cli.py` (`--simulate`) | F5 |
+| RF-20 | `notify/queue.py`, `notify/controlador.py` | F4 |
+| RF-21 | `simulacion.py`, `cli.py` (`--simulate`), `app.py` | F5 |
 | RF-22, RF-23 | `autostart/*` | F6 |
 | RF-24 | `config.py` | F1 |
 | RF-25 | `logging_conf.py` | F1 |
-| RF-26 | `cli.py`, `pyproject.toml` | F1/F5 |
+| RF-26 | `cli.py`, `app.py`, `pipeline/procesador.py`, `pyproject.toml` | F1/F5 |
 | RF-27..RF-32 | `packaging/*`, `.github/workflows/build.yml` | F8 |
 
 ## 4. Estrategia de pruebas (resumen)

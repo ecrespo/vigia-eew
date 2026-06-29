@@ -50,6 +50,11 @@ class Supervisor:
         """Registra una tarea de larga vida bajo un nombre legible."""
         self._tareas.append((nombre, factoria))
 
+    @property
+    def nombres(self) -> list[str]:
+        """Nombres de las tareas registradas (en orden de registro)."""
+        return [nombre for nombre, _ in self._tareas]
+
     def solicitar_parada(self) -> None:
         """Pide el cierre ordenado del supervisor y sus tareas."""
         self._parar.set()
