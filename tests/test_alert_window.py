@@ -149,3 +149,20 @@ def test_smoke_construye_ventana_real():
     assert len(raiz.winfo_children()) > 0
     w.reconocer()
     assert rec == [1]
+
+
+@pytest.mark.skipif(
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="prueba de GUI real; opt-in VIGIA_GUI_TESTS=1"
+)
+def test_smoke_detalle_tiene_wraplength():
+    # Sin wraplength, una línea larga (p. ej. "Hora local (Venezuela): ...") se
+    # recorta contra el borde de la ventana en vez de bajar de línea (ventana fija,
+    # no redimensionable). Ver alert_window.py::_construir.
+    import tkinter as tk
+
+    raiz = tk.Tk()
+    AlertWindow(_datos(), al_reconocer=lambda: None, raiz=raiz)
+    raiz.update()
+    etiquetas = [w for w in raiz.winfo_children() if isinstance(w, tk.Label)]
+    detalle = next(w for w in etiquetas if "Hora local" in w.cget("text"))
+    assert int(detalle.cget("wraplength")) > 0

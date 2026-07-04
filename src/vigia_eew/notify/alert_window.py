@@ -92,8 +92,10 @@ class AlertWindow:
         configurar_no_descartable(raiz, al_cerrar_intento=self._intento_cierre)
         if self._pantalla_completa:
             raiz.attributes("-fullscreen", True)
+            ancho_ventana = raiz.winfo_screenwidth()
         else:
-            self._centrar(900, 620)
+            ancho_ventana = 900
+            self._centrar(ancho_ventana, 620)
         raiz.configure(bg=color)
 
         for hijo in list(raiz.winfo_children()):
@@ -113,8 +115,18 @@ class AlertWindow:
             f"Hora local (Venezuela): {self._datos.hora_local}\n"
             f"Fuente: {self._datos.fuente}"
         )
+        # `wraplength` es obligatorio aquí: sin él, una línea más ancha que la ventana
+        # (p. ej. "Hora local (Venezuela): ...") se recorta contra el borde en vez de
+        # bajar de línea, porque la ventana tiene tamaño fijo y no es redimensionable
+        # (overrideredirect, RF-15).
         tk.Label(
-            raiz, text=detalle, font=("Helvetica", 22), fg="white", bg=color, justify="center"
+            raiz,
+            text=detalle,
+            font=("Helvetica", 22),
+            fg="white",
+            bg=color,
+            justify="center",
+            wraplength=ancho_ventana - 80,
         ).pack(pady=18)
 
         tk.Button(

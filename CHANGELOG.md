@@ -6,6 +6,14 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+### Corregido
+- La línea "Hora local (Venezuela): ..." de la ventana de alerta se recortaba contra el
+  borde (se veía la fecha, pero la hora quedaba cortada). Causa: el `Label` de detalle no
+  tenía `wraplength`, así que una línea más ancha que la ventana (fija, no redimensionable
+  por RF-15) se dibujaba fuera del área visible en vez de bajar de línea. Se agregó
+  `wraplength` acorde al ancho real de la ventana (fijo o pantalla completa) en
+  `notify/alert_window.py`.
+
 ## [0.1.3] - 2026-07-04
 
 ### Agregado
