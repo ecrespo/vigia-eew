@@ -15,6 +15,18 @@ de publicación en `packaging/RELEASING.md`.
 - `config.toml.example` documenta cómo bajar `magnitud_minima` a un umbral más estricto
   (ej. `3.0`) y cómo desactivar la detección automática fijando `[referencia]` a mano.
 
+### Corregido
+- El `.deb` instalado (release v0.1.2) fallaba al arrancar con
+  `ModuleNotFoundError: No module named 'desktop_notifier.resources'`. Causa:
+  `desktop_notifier.common` carga su ícono default con
+  `importlib.resources.files("desktop_notifier.resources")` — una referencia dinámica
+  por nombre de módulo que el análisis estático de PyInstaller no detecta, así que ese
+  subpaquete (con `python.png`) quedaba fuera del binario. Se agregó
+  `collect_data_files("desktop_notifier")` a `datas` y `desktop_notifier.resources` a
+  `hiddenimports` en `packaging/vigia-eew.spec`. Verificado localmente: el binario
+  onefile de Linux reconstruido ya no lanza el error y llega a mostrar la alerta con
+  `--simulate`.
+
 ## [0.1.2] - 2026-07-04
 
 ### Corregido
