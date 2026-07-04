@@ -235,6 +235,75 @@ def es_duplicado(ev, recientes, ids_alertados):
   - La distribución suma un artefacto opcional (extensión vía extensions.gnome.org o empaquetada),
     independiente del paquete Python.
 
+#### Diseño detallado del contrato D-Bus (elaboración de ADR-010 — solo diseño, no implementado)
+
+> Profundiza la "Opción 3" pendiente del ADR-010. No cambia la decisión, la hace codificable.
+
+**Bus y nombres** (convención D-Bus reverse-DNS, sesión de usuario — no *system bus*, no root):
+- Bus: **session bus** (`DBUS_SESSION_BUS_ADDRESS`), coherente con "sin privilegios" (RNF-09).
+- Nombre de servicio: `org.vigia_eew.Agente`.
+- Ruta de objeto: `/org/vigia_eew/Agente`.
+- Interfaz **versionada** (permite romper sin ambigüedad): `org.vigia_eew.Agente.Alertas1`.
+
+**Superficie de la interfaz `Alertas1`**
+
+| Miembro | Tipo | Dirección | Payload | Equivalente interno |
+|---|---|---|---|---|
+| señal `AlertaNueva` | `(s)` | agente → frontend(s) | `SeismicEvent` como JSON (mismo esquema de API-SPEC §3) | `ControladorAlertas._mostrar` |
+| señal `AlertaActualizada` | `(s)` | agente → frontend(s) | `SeismicEvent` JSON, `accion="update"` (RF-11) | `ControladorAlertas._actualizar` |
+| método `Reconocer` | `(s) -> (b)` | frontend → agente | `id` del evento | `AlertQueue.reconocer` → `ControladorAlertas._reconocido` |
+| método `ObtenerActiva` | `() -> (s)` | frontend → agente | `"" ` si no hay alerta en curso, o el `SeismicEvent` JSON actual | estado interno de `ControladorAlertas` |
+| método `Ping` | `() -> (s)` | frontend → agente | versión del agente (`"1.0"`) | detección de disponibilidad del agente |
+
+Se reutiliza literalmente el **contrato interno** (`SeismicEvent`, API-SPEC §3) serializado con
+`model_dump_json()`: un solo `string` como argumento evita definir una *struct* D-Bus paralela y
+mantiene un único punto de verdad para el esquema (igual criterio que el relay del ADR-008).
+
+**Encaje con `ControladorAlertas` (segundo backend de salida)**
+
+`ControladorAlertas` hoy invoca directamente `crear_ventana` (Tk), `reproducir_sonido` y
+`enviar_toast` como *callbacks* inyectables. El puente D-Bus se modela como un **cuarto callback
+del mismo tipo** (`publicar_dbus: Callable[[SeismicEvent], None] | None`), llamado desde `_mostrar`
+y `_actualizar` junto a los existentes — **no** reemplaza a Tk, se suma:
+
+```
+_mostrar(ev)      → crear_ventana(...) + reproducir_sonido(...) + enviar_toast(...) + publicar_dbus(ev)
+_actualizar(ev)   → ventana.actualizar(...)                                          + publicar_dbus(ev)
+Reconocer(id) (entrante) → self._cola.reconocer(...)   # mismo camino que "RECONOCIDO" de la ventana Tk
+```
+
+El servicio D-Bus (`org.vigia_eew.Agente`) corre en el mismo proceso asyncio del agente (librería
+`dbus-fast`, ya presente como dependencia transitiva de `desktop-notifier`); `Reconocer` recibido
+por D-Bus se despacha al hilo/loop correcto igual que hoy se despacha el clic "RECONOCIDO" de la
+ventana Tk (mismo puente asyncio↔UI de ADR-006, no uno nuevo).
+
+**Selección de frontend por plataforma/config (RF-22 no aplica; es config de presentación)**
+
+- Config nueva (v1 del diseño, futura en `config.toml`): `[notificacion] frontend = "tk" | "auto"`.
+  Default **`"tk"`** en los 3 SO (comportamiento actual, sin cambios).
+- Con `"auto"` en Linux: el agente detecta GNOME + Wayland (`XDG_CURRENT_DESKTOP` contiene
+  `"GNOME"`, `XDG_SESSION_TYPE == "wayland"`) **y** que la extensión esté activa, consultando
+  `org.freedesktop.DBus.NameHasOwner` sobre un nombre bien conocido que publicaría la extensión
+  (p. ej. `org.gnome.Shell.Extensions.VigiaEew`). Si ambas condiciones se cumplen, la ventana Tk
+  se **omite** para esa alerta (evita dos overlays no descartables compitiendo por foco) y solo se
+  emite la señal D-Bus; en cualquier otro caso (extensión ausente, otro SO, X11), Tk sigue siendo
+  el único frontend, igual que hoy.
+- El toast (`desktop-notifier`) y el sonido (`sound.py`) **no** se ven afectados por esta selección:
+  siguen disparándose siempre, son canales redundantes independientes (RF-14, RF-17).
+
+**Aislamiento de fallos (RNF-03 — nunca morir por esto)**
+
+Publicar en D-Bus (o que nadie escuche) **nunca** debe impedir mostrar la ventana Tk: mismo patrón
+que `toast.py` (fallo aislado, log de advertencia, la alerta sigue mostrándose). Si `"auto"`
+detecta la extensión pero la señal falla al emitirse (bus caído, extensión se cerró entre la
+detección y el envío), el agente debe **repetir el fallback a Tk** para esa alerta puntual, no
+asumir que quedó mostrada.
+
+**Qué falta para pasar de diseño a código** (fuera de alcance mientras no se pida explícitamente):
+implementar el servicio D-Bus (`dbus-fast` `ServiceInterface`), el `publicar_dbus` callback y su
+cableado en `app.py`/`config.py`, la detección `"auto"`, y — en el otro extremo, fuera del paquete
+Python — la extensión GNOME Shell (GJS) que consume la señal y llama `Reconocer`.
+
 ## 12. Trazabilidad
 
 Cada ADR y componente referencia RF del `PRD.md`. La matriz completa RF→módulo está en

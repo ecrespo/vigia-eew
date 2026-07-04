@@ -228,3 +228,29 @@ capas (ingestión → dedup/filtro → notificación). Esquema canónico (detall
 Documentado en `TECHNICAL-DESIGN.md` (ADR-008): un relay FastAPI podría exponer un WebSocket propio
 de *fan-out* hacia muchos clientes Vigía, reusando **el mismo contrato interno** de §3 como payload,
 de modo que la migración no rompa el modelo de datos.
+
+## 5. Evolución futura (no v1) — Contrato D-Bus (frontend GNOME opcional)
+
+Documentado en `TECHNICAL-DESIGN.md` (ADR-010, elaboración detallada): el agente podría exponer un
+servicio en el **bus de sesión** para que una extensión de GNOME Shell (u otro frontend local) se
+suscriba a las alertas y confirme el reconocimiento, sin duplicar el esquema de §3.
+
+| Elemento | Valor |
+|---|---|
+| Bus | Sesión (`DBUS_SESSION_BUS_ADDRESS`), no *system bus* |
+| Nombre de servicio | `org.vigia_eew.Agente` |
+| Ruta de objeto | `/org/vigia_eew/Agente` |
+| Interfaz | `org.vigia_eew.Agente.Alertas1` (versionada) |
+
+| Miembro | Firma | Payload |
+|---|---|---|
+| señal `AlertaNueva` | `(s)` | `SeismicEvent` JSON — mismo esquema de §3 |
+| señal `AlertaActualizada` | `(s)` | `SeismicEvent` JSON, `accion="update"` (RF-11) |
+| método `Reconocer` | `(s) -> (b)` | `id` del evento a reconocer |
+| método `ObtenerActiva` | `() -> (s)` | `SeismicEvent` JSON en curso, o `""` si no hay ninguna |
+| método `Ping` | `() -> (s)` | versión del agente, p. ej. `"1.0"` |
+
+El payload de las señales es **el mismo JSON del contrato interno** (§3), serializado tal cual
+(`model_dump_json()`); no se define una *struct* D-Bus paralela. Este contrato es aditivo a la
+ventana Tk (ADR-003): no la reemplaza salvo que la extensión GNOME esté detectada y activa (ver
+selección `frontend = "auto"` en `TECHNICAL-DESIGN.md`). **No implementado en v1.**
