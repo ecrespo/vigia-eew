@@ -59,3 +59,31 @@ def test_version_sale_limpio():
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
+
+
+class _FakeInstalador:
+    def __init__(self):
+        self.instalado = False
+        self.desinstalado = False
+
+    def instalar(self):
+        self.instalado = True
+
+    def desinstalar(self):
+        self.desinstalado = True
+
+
+def test_install_autostart_invoca_instalar(capsys):
+    inst = _FakeInstalador()
+    rc = main(["--install-autostart"], crear_app=_crear, crear_instalador=lambda: inst)
+    assert rc == 0
+    assert inst.instalado is True
+    assert _FakeApp.creadas == []  # no arranca el agente
+
+
+def test_uninstall_autostart_invoca_desinstalar():
+    inst = _FakeInstalador()
+    rc = main(["--uninstall-autostart"], crear_app=_crear, crear_instalador=lambda: inst)
+    assert rc == 0
+    assert inst.desinstalado is True
+    assert _FakeApp.creadas == []

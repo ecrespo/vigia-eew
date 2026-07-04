@@ -156,6 +156,7 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 - Captura de notificaciones del teléfono celular como fuente (la fuente de verdad son **APIs sísmicas públicas**).
 - Push real desde USGS por PDL (pesado/Java): se usa **polling** de respaldo en su lugar.
 - Relay central FastAPI con *fan-out* por WebSocket: **documentado como evolución futura**, no implementado en v1 (cada máquina corre su propio agente).
+- Frontend de presentación por **D-Bus** + **extensión de GNOME Shell** (modal con *grab* real en Wayland): **documentado como evolución futura** (ADR-010), no implementado en v1; el default sigue siendo Tkinter.
 - Predicción sísmica o estimación de intensidad/sacudida (MMI/ShakeMap) propias.
 - App móvil nativa, panel web, multiusuario/cuentas, telemetría centralizada.
 - Firma de código con certificado de pago (se documenta el procedimiento; la firma efectiva depende de disponer del certificado).

@@ -55,13 +55,14 @@ vigia-eew/
 │   │   ├── queue.py            # AlertQueue + puente asyncio↔Tk
 │   │   ├── controlador.py      # ControladorAlertas (cola + ventana + sonido + toast)
 │   │   └── sound.py            # capa de audio por severidad
+│   ├── autostart/              # autoarranque (dentro del paquete: usado por la CLI)
+│   │   ├── __init__.py         # crear_instalador(plataforma) + comando_agente()
+│   │   ├── linux_systemd.py    # instalar/desinstalar systemd --user
+│   │   ├── macos_launchagent.py # LaunchAgent plist (launchctl)
+│   │   └── windows_task.py     # tarea programada (schtasks /sc onlogon)
 │   ├── state.py                # StateStore (JSON atómico, platformdirs)
 │   ├── logging_conf.py         # logging estructurado + rotativo
 │   └── assets/                 # info.wav / atencion.wav / critico.wav (generados)
-├── autostart/
-│   ├── linux_systemd.py        # instalar/desinstalar systemd --user
-│   ├── macos_launchagent.py    # LaunchAgent plist
-│   └── windows_task.py         # tarea programada (schtasks)
 ├── packaging/
 │   ├── build_linux.sh          # AppImage + .deb/.rpm (fpm)
 │   ├── build_windows.ps1       # PyInstaller onefile (.exe)

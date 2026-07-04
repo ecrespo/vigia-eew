@@ -35,6 +35,16 @@ def _construir_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Inyecta un sismo simulado (M6.1 La Guaira) para probar la alerta (RF-21).",
     )
+    parser.add_argument(
+        "--install-autostart",
+        action="store_true",
+        help="Instala el autoarranque al iniciar sesión (RF-22, RF-23) y sale.",
+    )
+    parser.add_argument(
+        "--uninstall-autostart",
+        action="store_true",
+        help="Desinstala el autoarranque (RF-23) y sale.",
+    )
     return parser
 
 
@@ -42,6 +52,7 @@ def main(
     argv: list[str] | None = None,
     *,
     crear_app: Callable[[Settings], Any] | None = None,
+    crear_instalador: Callable[[], Any] | None = None,
 ) -> int:
     """Entrada de consola. Devuelve un código de salida estándar."""
     args = _construir_parser().parse_args(argv)
@@ -53,6 +64,20 @@ def main(
             f"({cfg.referencia.lat}, {cfg.referencia.lon}) · "
             f"radio={cfg.filtro.radio_km} km · mag_min={cfg.filtro.magnitud_minima}"
         )
+        return 0
+
+    if args.install_autostart or args.uninstall_autostart:
+        if crear_instalador is None:
+            from .autostart import crear_instalador as crear_instalador_real
+
+            crear_instalador = crear_instalador_real
+        instalador = crear_instalador()
+        if args.install_autostart:
+            instalador.instalar()
+            print("Autoarranque instalado.")
+        else:
+            instalador.desinstalar()
+            print("Autoarranque desinstalado.")
         return 0
 
     cfg = cargar_config(args.config)

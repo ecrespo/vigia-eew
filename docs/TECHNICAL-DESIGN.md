@@ -160,7 +160,8 @@ def es_duplicado(ev, recientes, ids_alertados):
   `overrideredirect`, `attributes('-fullscreen')`, `focus_force`, `lift`.
 - **Alternativas descartadas**: PyQt/PySide (mejor estética/teclado, pero +50–100 MB, licencias,
   empaquetado más complejo). Se reconsiderará **solo** si Tkinter no logra el "siempre al frente"
-  fiable en algún SO. *Disparador de reevaluación*: si en macOS no se puede forzar foco de forma fiable.
+  fiable en algún SO. *Disparador de reevaluación*: si en macOS no se puede forzar foco de forma
+  fiable, o en **GNOME/Wayland** donde el compositor restringe topmost/foco (decisión en **ADR-010**).
 - **Consecuencias**: UI más austera; el sonido se maneja por capa aparte (ADR-005).
 
 ### ADR-004 — Dedup heurística por (distancia, tiempo, magnitud)
@@ -202,6 +203,37 @@ def es_duplicado(ev, recientes, ids_alertados):
 - **Decisión**: **`websockets`** para WS (keepalive nativo `ping_interval`) y **`httpx`** async para REST.
 - **Alternativas descartadas**: Tornado (framework completo innecesario), `aiohttp` (válido; `httpx` por ergonomía/timeouts).
 - **Consecuencias**: dependencias mínimas y idiomáticas con asyncio.
+
+### ADR-010 — Frontend de presentación desacoplado por D-Bus + extensión GNOME Shell opcional
+- **Contexto**: la garantía central "imposible de ignorar" (OBJ-1, RF-15/16/19) depende de
+  *topmost* + robo de foco + sin decoración. Bajo **Wayland** (default de GNOME hoy), una app
+  X11/XWayland como **Tkinter** **no puede** forzar de forma fiable `-topmost`, `focus_force` ni
+  `overrideredirect`: el compositor controla apilamiento y foco. Es el *disparador de
+  reevaluación* anticipado en el ADR-003. El núcleo (ingestión/pipeline/estado) es Python y
+  multiplataforma (RNF-06) y no queremos perderlo.
+- **Decisión**: separar **presentación** de **núcleo**. El agente Python sigue siendo la única
+  fuente de verdad (ingestión → pipeline → `SeismicEvent` normalizado) y publica las alertas por
+  un **canal D-Bus** opcional; los frontends de presentación se **suscriben**.
+  - Frontend **por defecto**: la ventana **Tkinter** (ADR-003), empaquetada y multiplataforma.
+  - Frontend **opcional en GNOME**: una **extensión de GNOME Shell** (GJS) que escucha el canal
+    D-Bus y muestra un `ModalDialog` con *grab* real de pantalla/teclado — la forma **más fiable**
+    de "imposible de ignorar" en GNOME/Wayland, al vivir dentro del compositor.
+  - El reconocimiento (RECONOCIDO) fluye **de vuelta** al agente por D-Bus, de modo que el estado
+    y la auditoría (`reconocido_utc`, RF-10) permanecen en el núcleo Python.
+  - **v1: no implementado**; se documenta como evolución. Tkinter sigue siendo el default en los 3 SO.
+- **Alternativas descartadas**:
+  - *Reescribir toda la app como extensión GNOME (GJS)*: pierde portabilidad (RNF-06), el núcleo
+    Python y mete el agente dentro del proceso del shell (riesgo para 24/7, RNF-02/03).
+  - *Forzar más el topmost de Tkinter en Wayland*: no es fiable; el compositor manda.
+  - *Depender solo del toast crítico (`desktop-notifier`)*: silenciable por "No molestar" (RF-19).
+- **Consecuencias**:
+  - Hay que definir un **contrato D-Bus** mínimo (reutilizando el `SeismicEvent` interno, igual que
+    el relay del ADR-008): el agente emite `Alerta(evento)` y el frontend invoca `Reconocer(id)`.
+    El diseño detallado de este puente queda pendiente (ítem de evolución).
+  - El `ControladorAlertas` gana un segundo "backend" de salida (publicar a D-Bus) junto a la
+    ventana Tk; la selección es por plataforma/configuración.
+  - La distribución suma un artefacto opcional (extensión vía extensions.gnome.org o empaquetada),
+    independiente del paquete Python.
 
 ## 12. Trazabilidad
 
