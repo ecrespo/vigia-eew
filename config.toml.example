@@ -1,0 +1,47 @@
+# config.toml.example — Vigía-eew
+# Copia este archivo como `config.toml` en el directorio de config del usuario
+# (o pásalo con `vigia-eew --config <ruta>`). Todos los valores tienen defaults
+# sensatos centrados en Caracas; ajusta a tu zona.
+
+[referencia]
+nombre = "Caracas"
+lat = 10.4806
+lon = -66.9036
+
+[filtro]
+radio_km = 300.0
+magnitud_minima = 2.5
+
+[fuentes.emsc]
+habilitado = true
+url = "wss://www.seismicportal.eu/standing_order/websocket"
+ping_interval_s = 15      # keepalive obligatorio (RF-02)
+ping_timeout_s = 20
+backoff_max_s = 60        # tope del backoff exponencial de reconexión (RF-03)
+
+[fuentes.usgs]
+habilitado = true
+url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+intervalo_poll_s = 60     # respaldo de baja frecuencia (RF-05)
+timeout_s = 15
+
+[dedup]
+distancia_km = 100.0      # mismo sismo si <= 100 km, <= 90 s y <= 0.5 mag (RF-09)
+ventana_s = 90
+delta_magnitud = 0.5
+
+[severidad]
+# Límite superior de cada nivel; por encima de atencion_max es "critico" (RF-13).
+info_max = 4.0
+atencion_max = 5.5
+
+[notificacion]
+pantalla_completa = false
+zona_horaria = "America/Caracas"
+sonido = true
+
+[logging]
+nivel = "INFO"
+archivo = "vigia-eew.log"
+max_bytes = 1048576
+backups = 3

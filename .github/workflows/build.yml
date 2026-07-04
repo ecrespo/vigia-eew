@@ -1,0 +1,107 @@
+# Matriz de empaquetado y release (Fase 8, F8-5, RF-31).
+#
+# Dispara con un tag `vX.Y.Z` (ver packaging/RELEASING.md) o manualmente. Construye,
+# en paralelo, el paquete PyPI, el .exe de Windows, el .dmg de macOS y el
+# AppImage/.deb/.rpm de Linux; un job final los junta en un GitHub Release.
+name: build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  pypi:
+    name: PyPI (wheel + sdist)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pypi-dist
+          path: dist/*
+      - name: Publicar en PyPI (opcional, requiere el secreto PYPI_API_TOKEN)
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        if: ${{ env.PYPI_TOKEN != '' }}
+        run: uv publish --token "$PYPI_TOKEN"
+
+  windows:
+    name: Windows .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[packaging]"
+      - run: pwsh packaging/build_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/vigia-eew.exe
+
+  macos:
+    name: macOS .dmg
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[packaging]"
+      - run: bash packaging/build_macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+
+  linux:
+    name: Linux AppImage + .deb/.rpm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[packaging]"
+      - name: Instalar fpm (empaquetado .deb/.rpm)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rpm build-essential
+          sudo gem install --no-document fpm
+      - name: Instalar linuxdeploy + appimagetool (AppImage)
+        run: |
+          curl -fL -o /usr/local/bin/linuxdeploy \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -fL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/linuxdeploy /usr/local/bin/appimagetool
+      - run: bash packaging/build_linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+
+  release:
+    name: Crear GitHub Release
+    needs: [pypi, windows, macos, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
