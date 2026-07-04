@@ -6,6 +6,15 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+### Agregado
+- Detección automática del punto de referencia geográfico por geolocalización de IP
+  (`geoloc.py`, RF-33) cuando el usuario no define `[referencia]` en `config.toml`. Se
+  detecta una sola vez y se cachea en `state.json`; si falla (sin red, timeout, etc.) se
+  usa el default (Caracas) sin bloquear el arranque. No se activa en `--simulate` (RF-21
+  sigue funcionando sin red).
+- `config.toml.example` documenta cómo bajar `magnitud_minima` a un umbral más estricto
+  (ej. `3.0`) y cómo desactivar la detección automática fijando `[referencia]` a mano.
+
 ## [0.1.2] - 2026-07-04
 
 ### Corregido

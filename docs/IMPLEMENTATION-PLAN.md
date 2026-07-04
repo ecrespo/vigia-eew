@@ -62,6 +62,7 @@ vigia-eew/
 │   │   ├── macos_launchagent.py # LaunchAgent plist (launchctl)
 │   │   └── windows_task.py     # tarea programada (schtasks /sc onlogon)
 │   ├── state.py                # StateStore (JSON atómico, platformdirs)
+│   ├── geoloc.py                # detectar_ubicacion_ip (RF-33, fallback por IP)
 │   ├── logging_conf.py         # logging estructurado + rotativo
 │   └── assets/                 # info.wav / atencion.wav / critico.wav (generados)
 ├── packaging/
@@ -163,6 +164,20 @@ vigia-eew/
 > compartido sí se probó end-to-end en Linux). La verificación completa de esos dos
 > binarios queda pendiente de CI (F8-5) o de una máquina real del SO correspondiente.
 
+> **Actualización 2026-07-04**: el release `v0.1.2` corrió en CI real (GitHub Actions) y
+> terminó en `success`, publicando los 7 assets esperados (wheel, sdist, `.exe`, `.dmg`,
+> AppImage, `.deb`, `.rpm`). F8-2, F8-3 y F8-5 quedan **✅ verificados de verdad**, no solo
+> autoreados — este documento no se había actualizado hasta ahora para reflejarlo.
+
+### Fase 9 — Detección automática de ubicación por IP (RF-33)
+| ID | Tarea | Depende de | RF | Estado |
+|---|---|---|---|---|
+| F9-1 | `geoloc.py`: `detectar_ubicacion_ip` (cliente HTTP inyectable, nunca lanza) | F1-3 | RF-33 | ✅ |
+| F9-2 | `models.py`/`state.py`: `UbicacionDetectada` + caché en `AppState`/`StateStore` | F1-2, F1-5 | RF-33 | ✅ |
+| F9-3 | `config.py`: `tiene_referencia_manual` (expone si `[referencia]` está en el TOML, sin red) | F1-3 | RF-33 | ✅ |
+| F9-4 | `app.py`: `Aplicacion._resolver_referencia_automatica` (caché → geoloc → fallback), solo en `ejecutar()` | F9-1, F9-2, F5-b | RF-33 | ✅ |
+| F9-5 | `cli.py`: pasa `referencia_manual` a `Aplicacion` | F9-3, F5-1 | RF-33 | ✅ |
+
 ## 3. Matriz de trazabilidad RF → componente
 
 | RF | Componente(s) | Fase |
@@ -184,6 +199,7 @@ vigia-eew/
 | RF-25 | `logging_conf.py` | F1 |
 | RF-26 | `cli.py`, `app.py`, `pipeline/procesador.py`, `pyproject.toml` | F1/F5 |
 | RF-27..RF-32 | `packaging/*`, `.github/workflows/build.yml` | F8 |
+| RF-33 | `geoloc.py`, `config.py` (`tiene_referencia_manual`), `state.py`/`models.py` (`UbicacionDetectada`), `app.py`, `cli.py` | F9 |
 
 ## 4. Estrategia de pruebas (resumen)
 
@@ -217,3 +233,4 @@ vigia-eew/
 3. **M2**: Fase 4–5 (notificación + `--simulate`) demostrable en Linux.
 4. **M3**: Fase 6–7 (autoarranque + verificación en los 3 SO).
 5. **M4**: Fase 8 (empaquetado + CI con release assets).
+6. **M5**: Fase 9 (detección automática de ubicación por IP, RF-33).

@@ -86,6 +86,7 @@ con escritura atómica.
 | `cursor_usgs_ms` | `int \| None` | Epoch ms del evento USGS más reciente procesado (cursor RF-06) |
 | `ids_alertados` | `list[AlertedId]` | Ids ya alertados (con poda por antigüedad) |
 | `firmas_recientes` | `list[EventSignature]` | Firmas para dedup inter-fuente (ventana temporal) |
+| `ubicacion_detectada` | `UbicacionDetectada \| None` | Ubicación por IP cacheada tras la primera detección exitosa (RF-33); `None` si nunca se detectó o si el usuario configura `[referencia]` manual |
 
 ```python
 class AlertedId(BaseModel):
@@ -100,11 +101,18 @@ class EventSignature(BaseModel):
     hora_utc: datetime
     magnitud: float
 
+class UbicacionDetectada(BaseModel):
+    nombre: str
+    lat: float
+    lon: float
+    detectado_utc: datetime
+
 class AppState(BaseModel):
     version: int = 1
     cursor_usgs_ms: int | None = None
     ids_alertados: list[AlertedId] = []
     firmas_recientes: list[EventSignature] = []
+    ubicacion_detectada: UbicacionDetectada | None = None
 ```
 
 ### 2.1 Ubicación (multiplataforma, vía `platformdirs`)
@@ -268,5 +276,6 @@ SeismicEvent(
 
 ## 6. Trazabilidad
 
-`SeismicEvent` ⇄ RF-07/RF-08/RF-13 · `AppState` ⇄ RF-06/RF-10 · `Settings` ⇄ RF-24/RF-12.
+`SeismicEvent` ⇄ RF-07/RF-08/RF-13 · `AppState` ⇄ RF-06/RF-10 · `Settings` ⇄ RF-24/RF-12 ·
+`UbicacionDetectada` ⇄ RF-33.
 Mapeo de campos por fuente en `API-SPEC.md §3.1`.

@@ -223,13 +223,42 @@ capas (ingestión → dedup/filtro → notificación). Esquema canónico (detall
 
 ---
 
-## 4. Evolución futura (no v1) — Relay central
+## 4. Fuente auxiliar — Geolocalización por IP (RF-33)
+
+Usada **solo** cuando el usuario no define `[referencia]` en `config.toml`, para estimar un punto
+de referencia geográfico razonable sin intervención manual. Es de "mejor esfuerzo": cualquier fallo
+hace *fallback* al default (Caracas) sin bloquear el arranque (ver `geoloc.py`, `TECHNICAL-DESIGN.md`).
+
+| Elemento | Valor |
+|---|---|
+| Endpoint | `https://ipapi.co/json/` (HTTPS, sin API key) |
+| Método | `GET`, sin parámetros (la IP de origen la infiere el servicio) |
+| Timeout | 5 s |
+| Frecuencia | **Una vez** por instalación — el resultado se cachea en `state.json` (`ubicacion_detectada`) y no se repite en arranques siguientes salvo que se borre el estado o se defina `[referencia]` manual. |
+
+### 4.1 Campos usados de la respuesta
+
+| Campo JSON | Uso |
+|---|---|
+| `latitude`, `longitude` | `Referencia.lat` / `Referencia.lon` (obligatorios; si faltan o no son numéricos, se descarta la respuesta) |
+| `city` | `Referencia.nombre`; si falta, se usa `country_name`; si tampoco, un nombre genérico |
+
+### 4.2 Errores y resiliencia
+| Situación | Manejo |
+|---|---|
+| Sin red / timeout / error HTTP | Se captura, se logea un *warning*, se devuelve `None` (fallback al default). |
+| Status ≠ 200 | Igual que arriba. |
+| JSON inválido o campos faltantes/fuera de rango | Igual que arriba; nunca lanza una excepción hacia el llamador. |
+
+---
+
+## 5. Evolución futura (no v1) — Relay central
 
 Documentado en `TECHNICAL-DESIGN.md` (ADR-008): un relay FastAPI podría exponer un WebSocket propio
 de *fan-out* hacia muchos clientes Vigía, reusando **el mismo contrato interno** de §3 como payload,
 de modo que la migración no rompa el modelo de datos.
 
-## 5. Evolución futura (no v1) — Contrato D-Bus (frontend GNOME opcional)
+## 6. Evolución futura (no v1) — Contrato D-Bus (frontend GNOME opcional)
 
 Documentado en `TECHNICAL-DESIGN.md` (ADR-010, elaboración detallada): el agente podría exponer un
 servicio en el **bus de sesión** para que una extensión de GNOME Shell (u otro frontend local) se

@@ -22,7 +22,7 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 🛰️ **Real WebSocket push (EMSC)** as the primary channel — no constant polling.
 - 🔁 **REST fallback (USGS FDSN)** that reconciles and recovers anything the WebSocket may drop.
 - 🚨 **Non-dismissable alert**: a front-most window, with sound, that only closes on acknowledgment.
-- 📍 **Configurable geographic filter**: reference point, radius in km, and minimum magnitude.
+- 📍 **Configurable geographic filter**: reference point, radius in km, and minimum magnitude — auto-detected by IP geolocation if you don't set one manually.
 - 🟢 **Cross-platform**: Linux, Windows, and macOS, with autostart on login.
 - 📦 **Full distribution**: PyPI, `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`.
 - 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake.

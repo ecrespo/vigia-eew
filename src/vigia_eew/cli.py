@@ -15,7 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 from . import __version__
-from .config import Settings, cargar_config
+from .config import cargar_config, tiene_referencia_manual
 
 
 def _construir_parser() -> argparse.ArgumentParser:
@@ -51,7 +51,7 @@ def _construir_parser() -> argparse.ArgumentParser:
 def main(
     argv: list[str] | None = None,
     *,
-    crear_app: Callable[[Settings], Any] | None = None,
+    crear_app: Callable[..., Any] | None = None,
     crear_instalador: Callable[[], Any] | None = None,
 ) -> int:
     """Entrada de consola. Devuelve un código de salida estándar."""
@@ -85,7 +85,7 @@ def main(
         from .app import Aplicacion
 
         crear_app = Aplicacion
-    app = crear_app(cfg)
+    app = crear_app(cfg, referencia_manual=tiene_referencia_manual(args.config))
 
     if args.simulate:
         app.simular()

@@ -128,6 +128,25 @@ def _mapear_claves_toml(data: dict[str, Any]) -> dict[str, Any]:
     return resultado
 
 
+def _resolver_ruta_config(ruta: Path | str | None) -> Path | None:
+    """Resuelve la ruta efectiva de `config.toml`, o `None` si no hay archivo (RF-24).
+
+    Args:
+        ruta: ruta explícita a un `config.toml`. Si es None, se busca en el
+            directorio de config del usuario.
+
+    Raises:
+        FileNotFoundError: si se pasa una `ruta` explícita que no existe.
+    """
+    if ruta is not None:
+        ruta = Path(ruta)
+        if not ruta.exists():
+            raise FileNotFoundError(f"No existe el archivo de configuración: {ruta}")
+        return ruta
+    candidata = ruta_config_predeterminada()
+    return candidata if candidata.exists() else None
+
+
 def cargar_config(ruta: Path | str | None = None) -> Settings:
     """Carga y valida la configuración (RF-24).
 
@@ -143,18 +162,25 @@ def cargar_config(ruta: Path | str | None = None) -> Settings:
         tomllib.TOMLDecodeError: si el archivo no es TOML válido.
         pydantic.ValidationError: si los valores no cumplen el esquema.
     """
-    if ruta is not None:
-        ruta = Path(ruta)
-        if not ruta.exists():
-            raise FileNotFoundError(f"No existe el archivo de configuración: {ruta}")
-    else:
-        candidata = ruta_config_predeterminada()
-        ruta = candidata if candidata.exists() else None
-
-    if ruta is None:
+    ruta_efectiva = _resolver_ruta_config(ruta)
+    if ruta_efectiva is None:
         # Sin archivo: defaults sensatos (Caracas). El agente arranca igual.
         return Settings()
 
-    with open(ruta, "rb") as fh:
+    with open(ruta_efectiva, "rb") as fh:
         data = tomllib.load(fh)
     return Settings(**_mapear_claves_toml(data))
+
+
+def tiene_referencia_manual(ruta: Path | str | None = None) -> bool:
+    """True si `[referencia]` está definida explícitamente en el `config.toml` (RF-33).
+
+    Sin archivo de configuración (ni explícito ni en el directorio de usuario), no hay
+    referencia manual: `Aplicacion` dispara la detección automática por IP en su lugar.
+    """
+    ruta_efectiva = _resolver_ruta_config(ruta)
+    if ruta_efectiva is None:
+        return False
+    with open(ruta_efectiva, "rb") as fh:
+        data = tomllib.load(fh)
+    return "referencia" in data

@@ -103,12 +103,15 @@ def es_duplicado(ev, recientes, ids_alertados):
 - **Filtro** (RF-12): descartar si `distancia_km > radio` o `magnitud < magnitud_minima`.
 - **Severidad** (RF-13): umbrales configurables; por defecto `<4 info`, `4–5.5 atencion`, `5.5+ critico`.
   Cada nivel define **color** y **perfil de sonido** de la alerta.
+- **Punto de referencia** (RF-12/RF-33): si el usuario no define `[referencia]`, `Aplicacion`
+  resuelve una por geolocalización de IP antes de arrancar el pipeline (detalle en ADR-011).
 
 ## 7. Persistencia de estado — RF-06, RF-10
 
 - Formato: **JSON** en directorio de datos del usuario (`platformdirs`): p. ej.
   `~/.local/share/vigia-eew/state.json` (Linux), `%LOCALAPPDATA%` (Windows), `~/Library/Application Support` (macOS).
-- Contenido: `cursor_usgs` (epoch ms), `ids_alertados` (con poda por antigüedad), `firmas_recientes`.
+- Contenido: `cursor_usgs` (epoch ms), `ids_alertados` (con poda por antigüedad), `firmas_recientes`,
+  `ubicacion_detectada` (caché de la geolocalización por IP, RF-33).
 - Escritura **atómica** (escribir a temp + `os.replace`) para no corromper ante caída.
 - Esquema en `DATA-MODEL.md`.
 
@@ -123,6 +126,7 @@ def es_duplicado(ev, recientes, ids_alertados):
 | Pérdida de red total | Ambas ingestas reintentan; el proceso sigue vivo; al volver la red, USGS reconcilia. |
 | Excepción en una task | El `Supervisor` la captura, registra y reinicia esa task con backoff. |
 | Fallo de la UI | Aislado del pipeline; la ingestión sigue; se reintenta mostrar. |
+| Geolocalización por IP falla (red/timeout/JSON/status) | `geoloc.py` nunca lanza: devuelve `None`; `Aplicacion` cae al default (Caracas) sin bloquear el arranque (ADR-011). |
 
 ## 9. Logging y observabilidad — RNF-07
 
@@ -134,6 +138,10 @@ def es_duplicado(ev, recientes, ids_alertados):
 ## 10. Seguridad y privacidad — RNF-09
 - Sin claves de API; solo lectura de fuentes públicas; sin envío de datos del usuario a terceros.
 - Validación estricta de entrada (pydantic) para mensajes externos.
+- **Excepción explícita** (RF-33, ADR-011): si no hay `[referencia]` manual, se consulta un servicio
+  de geolocalización por IP (`ipapi.co`) — la IP de origen queda visible a ese tercero, igual que en
+  cualquier request HTTP. Se activa solo por ausencia de configuración manual (nunca con datos
+  explícitos del usuario) y se puede desactivar por completo fijando `[referencia]` en `config.toml`.
 
 ---
 
@@ -303,6 +311,35 @@ asumir que quedó mostrada.
 implementar el servicio D-Bus (`dbus-fast` `ServiceInterface`), el `publicar_dbus` callback y su
 cableado en `app.py`/`config.py`, la detección `"auto"`, y — en el otro extremo, fuera del paquete
 Python — la extensión GNOME Shell (GJS) que consume la señal y llama `Reconocer`.
+
+### ADR-011 — Punto de referencia: manual con fallback automático por IP (RF-33)
+
+- **Contexto**: RF-12 exige un punto de referencia (lat/lon) configurable, pero hasta ahora era
+  **100% manual** (`config.toml`, default Caracas). Un usuario nuevo sin configurar nada obtiene un
+  filtro geográfico centrado en un punto que no es el suyo, sin darse cuenta.
+- **Decisión**: si el usuario **no** define `[referencia]` en `config.toml`, `Aplicacion` detecta la
+  ubicación por IP (`geoloc.py`, endpoint documentado en `API-SPEC.md` §4) **una sola vez**, antes de
+  arrancar el pipeline, y la persiste en `state.json` (`ubicacion_detectada`) para no repetir la
+  consulta en arranques siguientes. Si ya hay `[referencia]` manual, o ya hay una ubicación
+  cacheada, **nunca** se llama a la API. Si la detección falla (sin red, timeout, respuesta
+  inesperada), se cae al default hardcodeado (Caracas) sin cachear el fallo, para reintentar en el
+  próximo arranque.
+- **Dónde vive la decisión**: en `app.py` (`Aplicacion._preparar`/`_resolver_referencia_automatica`),
+  no en `config.py`. `config.py` sigue siendo una función pura de lectura/validación de TOML (sin
+  red ni I/O de estado); solo expone si `[referencia]` estaba presente (`tiene_referencia_manual`).
+  `cli.py` calcula ese booleano y se lo pasa a `Aplicacion` en su construcción.
+- **Por qué no en `--simulate`**: RF-21 exige que el modo simulación funcione **sin red**; por eso
+  `simular()` nunca pasa `resolver_ubicacion=True` a `_preparar`, sin importar si hay referencia
+  manual o no.
+- **Alternativas descartadas**: (a) geolocalización real del SO (CoreLocation/Windows Location
+  API/GeoClue) — mucho más precisa, pero exige tres integraciones nativas distintas y permisos del
+  sistema, en contra de RNF-06 (un solo core Python portable); (b) detectar y sobreescribir la
+  referencia en **cada** arranque — descartado por depender de red en cada arranque y gastar más
+  rápido la cuota del servicio gratuito, sin beneficio real (la ubicación de una máquina no cambia
+  entre arranques).
+- **Consecuencias**: nueva dependencia externa opcional (RNF-09, ver §10); nuevo campo en el estado
+  persistido (`DATA-MODEL.md` §2); `geoloc.py` sigue el mismo patrón de aislamiento de fallos que
+  `notify/toast.py` (nunca lanza, siempre hay un fallback).
 
 ## 12. Trazabilidad
 

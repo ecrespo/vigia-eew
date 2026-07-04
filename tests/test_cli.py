@@ -10,8 +10,9 @@ from vigia_eew.cli import main
 class _FakeApp:
     creadas: list[_FakeApp] = []
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, *, referencia_manual=True):
         self.cfg = cfg
+        self.referencia_manual = referencia_manual
         self.simulado = False
         self.ejecutado = False
         _FakeApp.creadas.append(self)
@@ -23,8 +24,8 @@ class _FakeApp:
         self.ejecutado = True
 
 
-def _crear(cfg):
-    return _FakeApp(cfg)
+def _crear(cfg, **kwargs):
+    return _FakeApp(cfg, **kwargs)
 
 
 def setup_function():
@@ -53,6 +54,21 @@ def test_check_config_no_crea_app(capsys):
 def test_config_inexistente_falla():
     with pytest.raises(FileNotFoundError):
         main(["--config", "/ruta/que/no/existe.toml"], crear_app=_crear)
+
+
+def test_sin_config_referencia_no_manual():
+    # Sin --config y sin config.toml de usuario en este entorno de test -> no manual.
+    rc = main([], crear_app=_crear)
+    assert rc == 0
+    assert _FakeApp.creadas[-1].referencia_manual is False
+
+
+def test_config_con_referencia_es_manual(tmp_path):
+    ruta = tmp_path / "config.toml"
+    ruta.write_text('[referencia]\nnombre = "Test"\nlat = 1.0\nlon = 2.0\n', encoding="utf-8")
+    rc = main(["--config", str(ruta)], crear_app=_crear)
+    assert rc == 0
+    assert _FakeApp.creadas[-1].referencia_manual is True
 
 
 def test_version_sale_limpio():

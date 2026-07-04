@@ -88,6 +88,7 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 ### 5.4 Filtrado (configurable)
 - **RF-12** — Filtrar por **punto de referencia (lat/lon), radio en km y magnitud mínima** configurables.
 - **RF-13** — Clasificar **severidad por magnitud** (p. ej. `<4` info, `4–5.5` atención, `5.5+` crítico), configurable, que cambie **color y sonido** de la alerta.
+- **RF-33** — Cuando el usuario **no** configura `[referencia]` manualmente, **detectar automáticamente** el punto de referencia geográfico por geolocalización de IP (mejor esfuerzo), cachear el resultado para no repetir la consulta en cada arranque, y hacer **fallback silencioso** al default (Caracas) si la detección falla, sin bloquear el arranque del agente.
 
 ### 5.5 Notificación (requisito central)
 - **RF-14** — Mostrar un **toast nativo** del SO (informativo) con `desktop-notifier` (Linux/Win/macOS).
@@ -130,7 +131,7 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 | RNF-06 | Portabilidad | Linux, Windows, macOS; UI por defecto en **Tkinter** (cero dependencias extra). |
 | RNF-07 | Observabilidad | Logs estructurados con niveles; archivo rotativo; eventos de conexión/reconexión registrados. |
 | RNF-08 | Mantenibilidad/Trazabilidad | Cada componente del código rastreable a un RF del PRD. |
-| RNF-09 | Seguridad/Privacidad | Sin claves de API; sin enviar datos del usuario a terceros; solo lectura de fuentes públicas. |
+| RNF-09 | Seguridad/Privacidad | Sin claves de API; sin enviar datos del usuario a terceros; solo lectura de fuentes públicas. Excepción explícita: la detección automática de ubicación (RF-33) consulta un servicio de geolocalización por IP, y solo cuando el usuario no fijó `[referencia]` manualmente — desactivable configurando la referencia a mano. |
 | RNF-10 | Idioma | Código, comentarios y artefactos SDD en **español**. |
 | RNF-11 | Versión de Python | **Python 3.11+** (uso de `tomllib` de la stdlib). |
 | RNF-12 | Zona horaria | Hora local mostrada en **zona de Venezuela** (America/Caracas, UTC-4). |
@@ -150,6 +151,7 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 | CA-09 | La hora se muestra en **America/Caracas** y la distancia en km al punto de referencia. | RF-08, RF-18, RNF-12 |
 | CA-10 | El autoarranque se **instala y desinstala** correctamente en cada SO. | RF-22, RF-23 |
 | CA-11 | El CI produce `.exe`, `.dmg`, AppImage, `.deb`, `.rpm` y el paquete de PyPI como artefactos. | RF-27..RF-31 |
+| CA-12 | Sin `[referencia]` en `config.toml`, el agente detecta la ubicación por IP en el primer arranque y **reutiliza el caché** en arranques siguientes sin volver a llamar al servicio; si la detección falla, usa el default (Caracas) sin dejar de arrancar. | RF-33 |
 
 ## 8. Fuera de alcance (v1)
 

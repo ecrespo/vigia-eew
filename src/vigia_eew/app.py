@@ -23,7 +23,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from .config import Settings
+from . import geoloc
+from .config import Referencia, Settings
 from .ingest import RawMessage
 from .ingest.rest_usgs import RESTReconciler
 from .ingest.ws_emsc import WSIngestor
@@ -54,6 +55,8 @@ class Aplicacion:
         *,
         estado: StateStore | None = None,
         logger: logging.Logger | None = None,
+        referencia_manual: bool = True,
+        detectar_ubicacion: Callable[[], Referencia | None] | None = None,
     ) -> None:
         self.cfg = cfg
         self.estado = estado or StateStore()
@@ -63,6 +66,8 @@ class Aplicacion:
         self._root: Any = None
         self._ctrl: ControladorAlertas | None = None
         self._salir_al_vaciar = False
+        self._referencia_manual = referencia_manual
+        self._detectar_ubicacion = detectar_ubicacion or geoloc.detectar_ubicacion_ip
 
     # --- Wiring testeable ---
 
@@ -118,9 +123,27 @@ class Aplicacion:
 
     # --- Construcción de la GUI real ---
 
-    def _preparar(self) -> None:
+    def _preparar(self, *, resolver_ubicacion: bool = False) -> None:
         configurar_logging(self.cfg.logging)
         self.estado.cargar()
+        if resolver_ubicacion and not self._referencia_manual:
+            self._resolver_referencia_automatica()
+
+    def _resolver_referencia_automatica(self) -> None:
+        """Resuelve el punto de referencia por IP cuando no hay `[referencia]` manual (RF-33)."""
+        cacheada = self.estado.ubicacion_cacheada()
+        if cacheada is not None:
+            self.cfg.referencia = cacheada
+            self._log.info("ubicacion_ip_cache nombre=%s", cacheada.nombre)
+            return
+        detectada = self._detectar_ubicacion()
+        if detectada is None:
+            self._log.warning("ubicacion_ip_fallback_default")
+            return
+        self.cfg.referencia = detectada
+        self.estado.cachear_ubicacion(detectada)
+        self.estado.guardar()
+        self._log.info("ubicacion_ip_detectada nombre=%s", detectada.nombre)
 
     def _nuevo_root(self) -> Any:
         import tkinter as tk
@@ -178,7 +201,7 @@ class Aplicacion:
 
     def ejecutar(self) -> None:
         """Arranca el agente completo: ingestión + pipeline + notificación (CU-1, CU-2)."""
-        self._preparar()
+        self._preparar(resolver_ubicacion=True)
         root = self._nuevo_root()
         ctrl = self._controlador_para_gui(root, modo_loop=True)
         puente = PuenteAsyncioTk(sink=ctrl.encolar)
