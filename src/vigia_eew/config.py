@@ -82,6 +82,7 @@ class Notificacion(BaseModel):
     pantalla_completa: bool = False
     zona_horaria: str = "America/Caracas"
     sonido: bool = True
+    icono_bandeja: bool = True
 
 
 class LoggingCfg(BaseModel):

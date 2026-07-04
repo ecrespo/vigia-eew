@@ -63,8 +63,10 @@ vigia-eew/
 │   │   └── windows_task.py     # tarea programada (schtasks /sc onlogon)
 │   ├── state.py                # StateStore (JSON atómico, platformdirs)
 │   ├── geoloc.py                # detectar_ubicacion_ip (RF-33, fallback por IP)
+│   ├── estado_agente.py         # EstadoAgente (snapshot thread-safe para el tray, RF-34)
+│   ├── tray.py                  # ícono de bandeja (pystray, mejor esfuerzo, RF-34)
 │   ├── logging_conf.py         # logging estructurado + rotativo
-│   └── assets/                 # info.wav / atencion.wav / critico.wav (generados)
+│   └── assets/                 # info.wav / atencion.wav / critico.wav / tray_icon.png (generados)
 ├── packaging/
 │   ├── entrypoint.py            # script de entrada para PyInstaller (no es un entry point de pip)
 │   ├── vigia-eew.spec           # PyInstaller spec (onefile; BUNDLE .app en macOS)
@@ -178,6 +180,18 @@ vigia-eew/
 | F9-4 | `app.py`: `Aplicacion._resolver_referencia_automatica` (caché → geoloc → fallback), solo en `ejecutar()` | F9-1, F9-2, F5-b | RF-33 | ✅ |
 | F9-5 | `cli.py`: pasa `referencia_manual` a `Aplicacion` | F9-3, F5-1 | RF-33 | ✅ |
 
+### Fase 10 — Ícono de bandeja del sistema (RF-34)
+| ID | Tarea | Depende de | RF | Estado |
+|---|---|---|---|---|
+| F10-1 | `estado_agente.py`: `EstadoAgente` (snapshot thread-safe: WS conectado, última alerta) | F1-1 | RF-34 | ✅ |
+| F10-2 | `tray.py`: `construir_icono`/`IconoBandeja` (pystray, menú, mejor esfuerzo) + ícono generado (`assets/tray_icon.png`) | F10-1 | RF-34 | ✅ |
+| F10-3 | `notify/queue.py`: `AlertQueue.pausar`/`reanudar` (no pierde eventos, solo retrasa la presentación) | F4-4 | RF-34 | ✅ |
+| F10-4 | `notify/controlador.py`: expone `pausar`/`reanudar`/`pausado`; actualiza `EstadoAgente` al mostrar | F10-1, F10-3 | RF-34 | ✅ |
+| F10-5 | `ingest/ws_emsc.py`: actualiza `EstadoAgente` al conectar/reconectar | F10-1, F2-1 | RF-34 | ✅ |
+| F10-6 | `config.py`: `[notificacion] icono_bandeja` (default `true`) | F1-3 | RF-34 | ✅ |
+| F10-7 | `app.py`: `_construir_tray`/`_alternar_pausa`/`_salir_desde_tray`/`_editar_config`, solo en `ejecutar()` | F10-2, F10-4, F10-6, F5-b | RF-34 | ✅ |
+| F10-8 | `cli.py`: pasa `ruta_config` a `Aplicacion` (para que "editar configuración" abra el archivo en uso) | F10-7, F5-1 | RF-34 | ✅ |
+
 ## 3. Matriz de trazabilidad RF → componente
 
 | RF | Componente(s) | Fase |
@@ -200,6 +214,7 @@ vigia-eew/
 | RF-26 | `cli.py`, `app.py`, `pipeline/procesador.py`, `pyproject.toml` | F1/F5 |
 | RF-27..RF-32 | `packaging/*`, `.github/workflows/build.yml` | F8 |
 | RF-33 | `geoloc.py`, `config.py` (`tiene_referencia_manual`), `state.py`/`models.py` (`UbicacionDetectada`), `app.py`, `cli.py` | F9 |
+| RF-34 | `tray.py`, `estado_agente.py`, `notify/queue.py` (pausar/reanudar), `notify/controlador.py`, `ingest/ws_emsc.py`, `config.py`, `app.py`, `cli.py` | F10 |
 
 ## 4. Estrategia de pruebas (resumen)
 
@@ -225,6 +240,8 @@ vigia-eew/
 | `tomllib` (stdlib) | leer `config.toml` | RF-24/ADR-007 |
 | `tzdata`/zoneinfo | hora America/Caracas | RF-18/RNF-12 |
 | PyInstaller, fpm, linuxdeploy | empaquetado | RF-28..RF-30 |
+| `pystray` | ícono de bandeja (mejor esfuerzo) | RF-34/ADR-012 |
+| `Pillow` | imagen del ícono de bandeja (requisito de `pystray`) | RF-34/ADR-012 |
 
 ## 6. Hitos y orden de entrega
 
@@ -234,3 +251,4 @@ vigia-eew/
 4. **M3**: Fase 6–7 (autoarranque + verificación en los 3 SO).
 5. **M4**: Fase 8 (empaquetado + CI con release assets).
 6. **M5**: Fase 9 (detección automática de ubicación por IP, RF-33).
+7. **M6**: Fase 10 (ícono de bandeja del sistema, RF-34).

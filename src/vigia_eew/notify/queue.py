@@ -37,6 +37,7 @@ class AlertQueue:
         self._al_reconocer = al_reconocer
         self._pendientes: deque[SeismicEvent] = deque()
         self._actual: SeismicEvent | None = None
+        self._pausado = False
         self._log = logger or logging.getLogger("vigia_eew.notify.queue")
 
     @property
@@ -48,6 +49,20 @@ class AlertQueue:
     def pendientes(self) -> int:
         """Cantidad de eventos en espera (sin contar el que se muestra)."""
         return len(self._pendientes)
+
+    @property
+    def pausado(self) -> bool:
+        """True si la presentación de nuevas alertas está pausada (RF-34)."""
+        return self._pausado
+
+    def pausar(self) -> None:
+        """Deja de mostrar alertas nuevas; siguen encolándose sin perderse (RF-34)."""
+        self._pausado = True
+
+    def reanudar(self) -> None:
+        """Reanuda la presentación y muestra lo acumulado mientras estaba pausada."""
+        self._pausado = False
+        self._mostrar_siguiente_si_libre()
 
     def encolar(self, ev: SeismicEvent) -> None:
         """Encola un evento; si es un `update` del que está en pantalla, lo refresca."""
@@ -76,10 +91,11 @@ class AlertQueue:
         self._mostrar_siguiente_si_libre()
 
     def _mostrar_siguiente_si_libre(self) -> None:
-        if self._actual is None and self._pendientes:
-            self._actual = self._pendientes.popleft()
-            self._mostrar(self._actual)
-            self._log.info("alerta_mostrada id=%s", self._actual.id)
+        if self._pausado or self._actual is not None or not self._pendientes:
+            return
+        self._actual = self._pendientes.popleft()
+        self._mostrar(self._actual)
+        self._log.info("alerta_mostrada id=%s", self._actual.id)
 
 
 class PuenteAsyncioTk:

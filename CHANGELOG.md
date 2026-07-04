@@ -6,6 +6,29 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+### Agregado
+- Ícono de bandeja del sistema (RF-34): menú con estado (WS conectado/reconectando,
+  última alerta), pausar/reanudar notificaciones (sin perder eventos, solo retrasa su
+  presentación), editar `config.toml` con la app asociada del SO, y salir. Nuevo toggle
+  `[notificacion] icono_bandeja` (default `true`). Mejor esfuerzo: si el backend gráfico
+  no está disponible (GNOME/Wayland sin extensión de bandeja, macOS sin validar, etc.),
+  el agente sigue funcionando normalmente sin el ícono. No se activa en `--simulate`.
+  Nuevas dependencias: `pystray` + `Pillow` (excepción documentada a RNF-06).
+
+### Corregido
+- La línea "Hora local (Venezuela): ..." de la ventana de alerta se recortaba contra el
+  borde (se veía la fecha, pero la hora quedaba cortada). Causa: el `Label` de detalle no
+  tenía `wraplength`, así que una línea más ancha que la ventana (fija, no redimensionable
+  por RF-15) se dibujaba fuera del área visible en vez de bajar de línea. Se agregó
+  `wraplength` acorde al ancho real de la ventana (fijo o pantalla completa) en
+  `notify/alert_window.py`.
+- Tras el fix anterior, el contenido podía quedar recortado contra el **borde inferior**
+  en máquinas con otras métricas de fuente/DPI: el alto de la ventana era un número fijo
+  (620px) que no reflejaba lo que el contenido realmente necesitaba. Ahora el alto se mide
+  con `winfo_reqheight()` después de empaquetar el contenido (en la pantalla real del
+  usuario) y la ventana se dimensiona a ese valor (con un piso visual de 620px), en vez de
+  adivinar una constante.
+
 ## [0.1.3] - 2026-07-04
 
 ### Agregado

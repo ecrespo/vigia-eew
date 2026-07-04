@@ -26,6 +26,7 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 🟢 **Cross-platform**: Linux, Windows, and macOS, with autostart on login.
 - 📦 **Full distribution**: PyPI, `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`.
 - 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake.
+- 🖥️ **System tray icon**: connection status, last alert, pause/resume notifications, edit config, quit — best-effort, never blocks startup if unavailable on your desktop.
 
 ## Development
 

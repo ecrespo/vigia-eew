@@ -25,6 +25,7 @@ import websockets
 
 from ..backoff import exponential_backoff
 from ..config import FuenteEMSC
+from ..estado_agente import EstadoAgente
 from . import RawMessage
 
 # Factoría de conexión por defecto: el cliente real de `websockets`.
@@ -44,6 +45,7 @@ class WSIngestor:
         sleep: _SleepFn = asyncio.sleep,
         jitter: bool = True,
         rng: Callable[[], float] | None = None,
+        estado: EstadoAgente | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._cfg = cfg
@@ -52,6 +54,7 @@ class WSIngestor:
         self._sleep = sleep
         self._jitter = jitter
         self._rng = rng
+        self._estado = estado
         self._log = logger or logging.getLogger("vigia_eew.ingest.ws")
 
     def _parsear(self, raw: str | bytes) -> RawMessage | None:
@@ -80,6 +83,8 @@ class WSIngestor:
                 )
                 async with conexion as ws:
                     self._log.info("ws_conectado url=%s", self._cfg.url)
+                    if self._estado is not None:
+                        self._estado.marcar_conectado()
                     async for raw in ws:
                         # Reiniciar el backoff solo ante progreso real (mensaje
                         # recibido), no al abrir: así un socket que acepta y cierra
@@ -94,6 +99,8 @@ class WSIngestor:
             except Exception as exc:  # noqa: BLE001 - resiliencia deliberada (RNF-03)
                 self._log.warning("ws_error tipo=%s detalle=%s", type(exc).__name__, exc)
 
+            if self._estado is not None:
+                self._estado.marcar_reconectando()
             intento += 1
             espera = self._backoff(intento)
             self._log.info("ws_reconectando intento=%d espera_s=%.1f", intento, espera)

@@ -15,6 +15,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from ..estado_agente import EstadoAgente
 from ..models import SeismicEvent, Severidad
 from .presentacion import ZONA_VENEZUELA, DatosAlerta, formatear_evento
 from .queue import AlertQueue
@@ -38,6 +39,7 @@ class ControladorAlertas:
         al_reconocer: _ReconocerFn | None = None,
         zona: str = ZONA_VENEZUELA,
         nombre_referencia: str = "referencia",
+        estado: EstadoAgente | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._crear_ventana = crear_ventana
@@ -46,6 +48,7 @@ class ControladorAlertas:
         self._al_reconocer_extra = al_reconocer
         self._zona = zona
         self._nombre_ref = nombre_referencia
+        self._estado = estado
         self._log = logger or logging.getLogger("vigia_eew.notify.controlador")
         self._ventana: Any = None
         self._cola = AlertQueue(
@@ -58,6 +61,19 @@ class ControladorAlertas:
     def cola(self) -> AlertQueue:
         return self._cola
 
+    @property
+    def pausado(self) -> bool:
+        """True si la presentación de nuevas alertas está pausada (RF-34)."""
+        return self._cola.pausado
+
+    def pausar(self) -> None:
+        """Deja de mostrar alertas nuevas; siguen encolándose sin perderse (RF-34)."""
+        self._cola.pausar()
+
+    def reanudar(self) -> None:
+        """Reanuda la presentación de alertas (RF-34)."""
+        self._cola.reanudar()
+
     def encolar(self, ev: SeismicEvent) -> None:
         """Encola un evento para mostrarlo (entrada desde el puente asyncio↔Tk)."""
         self._cola.encolar(ev)
@@ -66,11 +82,16 @@ class ControladorAlertas:
         return formatear_evento(ev, zona=self._zona, nombre_referencia=self._nombre_ref)
 
     def _mostrar(self, ev: SeismicEvent) -> None:
-        self._ventana = self._crear_ventana(self._datos(ev), ev.severidad, self._cola.reconocer)
+        datos = self._datos(ev)
+        self._ventana = self._crear_ventana(datos, ev.severidad, self._cola.reconocer)
         if self._reproducir is not None:
             self._reproducir(ev.severidad)
         if self._toast is not None:
             self._toast(ev)
+        if self._estado is not None:
+            self._estado.marcar_ultima_alerta(
+                f"{datos.magnitud} · {datos.lugar} · {datos.hora_local}"
+            )
 
     def _actualizar(self, ev: SeismicEvent) -> None:
         if self._ventana is not None:

@@ -46,6 +46,10 @@ atencion_max = 5.5
 pantalla_completa = false
 zona_horaria = "America/Caracas"
 sonido = true
+# Ícono de bandeja del sistema (RF-34): estado, pausar/reanudar, editar config, salir.
+# Mejor esfuerzo — si el SO no puede mostrarlo (p. ej. GNOME/Wayland sin la extensión
+# "AppIndicator and KStatusNotifierItem Support"), el agente sigue funcionando igual.
+icono_bandeja = true
 
 [logging]
 nivel = "INFO"

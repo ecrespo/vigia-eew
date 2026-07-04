@@ -35,6 +35,7 @@ def test_defaults_sin_archivo(tmp_path):
     assert cfg.referencia.nombre == "Caracas"
     assert cfg.filtro.radio_km == 300.0
     assert cfg.fuentes_emsc.ping_interval_s == 15
+    assert cfg.notificacion.icono_bandeja is True
 
 
 def test_cargar_desde_toml(tmp_path):

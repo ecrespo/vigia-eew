@@ -35,6 +35,8 @@ dependencies = [
     "desktop-notifier>=5.0",   # toast multiplataforma (RF-14)
     "platformdirs>=4.0",       # rutas de estado/config por SO (RF-06/RF-10)
     "tzdata>=2024.1",          # zona America/Caracas en Win/macOS (RF-18/RNF-12)
+    "pystray>=0.19",           # ícono de bandeja del sistema (RF-34/ADR-012)
+    "Pillow>=10.0",            # imagen del ícono de bandeja, requisito de pystray (RF-34)
 ]
 
 [project.urls]
@@ -82,3 +84,7 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.11"
 strict = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "pystray"
+ignore_missing_imports = true  # sin stubs/py.typed publicados (RF-34)

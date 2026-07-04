@@ -10,9 +10,10 @@ from vigia_eew.cli import main
 class _FakeApp:
     creadas: list[_FakeApp] = []
 
-    def __init__(self, cfg, *, referencia_manual=True):
+    def __init__(self, cfg, *, referencia_manual=True, ruta_config=None):
         self.cfg = cfg
         self.referencia_manual = referencia_manual
+        self.ruta_config = ruta_config
         self.simulado = False
         self.ejecutado = False
         _FakeApp.creadas.append(self)
@@ -69,6 +70,14 @@ def test_config_con_referencia_es_manual(tmp_path):
     rc = main(["--config", str(ruta)], crear_app=_crear)
     assert rc == 0
     assert _FakeApp.creadas[-1].referencia_manual is True
+
+
+def test_ruta_config_se_propaga_a_la_app(tmp_path):
+    ruta = tmp_path / "config.toml"
+    ruta.write_text('[referencia]\nnombre = "Test"\nlat = 1.0\nlon = 2.0\n', encoding="utf-8")
+    rc = main(["--config", str(ruta)], crear_app=_crear)
+    assert rc == 0
+    assert _FakeApp.creadas[-1].ruta_config == str(ruta)
 
 
 def test_version_sale_limpio():
