@@ -6,6 +6,14 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+## [0.1.2] - 2026-07-04
+
+### Corregido
+- El PNG 1x1 introducido en 0.1.1 era una imagen válida pero de una resolución que
+  `linuxdeploy` rechaza (exige una de la lista fija 8x8..512x512). Se reemplaza por
+  un PNG **64x64** sólido generado con la stdlib de Python (`struct`+`zlib`, sin
+  depender de Pillow). Detectado en el run de CI del tag `v0.1.1`.
+
 ## [0.1.1] - 2026-07-04
 
 ### Corregido
@@ -28,6 +36,7 @@ de publicación en `packaging/RELEASING.md`.
 - Empaquetado: build de PyPI (wheel/sdist), especificación PyInstaller y scripts de build
   por SO, workflow de CI/CD con matriz de release (Fase 8).
 
-[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.1...HEAD
+[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/ecrespo/vigia-eew/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ecrespo/vigia-eew/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ecrespo/vigia-eew/releases/tag/v0.1.0

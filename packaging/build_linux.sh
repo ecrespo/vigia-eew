@@ -41,11 +41,21 @@ Icon=vigia-eew
 Categories=Utility;
 Terminal=false
 EOF
-    # Icono placeholder (PNG 1x1 transparente válido): falta un asset gráfico real
-    # (ver nota en vigia-eew.spec). Un archivo vacío hace fallar a linuxdeploy/CImg
-    # al intentar decodificarlo como imagen.
-    base64 -d > "$APPDIR/vigia-eew.png" <<< \
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    # Icono placeholder: falta un asset gráfico real (ver nota en vigia-eew.spec).
+    # linuxdeploy exige una resolución "de verdad" (8x8..512x512); un PNG 1x1 es
+    # válido como imagen pero lo rechaza igual. Se genera un PNG 64x64 sólido con
+    # la stdlib (sin depender de Pillow, que no es una dependencia del proyecto).
+    python3 -c "
+import struct, zlib
+def chunk(tag, data):
+    return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+w = h = 64
+ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)  # 8 bits, color RGB
+fila = b'\x00' + bytes((200, 60, 60)) * w  # filtro 'None' + relleno sólido
+idat = zlib.compress(fila * h)
+with open('$APPDIR/vigia-eew.png', 'wb') as f:
+    f.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b''))
+"
     linuxdeploy --appdir "$APPDIR" --desktop-file "$APPDIR/vigia-eew.desktop" \
         --icon-file "$APPDIR/vigia-eew.png" --output appimage
     mv ./*.AppImage "$DIST/vigia-eew-$VERSION-x86_64.AppImage"
