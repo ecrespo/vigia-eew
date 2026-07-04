@@ -166,3 +166,20 @@ def test_smoke_detalle_tiene_wraplength():
     etiquetas = [w for w in raiz.winfo_children() if isinstance(w, tk.Label)]
     detalle = next(w for w in etiquetas if "Hora local" in w.cget("text"))
     assert int(detalle.cget("wraplength")) > 0
+
+
+@pytest.mark.skipif(
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="prueba de GUI real; opt-in VIGIA_GUI_TESTS=1"
+)
+def test_smoke_alto_ventana_alcanza_para_el_contenido():
+    # La ventana no es redimensionable ni scrolleable (overrideredirect, RF-15): el
+    # alto fijado debe ser siempre >= lo que el contenido empaquetado realmente pide,
+    # medido en la propia pantalla (fuentes/DPI reales), no un número fijo adivinado.
+    import tkinter as tk
+
+    raiz = tk.Tk()
+    w = AlertWindow(_datos(), al_reconocer=lambda: None, raiz=raiz)
+    raiz.update_idletasks()
+    alto_ventana = int(raiz.geometry().split("+")[0].split("x")[1])
+    assert alto_ventana >= raiz.winfo_reqheight()
+    w.reconocer()

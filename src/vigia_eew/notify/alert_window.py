@@ -23,6 +23,8 @@ from typing import Any
 
 from .presentacion import DatosAlerta, color_severidad
 
+_ALTO_MINIMO = 620  # piso visual (ADR-003); el alto real crece si el contenido lo exige
+
 
 def tomar_foco(raiz: Any) -> None:
     """Eleva la ventana y le fuerza el foco (RF-16)."""
@@ -95,7 +97,6 @@ class AlertWindow:
             ancho_ventana = raiz.winfo_screenwidth()
         else:
             ancho_ventana = 900
-            self._centrar(ancho_ventana, 620)
         raiz.configure(bg=color)
 
         for hijo in list(raiz.winfo_children()):
@@ -140,6 +141,16 @@ class AlertWindow:
             pady=16,
             command=self.reconocer,
         ).pack(pady=(20, 30))
+
+        if not self._pantalla_completa:
+            # Alto dinámico: calcularlo del contenido ya empaquetado evita que una
+            # línea de más (p. ej. `lugar` largo que envuelve por `wraplength`) quede
+            # recortada contra un alto fijo — la ventana no es redimensionable ni
+            # scrolleable (overrideredirect, RF-15), así que el alto debe alcanzar
+            # siempre para todo el contenido real.
+            raiz.update_idletasks()
+            alto_ventana = max(_ALTO_MINIMO, raiz.winfo_reqheight())
+            self._centrar(ancho_ventana, alto_ventana)
 
         tomar_foco(raiz)
 

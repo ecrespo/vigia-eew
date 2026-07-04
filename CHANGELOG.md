@@ -13,6 +13,12 @@ de publicación en `packaging/RELEASING.md`.
   por RF-15) se dibujaba fuera del área visible en vez de bajar de línea. Se agregó
   `wraplength` acorde al ancho real de la ventana (fijo o pantalla completa) en
   `notify/alert_window.py`.
+- Tras el fix anterior, el contenido podía quedar recortado contra el **borde inferior**
+  en máquinas con otras métricas de fuente/DPI: el alto de la ventana era un número fijo
+  (620px) que no reflejaba lo que el contenido realmente necesitaba. Ahora el alto se mide
+  con `winfo_reqheight()` después de empaquetar el contenido (en la pantalla real del
+  usuario) y la ventana se dimensiona a ese valor (con un piso visual de 620px), en vez de
+  adivinar una constante.
 
 ## [0.1.3] - 2026-07-04
 
