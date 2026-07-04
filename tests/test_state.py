@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from vigia_eew.config import Referencia
 from vigia_eew.models import AlertedId, EventSignature
 from vigia_eew.state import StateStore
 
@@ -97,3 +98,24 @@ def test_escritura_atomica_deja_archivo_unico(tmp_path):
     archivos = list(tmp_path.iterdir())
     # Solo debe quedar state.json, sin temporales .tmp colgando.
     assert [p.name for p in archivos] == ["state.json"]
+
+
+def test_ubicacion_cacheada_vacia_por_defecto(tmp_path):
+    s = _store(tmp_path)
+    s.cargar()
+    assert s.ubicacion_cacheada() is None
+
+
+def test_cachear_y_recuperar_ubicacion(tmp_path):
+    s = _store(tmp_path)
+    s.cargar()
+    s.cachear_ubicacion(Referencia(nombre="Maracaibo", lat=10.63, lon=-71.64))
+    s.guardar()
+
+    s2 = _store(tmp_path)
+    s2.cargar()
+    cacheada = s2.ubicacion_cacheada()
+    assert cacheada is not None
+    assert cacheada.nombre == "Maracaibo"
+    assert cacheada.lat == 10.63
+    assert cacheada.lon == -71.64

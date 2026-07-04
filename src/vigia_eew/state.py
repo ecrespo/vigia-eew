@@ -16,8 +16,8 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-from .config import APP_NAME
-from .models import AlertedId, AppState, EventSignature
+from .config import APP_NAME, Referencia
+from .models import AlertedId, AppState, EventSignature, UbicacionDetectada
 
 NOMBRE_ARCHIVO_ESTADO = "state.json"
 # Antigüedad máxima de ids/firmas antes de podarlos (DATA-MODEL §2.2).
@@ -102,6 +102,22 @@ class StateStore:
         actual = self._estado.cursor_usgs_ms
         if actual is None or cursor_ms > actual:
             self._estado.cursor_usgs_ms = cursor_ms
+
+    def ubicacion_cacheada(self) -> Referencia | None:
+        """Última ubicación detectada por IP y cacheada, si hay una (RF-33)."""
+        ub = self._estado.ubicacion_detectada
+        if ub is None:
+            return None
+        return Referencia(nombre=ub.nombre, lat=ub.lat, lon=ub.lon)
+
+    def cachear_ubicacion(self, referencia: Referencia, *, cuando: datetime | None = None) -> None:
+        """Persiste una ubicación detectada por IP para no repetir la llamada al reiniciar."""
+        self._estado.ubicacion_detectada = UbicacionDetectada(
+            nombre=referencia.nombre,
+            lat=referencia.lat,
+            lon=referencia.lon,
+            detectado_utc=cuando or datetime.now(UTC),
+        )
 
     def podar(self, ahora: datetime | None = None) -> None:
         """Elimina ids y firmas más antiguos que `ANTIGUEDAD_MAX` (DATA-MODEL §2.2)."""

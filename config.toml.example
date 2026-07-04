@@ -3,6 +3,10 @@
 # (o pásalo con `vigia-eew --config <ruta>`). Todos los valores tienen defaults
 # sensatos centrados en Caracas; ajusta a tu zona.
 
+# Punto geográfico contra el que se calculan distancia y radio (RF-12). Si **borras o
+# comentas** esta sección completa, el agente detecta tu ubicación automáticamente por IP
+# en el primer arranque y la cachea para no repetir la consulta después (RF-33, ver
+# docs/API-SPEC.md §4). Déjala como está (o ajústala) para fijar tu ubicación a mano.
 [referencia]
 nombre = "Caracas"
 lat = 10.4806
@@ -10,6 +14,9 @@ lon = -66.9036
 
 [filtro]
 radio_km = 300.0
+# Magnitud mínima para que un sismo dispare una alerta (RF-12). Sube este valor si no
+# quieres que se reporten sismos menores; por ejemplo, para ignorar todo lo < 3.0:
+# magnitud_minima = 3.0
 magnitud_minima = 2.5
 
 [fuentes.emsc]

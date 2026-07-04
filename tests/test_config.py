@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from vigia_eew.config import Settings, cargar_config
+from vigia_eew.config import Settings, cargar_config, tiene_referencia_manual
 
 CONFIG_EJEMPLO = """
 [referencia]
@@ -68,3 +68,25 @@ def test_archivo_ejemplo_es_valido():
     cfg = cargar_config(ejemplo)
     assert cfg.referencia.nombre == "Caracas"
     assert cfg.notificacion.zona_horaria == "America/Caracas"
+
+
+def test_tiene_referencia_manual_ruta_explicita_inexistente(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        tiene_referencia_manual(tmp_path / "no_existe.toml")
+
+
+def test_tiene_referencia_manual_con_seccion(tmp_path):
+    ruta = tmp_path / "config.toml"
+    ruta.write_text(CONFIG_EJEMPLO, encoding="utf-8")
+    assert tiene_referencia_manual(ruta) is True
+
+
+def test_tiene_referencia_manual_sin_seccion(tmp_path):
+    ruta = tmp_path / "config.toml"
+    ruta.write_text("[filtro]\nmagnitud_minima = 4.0\n", encoding="utf-8")
+    assert tiene_referencia_manual(ruta) is False
+
+
+def test_tiene_referencia_manual_sin_ruta_ni_archivo_usuario():
+    # Sin --config y sin config.toml de usuario en este entorno de test -> no manual.
+    assert tiene_referencia_manual(None) is False

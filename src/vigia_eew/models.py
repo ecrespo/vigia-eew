@@ -114,6 +114,22 @@ class AlertedId(BaseModel):
         return _exigir_utc(v)
 
 
+class UbicacionDetectada(BaseModel):
+    """Ubicación por IP cacheada tras la primera detección exitosa (RF-33)."""
+
+    nombre: str
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    detectado_utc: datetime
+
+    @field_validator("detectado_utc")
+    @classmethod
+    def _validar_utc(cls, v: datetime) -> datetime:
+        validado = _exigir_utc(v)
+        assert validado is not None  # detectado_utc es obligatorio aquí
+        return validado
+
+
 class AppState(BaseModel):
     """Estado persistido del agente (RF-06, RF-10). Ver `state.py`."""
 
@@ -121,3 +137,4 @@ class AppState(BaseModel):
     cursor_usgs_ms: int | None = None
     ids_alertados: list[AlertedId] = Field(default_factory=list)
     firmas_recientes: list[EventSignature] = Field(default_factory=list)
+    ubicacion_detectada: UbicacionDetectada | None = None
