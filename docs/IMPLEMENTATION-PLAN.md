@@ -133,12 +133,17 @@ vigia-eew/
 | F6-3 | Windows tarea programada (instalar/desinstalar) | F5-1 | RF-22, RF-23 |
 
 ### Fase 7 — Verificación `--simulate` en los 3 SO
-| ID | Tarea | Depende de | CA |
-|---|---|---|---|
-| F7-1 | Validar alerta no descartable + sonido en Linux | F5-2 | CA-01 |
-| F7-2 | Validar en Windows | F5-2 | CA-01 |
-| F7-3 | Validar en macOS (foco/topmost) | F5-2 | CA-01, ADR-003 |
-| F7-4 | Pruebas de resiliencia (WS caído, 429, JSON inválido, reinicio) | F2-*, F3-* | CA-02..CA-07 |
+| ID | Tarea | Depende de | CA | Estado |
+|---|---|---|---|---|
+| F7-1 | Validar alerta no descartable + sonido en Linux | F5-2 | CA-01 | ✅ Verificado (GNOME/Wayland real): `--simulate` mostró la ventana topmost/sin decoración, disparó sonido y solo cerró tras RECONOCIDO; el proceso terminó limpio. |
+| F7-2 | Validar en Windows | F5-2 | CA-01 | ⏳ Pendiente — sin máquina Windows disponible en este entorno de desarrollo. |
+| F7-3 | Validar en macOS (foco/topmost) | F5-2 | CA-01, ADR-003 | ⏳ Pendiente — sin máquina macOS disponible en este entorno de desarrollo. |
+| F7-4 | Pruebas de resiliencia (WS caído, 429, JSON inválido, reinicio) | F2-*, F3-* | CA-02..CA-07 | ✅ `tests/test_resiliencia.py`: cierra a nivel de pipeline completo (`Procesador` real) lo que F2/F3 ya cubrían por componente — CA-02 (`WSIngestor` real supervisado), CA-04 (alerta solo-USGS), CA-05 (dedup inter-fuente end-to-end) y CA-07 (reinicio no re-alerta). |
+
+> F7-2/F7-3 requieren ejecutar `vigia-eew --simulate` manualmente en Windows/macOS y confirmar
+> visualmente CA-01 (ventana al frente, con foco, sonido, solo RECONOCIDO cierra). Sin esas
+> máquinas, la Fase 7 queda parcialmente verificada: el núcleo (pipeline + resiliencia) tiene
+> evidencia automatizada multiplataforma; el frontend Tkinter solo tiene evidencia real en Linux.
 
 ### Fase 8 — Empaquetado y distribución
 | ID | Tarea | Depende de | RF |
