@@ -53,6 +53,11 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
 ]
+# Empaquetado nativo (Fase 8, RF-28..RF-30): solo se necesita al construir binarios
+# con `packaging/build_*.{sh,ps1}`, no para desarrollar ni para instalar desde PyPI.
+packaging = [
+    "pyinstaller>=6.0",
+]
 
 # --- Configuración de herramientas ---
 

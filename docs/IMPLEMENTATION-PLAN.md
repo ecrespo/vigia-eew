@@ -19,6 +19,7 @@
 vigia-eew/
 ├── pyproject.toml              # uv + hatchling, deps, entry point `vigia-eew`
 ├── README.md
+├── CHANGELOG.md                # Keep a Changelog + versionado semántico (RF-27)
 ├── ARCHITECTURE.md
 ├── config.toml.example
 ├── docs/                       # artefactos SDD (este conjunto)
@@ -64,11 +65,13 @@ vigia-eew/
 │   ├── logging_conf.py         # logging estructurado + rotativo
 │   └── assets/                 # info.wav / atencion.wav / critico.wav (generados)
 ├── packaging/
-│   ├── build_linux.sh          # AppImage + .deb/.rpm (fpm)
-│   ├── build_windows.ps1       # PyInstaller onefile (.exe)
-│   ├── build_macos.sh          # .app → .dmg (codesign/notarize doc)
-│   ├── vigia-eew.spec          # PyInstaller spec
-│   └── apt-r2/                 # doc/utilidades repo apt en Cloudflare R2
+│   ├── entrypoint.py            # script de entrada para PyInstaller (no es un entry point de pip)
+│   ├── vigia-eew.spec           # PyInstaller spec (onefile; BUNDLE .app en macOS)
+│   ├── build_linux.sh           # AppImage + .deb/.rpm (fpm)
+│   ├── build_windows.ps1        # PyInstaller onefile (.exe)
+│   ├── build_macos.sh           # .app → .dmg (codesign/notarize doc)
+│   ├── RELEASING.md             # procedimiento de release (versionado, tag, CI)
+│   └── apt-r2/                  # doc/utilidades repo apt en Cloudflare R2
 ├── tests/
 └── .github/workflows/build.yml # matriz windows/macos/ubuntu → release assets
 ```
@@ -146,14 +149,19 @@ vigia-eew/
 > evidencia automatizada multiplataforma; el frontend Tkinter solo tiene evidencia real en Linux.
 
 ### Fase 8 — Empaquetado y distribución
-| ID | Tarea | Depende de | RF |
-|---|---|---|---|
-| F8-1 | PyPI (uv/hatchling), versionado semántico | F5-* | RF-27 |
-| F8-2 | Windows `.exe` (PyInstaller onefile, sin consola) | F5-* | RF-28 |
-| F8-3 | macOS `.app`→`.dmg` (+doc codesign/notarización) | F5-* | RF-29 |
-| F8-4 | Linux AppImage + `.deb`/`.rpm` (fpm) + snap doc | F5-* | RF-30 |
-| F8-5 | GitHub Actions matriz → release assets + scripts locales | F8-1..F8-4 | RF-31 |
-| F8-6 | Doc repo apt en Cloudflare R2 | F8-4 | RF-32 |
+| ID | Tarea | Depende de | RF | Estado |
+|---|---|---|---|---|
+| F8-1 | PyPI (uv/hatchling), versionado semántico | F5-* | RF-27 | ✅ Verificado: `uv build` produce wheel+sdist (con `assets/*.wav` incluidos); instalado en un venv limpio, `vigia-eew --check-config` funciona. `CHANGELOG.md` + `packaging/RELEASING.md` documentan el proceso. |
+| F8-2 | Windows `.exe` (PyInstaller onefile, sin consola) | F5-* | RF-28 | 🟡 `packaging/vigia-eew.spec` + `build_windows.ps1` escritos; el `.spec` se probó de verdad en Linux (produce un binario onefile funcional). El `.exe` en sí requiere ejecutarse en Windows (PyInstaller no cross-compila) — pendiente en CI (F8-5) o manualmente. |
+| F8-3 | macOS `.app`→`.dmg` (+doc codesign/notarización) | F5-* | RF-29 | 🟡 `build_macos.sh` escrito (usa el mismo `.spec`, con bloque `BUNDLE` condicional a `darwin`); doc de codesign/notarización sin certificado (fuera de alcance v1). Requiere macOS para ejecutarse — pendiente en CI o manualmente. |
+| F8-4 | Linux AppImage + `.deb`/`.rpm` (fpm) + snap doc | F5-* | RF-30 | 🟡 `build_linux.sh` escrito y con sintaxis validada; el binario onefile se construyó y corrió de verdad en este entorno. AppImage/`.deb`/`.rpm` necesitan `linuxdeploy`/`appimagetool`/`fpm`, no instalados aquí (sí en CI, F8-5) — el script los detecta y avisa si faltan en vez de fallar. Snap: solo doc (fuera de alcance v1). |
+| F8-5 | GitHub Actions matriz → release assets + scripts locales | F8-1..F8-4 | RF-31 | 🟡 `.github/workflows/build.yml` escrito (matriz ubuntu/windows/macos + job de Release), YAML validado sintácticamente. No ejecutado (requiere push de un tag `v*` en GitHub); instala `fpm`/`linuxdeploy`/`appimagetool` en el runner ubuntu antes de invocar `build_linux.sh`. |
+| F8-6 | Doc repo apt en Cloudflare R2 | F8-4 | RF-32 | ✅ `packaging/apt-r2/README.md`: estructura del repo, publicación con `reprepro`+`aws s3 sync`, uso desde el cliente. Documentado como evolución futura, sin bucket ni pipeline activados todavía. |
+
+> Este entorno de desarrollo es Linux sin Windows/macOS disponibles (misma limitación que
+> la Fase 7): F8-2/F8-3 solo pudieron autorearse y validarse parcialmente (el `.spec`
+> compartido sí se probó end-to-end en Linux). La verificación completa de esos dos
+> binarios queda pendiente de CI (F8-5) o de una máquina real del SO correspondiente.
 
 ## 3. Matriz de trazabilidad RF → componente
 

@@ -36,9 +36,14 @@ class Instalador(Protocol):
 def comando_agente() -> list[str]:
     """Comando que lanza el agente desde el autoarranque (RF-26).
 
-    Usa el intérprete actual con `-m vigia_eew.cli`, robusto frente a la instalación
-    del *console script*. En Windows prefiere `pythonw.exe` (sin consola para la GUI).
+    Empaquetado (PyInstaller, RF-28..RF-30): `sys.frozen` es `True` y `sys.executable`
+    **es** el propio binario del agente (`.exe`/AppImage) — se invoca solo, sin `-m`.
+    En checkout de desarrollo: usa el intérprete actual con `-m vigia_eew.cli`, robusto
+    frente a la instalación del *console script*. En Windows prefiere `pythonw.exe`
+    (sin consola para la GUI).
     """
+    if getattr(sys, "frozen", False):
+        return [sys.executable]
     ejecutable = sys.executable
     if sys.platform == "win32" and ejecutable.lower().endswith("python.exe"):
         sin_consola = ejecutable[: -len("python.exe")] + "pythonw.exe"

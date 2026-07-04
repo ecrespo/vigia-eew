@@ -18,6 +18,14 @@ def test_comando_agente_apunta_al_cli():
     assert "python" in cmd[0].lower()
 
 
+def test_comando_agente_congelado_usa_solo_el_ejecutable(monkeypatch):
+    # Empaquetado con PyInstaller (RF-28..RF-30): el propio binario ya es el agente,
+    # no un intérprete que acepte `-m`.
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    cmd = comando_agente()
+    assert cmd == [sys.executable]
+
+
 def test_crear_instalador_linux():
     assert isinstance(crear_instalador("linux"), InstaladorSystemd)
 
