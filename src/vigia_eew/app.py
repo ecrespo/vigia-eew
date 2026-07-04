@@ -21,10 +21,12 @@ import asyncio
 import logging
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
-from . import geoloc
-from .config import Referencia, Settings
+from . import geoloc, tray
+from .config import Referencia, Settings, ruta_config_predeterminada
+from .estado_agente import EstadoAgente
 from .ingest import RawMessage
 from .ingest.rest_usgs import RESTReconciler
 from .ingest.ws_emsc import WSIngestor
@@ -57,6 +59,7 @@ class Aplicacion:
         logger: logging.Logger | None = None,
         referencia_manual: bool = True,
         detectar_ubicacion: Callable[[], Referencia | None] | None = None,
+        ruta_config: Path | str | None = None,
     ) -> None:
         self.cfg = cfg
         self.estado = estado or StateStore()
@@ -68,6 +71,9 @@ class Aplicacion:
         self._salir_al_vaciar = False
         self._referencia_manual = referencia_manual
         self._detectar_ubicacion = detectar_ubicacion or geoloc.detectar_ubicacion_ip
+        self._ruta_config = ruta_config
+        self._estado_agente = EstadoAgente()
+        self._icono_bandeja: tray.IconoBandeja | None = None
 
     # --- Wiring testeable ---
 
@@ -77,7 +83,12 @@ class Aplicacion:
         """Registra las tareas del agente según las fuentes habilitadas (RNF-04)."""
         sup = Supervisor(manejar_senales=False)  # las señales las maneja el hilo principal
         if self.cfg.fuentes_emsc.habilitado:
-            sup.add("ws", lambda: WSIngestor(self.cfg.fuentes_emsc, raw_queue).run())
+            sup.add(
+                "ws",
+                lambda: WSIngestor(
+                    self.cfg.fuentes_emsc, raw_queue, estado=self._estado_agente
+                ).run(),
+            )
         if self.cfg.fuentes_usgs.habilitado:
             sup.add(
                 "rest",
@@ -106,9 +117,61 @@ class Aplicacion:
             enviar_toast=publicar_toast,
             al_reconocer=self._tras_reconocer,
             nombre_referencia=self.cfg.referencia.nombre,
+            estado=self._estado_agente,
         )
         self._ctrl = ctrl
         return ctrl
+
+    def _construir_tray(self) -> tray.IconoBandeja | None:
+        """Construye el ícono de bandeja si está habilitado (RF-34); mejor esfuerzo."""
+        if not self.cfg.notificacion.icono_bandeja:
+            return None
+        try:
+            icono = tray.construir_icono(
+                estado=self._estado_agente,
+                pausado=lambda: self._ctrl.pausado if self._ctrl is not None else False,
+                alternar_pausa=self._alternar_pausa,
+                editar_config=self._editar_config,
+                salir=self._salir_desde_tray,
+            )
+            return tray.IconoBandeja(icono)
+        except Exception as exc:  # noqa: BLE001 - mejor esfuerzo deliberado (RF-34)
+            self._log.warning("tray_no_disponible tipo=%s detalle=%s", type(exc).__name__, exc)
+            return None
+
+    def _alternar_pausa(self) -> None:
+        """Callback del ícono de bandeja: pausa/reanuda (RF-34).
+
+        Se agenda con `root.after(0, ...)` porque `reanudar()` puede disparar la
+        creación de una ventana Tk, y Tkinter no es thread-safe (ADR-006) — el
+        ícono corre en su propio hilo, no en el de Tk.
+        """
+        if self._root is None or self._ctrl is None:
+            return
+
+        def hacer() -> None:
+            if self._ctrl is None:
+                return
+            if self._ctrl.pausado:
+                self._ctrl.reanudar()
+            else:
+                self._ctrl.pausar()
+
+        self._root.after(0, hacer)
+
+    def _salir_desde_tray(self) -> None:
+        """Callback del ícono de bandeja: sale del agente (RF-34)."""
+        if self._root is not None:
+            self._root.after(0, self._root.quit)
+
+    def _editar_config(self) -> None:
+        """Callback del ícono de bandeja: abre `config.toml` con la app del SO (RF-34)."""
+        ruta = (
+            Path(self._ruta_config)
+            if self._ruta_config is not None
+            else ruta_config_predeterminada()
+        )
+        tray.abrir_config(ruta)
 
     def _tras_reconocer(self, _ev: SeismicEvent) -> None:
         """Tras reconocer: si la cola quedó vacía y procede, cierra la app (simulate)."""
@@ -204,6 +267,9 @@ class Aplicacion:
         self._preparar(resolver_ubicacion=True)
         root = self._nuevo_root()
         ctrl = self._controlador_para_gui(root, modo_loop=True)
+        self._icono_bandeja = self._construir_tray()
+        if self._icono_bandeja is not None:
+            self._icono_bandeja.iniciar()
         puente = PuenteAsyncioTk(sink=ctrl.encolar)
         puente.iniciar_sondeo(root, intervalo_ms=100)
         hilo = threading.Thread(target=self._correr_loop, args=(puente,), daemon=True)
@@ -239,7 +305,9 @@ class Aplicacion:
             loop.close()
 
     def _detener(self, hilo: threading.Thread) -> None:
-        """Cierre coordinado: para el supervisor y espera al hilo asyncio."""
+        """Cierre coordinado: para el ícono de bandeja, el supervisor y el hilo asyncio."""
+        if self._icono_bandeja is not None:
+            self._icono_bandeja.detener()
         if self._loop is not None and self._sup is not None:
             self._loop.call_soon_threadsafe(self._sup.solicitar_parada)
         hilo.join(timeout=5.0)

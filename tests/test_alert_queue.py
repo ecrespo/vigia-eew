@@ -88,6 +88,40 @@ def test_reconocer_sin_actual_no_rompe():
     assert cola.actual is None
 
 
+# --- Pausar/reanudar (RF-34, ícono de bandeja) ---
+
+
+def test_pausada_no_muestra_pero_encola():
+    s = _Sink()
+    cola = _cola(s)
+    cola.pausar()
+    assert cola.pausado is True
+    cola.encolar(_ev("a"))
+    assert s.mostrados == []  # no se muestra mientras está pausada
+    assert cola.pendientes == 1
+    assert cola.actual is None
+
+
+def test_reanudar_muestra_lo_pendiente():
+    s = _Sink()
+    cola = _cola(s)
+    cola.pausar()
+    cola.encolar(_ev("a"))
+    cola.encolar(_ev("b"))
+    cola.reanudar()
+    assert cola.pausado is False
+    assert [e.id for e in s.mostrados] == ["a"]  # sigue siendo una a la vez
+    assert cola.pendientes == 1
+
+
+def test_pausar_no_interrumpe_la_alerta_en_curso():
+    s = _Sink()
+    cola = _cola(s)
+    cola.encolar(_ev("a"))
+    cola.pausar()
+    assert cola.actual is not None and cola.actual.id == "a"  # sigue mostrada
+
+
 # --- Update en pantalla (RF-11) ---
 
 

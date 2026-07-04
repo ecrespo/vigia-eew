@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from vigia_eew.estado_agente import EstadoAgente
 from vigia_eew.models import SeismicEvent
 from vigia_eew.notify.controlador import ControladorAlertas
 
@@ -94,3 +95,33 @@ def test_sin_sonido_ni_toast_no_falla():
     ctrl.encolar(_ev())
     assert len(cap.ventanas) == 1
     assert cap.sonidos == [] and cap.toasts == []
+
+
+# --- Pausar/reanudar (RF-34) ---
+
+
+def test_pausar_y_reanudar_delegan_a_la_cola():
+    cap = _Cap()
+    ctrl = _controlador(cap)
+    ctrl.pausar()
+    assert ctrl.pausado is True
+    ctrl.encolar(_ev("a"))
+    assert cap.ventanas == []  # no se muestra mientras está pausado
+    ctrl.reanudar()
+    assert ctrl.pausado is False
+    assert len(cap.ventanas) == 1
+
+
+# --- EstadoAgente: última alerta (RF-34) ---
+
+
+def test_mostrar_actualiza_estado_agente():
+    cap = _Cap()
+    estado = EstadoAgente()
+    ctrl = ControladorAlertas(
+        crear_ventana=cap.crear_ventana, nombre_referencia="Caracas", estado=estado
+    )
+    ctrl.encolar(_ev())
+    assert estado.ultima_alerta is not None
+    assert "M 6.1" in estado.ultima_alerta
+    assert "La Guaira" in estado.ultima_alerta

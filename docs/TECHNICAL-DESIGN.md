@@ -51,6 +51,9 @@ Tareas `asyncio` coordinadas por un orquestador (`Supervisor`):
 - **T3 `pipeline_task`**: consume `raw_queue` → normaliza → filtra → dedup → si procede, `alert_queue`.
 - **T4 capa UI**: la GUI (Tkinter) corre en el **hilo principal**; un *bridge* thread-safe pasa
   eventos desde `alert_queue` (asyncio) a la UI (ver ADR-006).
+- **T5 ícono de bandeja** (RF-34, ADR-012): `pystray.Icon.run()` corre en su **propio hilo** de
+  trabajo (ni asyncio ni Tk); sus callbacks que tocan Tk (pausar/reanudar, salir) se agendan de
+  vuelta al hilo principal con `root.after(0, ...)`, igual patrón que el *bridge* de T4.
 
 Resiliencia: cada *task* va envuelta en un guard que captura excepciones, las registra y **reinicia
 la task con backoff** sin tumbar el proceso (patrón "supervisor que reincia hijos"). Cierre limpio
@@ -127,6 +130,7 @@ def es_duplicado(ev, recientes, ids_alertados):
 | Excepción en una task | El `Supervisor` la captura, registra y reinicia esa task con backoff. |
 | Fallo de la UI | Aislado del pipeline; la ingestión sigue; se reintenta mostrar. |
 | Geolocalización por IP falla (red/timeout/JSON/status) | `geoloc.py` nunca lanza: devuelve `None`; `Aplicacion` cae al default (Caracas) sin bloquear el arranque (ADR-011). |
+| Ícono de bandeja no arranca (backend gráfico ausente, GNOME/Wayland sin extensión, excepción de `pystray`) | `IconoBandeja` captura la excepción **dentro de su propio hilo** y loguea un *warning*; el agente sigue funcionando con normalidad, sin ícono (ADR-012). |
 
 ## 9. Logging y observabilidad — RNF-07
 
@@ -137,6 +141,9 @@ def es_duplicado(ev, recientes, ids_alertados):
 
 ## 10. Seguridad y privacidad — RNF-09
 - Sin claves de API; solo lectura de fuentes públicas; sin envío de datos del usuario a terceros.
+- **Excepción** (RF-34, ADR-012): `pystray` + `Pillow` son dependencias nuevas exclusivas del
+  ícono de bandeja, excepción documentada a RNF-06 ("cero dependencias extra" de la UI por
+  defecto). No hacen red ni telemetría; solo GUI local.
 - Validación estricta de entrada (pydantic) para mensajes externos.
 - **Excepción explícita** (RF-33, ADR-011): si no hay `[referencia]` manual, se consulta un servicio
   de geolocalización por IP (`ipapi.co`) — la IP de origen queda visible a ese tercero, igual que en
@@ -340,6 +347,44 @@ Python — la extensión GNOME Shell (GJS) que consume la señal y llama `Recono
 - **Consecuencias**: nueva dependencia externa opcional (RNF-09, ver §10); nuevo campo en el estado
   persistido (`DATA-MODEL.md` §2); `geoloc.py` sigue el mismo patrón de aislamiento de fallos que
   `notify/toast.py` (nunca lanza, siempre hay un fallback).
+
+### ADR-012 — Ícono de bandeja con `pystray`, hilo separado, mejor esfuerzo (RF-34)
+
+- **Contexto**: el agente corre en segundo plano (autoarranque) sin ninguna UI persistente; el
+  usuario pidió un ícono de bandeja para ver estado, pausar notificaciones, editar la config y
+  salir sin depender de la terminal.
+- **Decisión**: `tray.py` arma un `pystray.Icon` (única librería práctica multiplataforma para
+  esto) y lo corre en un **hilo de trabajo aparte** (`IconoBandeja.iniciar`), dejando **Tkinter
+  como único dueño del hilo principal** (ADR-006 no cambia). Los callbacks del menú que pueden
+  tocar Tk (`reanudar` puede disparar la creación de una ventana) se agendan de vuelta al hilo de
+  Tk con `root.after(0, ...)`; los que no tocan Tk (`editar_config`, que solo hace
+  `subprocess.Popen`/`os.startfile`) corren directo en el hilo del ícono.
+- **Estado compartido**: `EstadoAgente` (nuevo, `estado_agente.py`) es un snapshot pequeño
+  protegido por `threading.Lock` — `WSIngestor` lo actualiza al conectar/reconectar (hilo
+  asyncio), `ControladorAlertas` al mostrar una alerta (hilo de Tk), y el ícono lo lee (hilo
+  propio) para el texto dinámico del menú. No se persiste: vive solo mientras el proceso corre.
+- **Pausar sin perder eventos**: `AlertQueue.pausar()` solo detiene `_mostrar_siguiente_si_libre`;
+  los eventos entrantes se siguen encolando normalmente. `reanudar()` vuelve a drenar lo
+  acumulado — mantiene OBJ-3 ("cero eventos perdidos") a costa de retrasar la presentación
+  mientras está pausado, una compensación deliberada frente a OBJ-1 que el usuario pidió
+  explícitamente.
+- **Mejor esfuerzo, aislado de fallos** (mismo principio que `toast.py`/`geoloc.py`): construir el
+  ícono (`Aplicacion._construir_tray`) y ejecutarlo (`IconoBandeja._ejecutar`, dentro de su propio
+  hilo) están envueltos en `try/except` que solo loguean un *warning*. Motivado por dos límites
+  conocidos y no resolubles desde este código: (a) bajo **GNOME + Wayland** sin la extensión
+  `AppIndicator`/`KStatusNotifierItem`, GNOME Shell no muestra íconos de bandeja legacy — el
+  agente arranca igual, simplemente no se ve; (b) en **macOS**, `pystray` exige que su `run()`
+  viva en el hilo principal (requisito de Cocoa), lo que potencialmente choca con Tkinter — sin
+  máquina macOS disponible en este entorno para validarlo (misma limitación que F7-2/F7-3), se
+  deja como mejor esfuerzo en vez de bloquear el diseño.
+- **Dependencias nuevas**: `pystray` + `Pillow` — excepción documentada a RNF-06 (ver §10);
+  `Pillow` es requisito de la API de `pystray` (`Icon(icon=PIL.Image)`), no evitable.
+- **Arte del ícono**: generado una vez con Pillow (círculo + ondas concéntricas, color de
+  severidad crítica) y committeado como `src/vigia_eew/assets/tray_icon.png` — mismo criterio que
+  los `.wav` de la Fase 4 (activo generado, sin mantener el script generador en el repo).
+- **Consecuencias**: nuevo módulo `tray.py`, nuevo `estado_agente.py`; `WSIngestor` y
+  `ControladorAlertas` ganan un parámetro `estado` opcional; `Aplicacion` gana `ruta_config` para
+  que "editar configuración" abra el archivo realmente en uso (no siempre el default).
 
 ## 12. Trazabilidad
 

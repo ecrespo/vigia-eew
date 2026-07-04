@@ -85,7 +85,9 @@ def main(
         from .app import Aplicacion
 
         crear_app = Aplicacion
-    app = crear_app(cfg, referencia_manual=tiene_referencia_manual(args.config))
+    app = crear_app(
+        cfg, referencia_manual=tiene_referencia_manual(args.config), ruta_config=args.config
+    )
 
     if args.simulate:
         app.simular()

@@ -119,6 +119,9 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 - **RF-31** — **CI de build**: GitHub Actions con matriz (windows/macos/ubuntu-latest) que produzca todos los artefactos como *release assets*; más scripts locales (`build_windows.ps1`, `build_macos.sh`, `build_linux.sh`).
 - **RF-32** — Documentar cómo servir el `.deb` desde un **repositorio apt propio en Cloudflare R2**.
 
+### 5.10 Ícono de bandeja del sistema
+- **RF-34** — Mostrar un **ícono de bandeja** (system tray) mientras el agente corre, con menú: **estado** (WS conectado/reconectando, última alerta), **pausar/reanudar notificaciones** (sin perder eventos: solo retrasa su presentación), **editar configuración** (abre `config.toml` con la app asociada del SO) y **salir**. Es una mejora de **mejor esfuerzo**: si el backend gráfico no está disponible (sin display, GNOME/Wayland sin extensión de bandeja, etc.), el agente sigue funcionando con normalidad, sin ícono. Configurable (`[notificacion] icono_bandeja`, default `true`). No se activa en `--simulate` (RF-21).
+
 ## 6. Requisitos no funcionales (RNF)
 
 | ID | Categoría | Requisito |
@@ -128,7 +131,7 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 | RNF-03 | Robustez | El proceso **no termina** por fallos transitorios (WS caído, timeouts, 429/5xx, JSON inválido, pérdida de red). |
 | RNF-04 | Concurrencia | Basado en **asyncio**; tareas de ingestión sin bloquear la UI. |
 | RNF-05 | "Alerta no descartable" | La alerta no se puede ocultar con un clic accidental; solo cierre explícito (RF-19). |
-| RNF-06 | Portabilidad | Linux, Windows, macOS; UI por defecto en **Tkinter** (cero dependencias extra). |
+| RNF-06 | Portabilidad | Linux, Windows, macOS; UI por defecto en **Tkinter** (cero dependencias extra). Excepción explícita (RF-34, ADR-012): el ícono de bandeja usa `pystray` + `Pillow` — mejor esfuerzo, nunca bloquea el arranque si no está disponible en la plataforma. |
 | RNF-07 | Observabilidad | Logs estructurados con niveles; archivo rotativo; eventos de conexión/reconexión registrados. |
 | RNF-08 | Mantenibilidad/Trazabilidad | Cada componente del código rastreable a un RF del PRD. |
 | RNF-09 | Seguridad/Privacidad | Sin claves de API; sin enviar datos del usuario a terceros; solo lectura de fuentes públicas. Excepción explícita: la detección automática de ubicación (RF-33) consulta un servicio de geolocalización por IP, y solo cuando el usuario no fijó `[referencia]` manualmente — desactivable configurando la referencia a mano. |
@@ -152,6 +155,7 @@ El usuario primario para el diseño de UX de la alerta es **P1 (operador humanit
 | CA-10 | El autoarranque se **instala y desinstala** correctamente en cada SO. | RF-22, RF-23 |
 | CA-11 | El CI produce `.exe`, `.dmg`, AppImage, `.deb`, `.rpm` y el paquete de PyPI como artefactos. | RF-27..RF-31 |
 | CA-12 | Sin `[referencia]` en `config.toml`, el agente detecta la ubicación por IP en el primer arranque y **reutiliza el caché** en arranques siguientes sin volver a llamar al servicio; si la detección falla, usa el default (Caracas) sin dejar de arrancar. | RF-33 |
+| CA-13 | Pausar desde el ícono de bandeja deja de mostrar alertas nuevas sin perderlas (se muestran al reanudar); si el ícono no puede arrancar, el agente sigue funcionando igual. | RF-34 |
 
 ## 8. Fuera de alcance (v1)
 

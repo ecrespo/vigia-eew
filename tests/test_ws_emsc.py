@@ -8,6 +8,7 @@ import json
 import pytest
 
 from vigia_eew.config import FuenteEMSC
+from vigia_eew.estado_agente import EstadoAgente
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.ws_emsc import WSIngestor
 
@@ -184,3 +185,35 @@ async def test_backoff_crece_entre_reintentos():
         await ing.run()
 
     assert sleep.esperas == [1.0, 2.0]
+
+
+# --- EstadoAgente: conectado/reconectando (RF-34) ---
+
+
+async def test_conectar_marca_estado_conectado():
+    estado = EstadoAgente()
+    # Cancelado mientras sigue conectado (no cae): el estado no debe pasar a
+    # "reconectando" (ese camino solo se toca si la conexión realmente se cierra).
+    connect = _FakeConnect(
+        [_FakeWS([json.dumps(_MENSAJE_EMSC)], error=asyncio.CancelledError())]
+    )
+    sleep = _SleepControlado(romper_en=1)
+    ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, estado=estado)
+
+    with pytest.raises(asyncio.CancelledError):
+        await ing.run()
+
+    assert estado.ws_conectado is True
+
+
+async def test_caida_marca_estado_reconectando():
+    estado = EstadoAgente()
+    estado.marcar_conectado()
+    connect = _FakeConnect([_FakeWS([], error=ConnectionResetError("caída")), _FakeWS([])])
+    sleep = _SleepControlado(romper_en=1)
+    ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, estado=estado)
+
+    with pytest.raises(asyncio.CancelledError):
+        await ing.run()
+
+    assert estado.ws_conectado is False

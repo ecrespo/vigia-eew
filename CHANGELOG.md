@@ -6,6 +6,15 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+### Agregado
+- Ícono de bandeja del sistema (RF-34): menú con estado (WS conectado/reconectando,
+  última alerta), pausar/reanudar notificaciones (sin perder eventos, solo retrasa su
+  presentación), editar `config.toml` con la app asociada del SO, y salir. Nuevo toggle
+  `[notificacion] icono_bandeja` (default `true`). Mejor esfuerzo: si el backend gráfico
+  no está disponible (GNOME/Wayland sin extensión de bandeja, macOS sin validar, etc.),
+  el agente sigue funcionando normalmente sin el ícono. No se activa en `--simulate`.
+  Nuevas dependencias: `pystray` + `Pillow` (excepción documentada a RNF-06).
+
 ### Corregido
 - La línea "Hora local (Venezuela): ..." de la ventana de alerta se recortaba contra el
   borde (se veía la fecha, pero la hora quedaba cortada). Causa: el `Label` de detalle no

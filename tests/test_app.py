@@ -5,13 +5,25 @@ from __future__ import annotations
 import asyncio
 
 from vigia_eew.app import Aplicacion
-from vigia_eew.config import FuenteEMSC, FuenteUSGS, Referencia, Settings
+from vigia_eew.config import FuenteEMSC, FuenteUSGS, Notificacion, Referencia, Settings
 from vigia_eew.simulacion import evento_simulado
 from vigia_eew.state import StateStore
+from vigia_eew.tray import IconoBandeja
 
 
 class _FakeVentana:
     def actualizar(self, datos):
+        pass
+
+
+class _FakeRaiz:
+    def __init__(self):
+        self.after_calls: list[tuple[int, object]] = []
+
+    def after(self, ms, callback):
+        self.after_calls.append((ms, callback))
+
+    def quit(self):
         pass
 
 
@@ -129,3 +141,63 @@ def test_preparar_fallback_a_default_si_geoloc_falla(tmp_path):
     app._preparar(resolver_ubicacion=True)
     assert app.cfg.referencia.nombre == "Caracas"  # default, sin cachear
     assert app.estado.ubicacion_cacheada() is None
+
+
+# --- Ícono de bandeja (RF-34) ---
+
+
+def test_construir_tray_deshabilitado_devuelve_none():
+    app = _app(notificacion=Notificacion(icono_bandeja=False))
+    assert app._construir_tray() is None
+
+
+def test_construir_tray_habilitado_devuelve_icono():
+    app = _app()
+    icono = app._construir_tray()
+    assert isinstance(icono, IconoBandeja)
+
+
+def test_alternar_pausa_programa_en_hilo_de_tk():
+    app = _app()
+    app._root = _FakeRaiz()
+    ctrl = app._construir_controlador(lambda datos, severidad, al_reconocer: _FakeVentana())
+    assert ctrl.pausado is False
+
+    app._alternar_pausa()
+    assert len(app._root.after_calls) == 1
+    ms, callback = app._root.after_calls[0]
+    assert ms == 0
+    callback()  # ejecuta lo agendado, como haría el mainloop real de Tk
+    assert ctrl.pausado is True
+
+
+def test_salir_desde_tray_programa_quit():
+    app = _app()
+    app._root = _FakeRaiz()
+    app._salir_desde_tray()
+    assert len(app._root.after_calls) == 1
+    ms, callback = app._root.after_calls[0]
+    assert ms == 0
+    assert callable(callback)
+
+
+def test_editar_config_usa_ruta_explicita(monkeypatch, tmp_path):
+    ruta = tmp_path / "config.toml"
+    llamadas = []
+    import vigia_eew.app as app_mod
+
+    monkeypatch.setattr(app_mod.tray, "abrir_config", lambda r: llamadas.append(r))
+    app = Aplicacion(Settings(), ruta_config=ruta)
+    app._editar_config()
+    assert llamadas == [ruta]
+
+
+def test_editar_config_usa_ruta_default_sin_config_explicito(monkeypatch):
+    llamadas = []
+    import vigia_eew.app as app_mod
+
+    monkeypatch.setattr(app_mod.tray, "abrir_config", lambda r: llamadas.append(r))
+    app = _app()
+    app._editar_config()
+    assert len(llamadas) == 1
+    assert llamadas[0] == app_mod.ruta_config_predeterminada()
