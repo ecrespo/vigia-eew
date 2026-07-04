@@ -6,6 +6,15 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+## [0.1.1] - 2026-07-04
+
+### Corregido
+- `packaging/build_linux.sh` generaba un ícono placeholder **vacío** para el AppImage,
+  lo que hacía fallar a `linuxdeploy` (CImg no puede decodificar un archivo de 0 bytes
+  como PNG). Se reemplazó por un PNG 1x1 transparente válido. Detectado en el primer
+  run real de `.github/workflows/build.yml` (tag `v0.1.0`): PyPI, Windows y macOS
+  construyeron bien; solo falló el job de Linux.
+
 ## [0.1.0] - 2026-07-04
 
 ### Agregado
@@ -19,5 +28,6 @@ de publicación en `packaging/RELEASING.md`.
 - Empaquetado: build de PyPI (wheel/sdist), especificación PyInstaller y scripts de build
   por SO, workflow de CI/CD con matriz de release (Fase 8).
 
-[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.0...HEAD
+[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ecrespo/vigia-eew/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ecrespo/vigia-eew/releases/tag/v0.1.0

@@ -41,8 +41,11 @@ Icon=vigia-eew
 Categories=Utility;
 Terminal=false
 EOF
-    # Icono placeholder: falta un asset gráfico real (ver nota en vigia-eew.spec).
-    : > "$APPDIR/vigia-eew.png"
+    # Icono placeholder (PNG 1x1 transparente válido): falta un asset gráfico real
+    # (ver nota en vigia-eew.spec). Un archivo vacío hace fallar a linuxdeploy/CImg
+    # al intentar decodificarlo como imagen.
+    base64 -d > "$APPDIR/vigia-eew.png" <<< \
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     linuxdeploy --appdir "$APPDIR" --desktop-file "$APPDIR/vigia-eew.desktop" \
         --icon-file "$APPDIR/vigia-eew.png" --output appimage
     mv ./*.AppImage "$DIST/vigia-eew-$VERSION-x86_64.AppImage"
