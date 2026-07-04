@@ -6,6 +6,8 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+## [0.1.0] - 2026-07-04
+
 ### Agregado
 - Núcleo del agente: ingestión EMSC (WebSocket, push primario) + USGS (REST, respaldo),
   pipeline de normalización/filtro/deduplicación, notificación (ventana no descartable,
@@ -17,4 +19,5 @@ de publicación en `packaging/RELEASING.md`.
 - Empaquetado: build de PyPI (wheel/sdist), especificación PyInstaller y scripts de build
   por SO, workflow de CI/CD con matriz de release (Fase 8).
 
-[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/406cde0...HEAD
+[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ecrespo/vigia-eew/releases/tag/v0.1.0
