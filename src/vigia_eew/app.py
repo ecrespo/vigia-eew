@@ -1,18 +1,18 @@
-"""Ensamblaje del agente (RF-26, RF-21; concurrencia ADR-006).
+"""Application assembly (RF-26, RF-21; concurrency ADR-006).
 
-`Aplicacion` cablea todas las capas en un agente ejecutable:
+`Application` wires all layers into a runnable agent:
 
-  ingestión (WS + REST) → cola asyncio → procesador (normaliza/filtra/dedup)
-  → puente asyncio↔Tk → controlador de alertas (ventana + sonido + toast).
+  ingestion (WS + REST) -> asyncio queue -> processor (normalize/filter/dedup)
+  -> asyncio<->Tk bridge -> alert controller (window + sound + toast).
 
-Sigue el modelo de concurrencia del ADR-006: **Tkinter en el hilo principal** y el
-bucle **asyncio en un hilo de trabajo**; los eventos cruzan por `PuenteAsyncioTk`.
+Follows the ADR-006 concurrency model: **Tkinter on the main thread** and the
+**asyncio loop on a worker thread**; events cross via `AsyncioTkBridge`.
 
-  - `ejecutar()`: agente completo (ingestión real + notificación).
-  - `simular()`: inyecta el evento simulado en la capa de notificación, sin red (RF-21).
+  - `execute()`: full agent (real ingestion + notification).
+  - `simulate()`: injects the simulated event into the notification layer, no network (RF-21).
 
-Las partes con lógica (selección de tareas del supervisor, construcción del controlador)
-se aíslan en métodos testeables; el arranque de hilos/GUI es glue de integración.
+The parts with logic (supervisor task selection, controller construction) are
+isolated into testable methods; thread/GUI startup is integration glue.
 """
 
 from __future__ import annotations
@@ -25,294 +25,301 @@ from pathlib import Path
 from typing import Any
 
 from . import geoloc, tray
-from .config import Referencia, Settings, ruta_config_predeterminada
-from .estado_agente import EstadoAgente
+from .agent_state import AgentState
+from .config import ReferencePoint, Settings, default_config_path
+from .i18n import resolve_locale
 from .ingest import RawMessage
 from .ingest.rest_usgs import RESTReconciler
 from .ingest.ws_emsc import WSIngestor
-from .logging_conf import configurar_logging
-from .models import SeismicEvent, Severidad
-from .notify.controlador import ControladorAlertas
-from .notify.presentacion import DatosAlerta
-from .notify.queue import PuenteAsyncioTk
+from .logging_conf import configure_logging
+from .models import SeismicEvent, SeverityLevel
+from .notify.controller import AlertController
+from .notify.presentation import AlertData
+from .notify.queue import AsyncioTkBridge
 from .notify.sound import SoundPlayer
 from .notify.toast import Toaster
 from .pipeline.dedup import Deduplicator
-from .pipeline.filtro import GeoFilter
+from .pipeline.filter import GeoFilter
 from .pipeline.normalize import Normalizer
-from .pipeline.procesador import Procesador
-from .simulacion import evento_simulado
+from .pipeline.processor import Processor
+from .simulation import simulated_event
 from .state import StateStore
 from .supervisor import Supervisor
 
-_VentanaFactory = Callable[[DatosAlerta, Severidad, Callable[[], None]], Any]
+_WindowFactory = Callable[[AlertData, SeverityLevel, Callable[[], None]], Any]
 
 
-class Aplicacion:
-    """Construye y ejecuta el agente Vigía (modo completo o `--simulate`)."""
+class Application:
+    """Builds and runs the Vigía agent (full mode or `--simulate`)."""
 
     def __init__(
         self,
         cfg: Settings,
         *,
-        estado: StateStore | None = None,
+        state: StateStore | None = None,
         logger: logging.Logger | None = None,
-        referencia_manual: bool = True,
-        detectar_ubicacion: Callable[[], Referencia | None] | None = None,
-        ruta_config: Path | str | None = None,
+        manual_reference: bool = True,
+        detect_location: Callable[[], ReferencePoint | None] | None = None,
+        config_path: Path | str | None = None,
     ) -> None:
         self.cfg = cfg
-        self.estado = estado or StateStore()
+        self.state = state or StateStore()
         self._log = logger or logging.getLogger("vigia_eew.app")
         self._loop: asyncio.AbstractEventLoop | None = None
         self._sup: Supervisor | None = None
         self._root: Any = None
-        self._ctrl: ControladorAlertas | None = None
-        self._salir_al_vaciar = False
-        self._referencia_manual = referencia_manual
-        self._detectar_ubicacion = detectar_ubicacion or geoloc.detectar_ubicacion_ip
-        self._ruta_config = ruta_config
-        self._estado_agente = EstadoAgente()
-        self._icono_bandeja: tray.IconoBandeja | None = None
+        self._ctrl: AlertController | None = None
+        self._exit_on_drain = False
+        self._manual_reference = manual_reference
+        self._detect_location = detect_location or geoloc.detect_ip_location
+        self._config_path = config_path
+        self._agent_state = AgentState()
+        self._tray_icon: tray.TrayIcon | None = None
+        self._locale = resolve_locale(cfg.notification.language)
 
-    # --- Wiring testeable ---
+    # --- Testable wiring ---
 
-    def _construir_supervisor(
-        self, raw_queue: asyncio.Queue[RawMessage], procesador: Any
+    def _build_supervisor(
+        self, raw_queue: asyncio.Queue[RawMessage], processor: Any
     ) -> Supervisor:
-        """Registra las tareas del agente según las fuentes habilitadas (RNF-04)."""
-        sup = Supervisor(manejar_senales=False)  # las señales las maneja el hilo principal
-        if self.cfg.fuentes_emsc.habilitado:
+        """Registers the agent's tasks based on the enabled sources (RNF-04)."""
+        sup = Supervisor(handle_signals=False)  # signals are handled by the main thread
+        if self.cfg.sources_emsc.enabled:
             sup.add(
                 "ws",
                 lambda: WSIngestor(
-                    self.cfg.fuentes_emsc, raw_queue, estado=self._estado_agente
+                    self.cfg.sources_emsc, raw_queue, state=self._agent_state
                 ).run(),
             )
-        if self.cfg.fuentes_usgs.habilitado:
+        if self.cfg.sources_usgs.enabled:
             sup.add(
                 "rest",
                 lambda: RESTReconciler(
-                    self.cfg.fuentes_usgs,
-                    self.cfg.referencia,
-                    self.cfg.filtro,
-                    self.estado,
+                    self.cfg.sources_usgs,
+                    self.cfg.reference,
+                    self.cfg.filter,
+                    self.state,
                     raw_queue,
                 ).run(),
             )
-        sup.add("pipeline", lambda: procesador.run())
+        sup.add("pipeline", lambda: processor.run())
         return sup
 
-    def _construir_controlador(
+    def _build_controller(
         self,
-        crear_ventana: _VentanaFactory,
+        create_window: _WindowFactory,
         *,
-        reproducir: Callable[[Severidad], None] | None = None,
-        publicar_toast: Callable[[SeismicEvent], None] | None = None,
-    ) -> ControladorAlertas:
-        """Crea el controlador de alertas con los efectos inyectados."""
-        ctrl = ControladorAlertas(
-            crear_ventana=crear_ventana,
-            reproducir_sonido=reproducir,
-            enviar_toast=publicar_toast,
-            al_reconocer=self._tras_reconocer,
-            nombre_referencia=self.cfg.referencia.nombre,
-            estado=self._estado_agente,
+        play_sound: Callable[[SeverityLevel], None] | None = None,
+        publish_toast: Callable[[SeismicEvent], None] | None = None,
+    ) -> AlertController:
+        """Creates the alert controller with the injected effects."""
+        ctrl = AlertController(
+            create_window=create_window,
+            play_sound=play_sound,
+            send_toast=publish_toast,
+            on_acknowledge=self._after_acknowledge,
+            reference_name=self.cfg.reference.name,
+            state=self._agent_state,
+            locale_code=self._locale,
         )
         self._ctrl = ctrl
         return ctrl
 
-    def _construir_tray(self) -> tray.IconoBandeja | None:
-        """Construye el ícono de bandeja si está habilitado (RF-34); mejor esfuerzo."""
-        if not self.cfg.notificacion.icono_bandeja:
+    def _build_tray(self) -> tray.TrayIcon | None:
+        """Builds the tray icon if enabled (RF-34); best-effort."""
+        if not self.cfg.notification.tray_icon:
             return None
         try:
-            icono = tray.construir_icono(
-                estado=self._estado_agente,
-                pausado=lambda: self._ctrl.pausado if self._ctrl is not None else False,
-                alternar_pausa=self._alternar_pausa,
-                editar_config=self._editar_config,
-                salir=self._salir_desde_tray,
+            icon = tray.build_icon(
+                state=self._agent_state,
+                paused=lambda: self._ctrl.paused if self._ctrl is not None else False,
+                toggle_pause=self._toggle_pause,
+                edit_config=self._edit_config,
+                exit=self._exit_from_tray,
+                locale_code=self._locale,
             )
-            return tray.IconoBandeja(icono)
-        except Exception as exc:  # noqa: BLE001 - mejor esfuerzo deliberado (RF-34)
-            self._log.warning("tray_no_disponible tipo=%s detalle=%s", type(exc).__name__, exc)
+            return tray.TrayIcon(icon)
+        except Exception as exc:  # noqa: BLE001 - deliberate best-effort (RF-34)
+            self._log.warning("tray_unavailable type=%s detail=%s", type(exc).__name__, exc)
             return None
 
-    def _alternar_pausa(self) -> None:
-        """Callback del ícono de bandeja: pausa/reanuda (RF-34).
+    def _toggle_pause(self) -> None:
+        """Tray icon callback: pause/resume (RF-34).
 
-        Se agenda con `root.after(0, ...)` porque `reanudar()` puede disparar la
-        creación de una ventana Tk, y Tkinter no es thread-safe (ADR-006) — el
-        ícono corre en su propio hilo, no en el de Tk.
+        Scheduled via `root.after(0, ...)` because `resume()` can trigger the
+        creation of a Tk window, and Tkinter is not thread-safe (ADR-006) — the
+        tray icon runs on its own thread, not on the Tk thread.
         """
         if self._root is None or self._ctrl is None:
             return
 
-        def hacer() -> None:
+        def do_toggle() -> None:
             if self._ctrl is None:
                 return
-            if self._ctrl.pausado:
-                self._ctrl.reanudar()
+            if self._ctrl.paused:
+                self._ctrl.resume()
             else:
-                self._ctrl.pausar()
+                self._ctrl.pause()
 
-        self._root.after(0, hacer)
+        self._root.after(0, do_toggle)
 
-    def _salir_desde_tray(self) -> None:
-        """Callback del ícono de bandeja: sale del agente (RF-34)."""
+    def _exit_from_tray(self) -> None:
+        """Tray icon callback: exits the agent (RF-34)."""
         if self._root is not None:
             self._root.after(0, self._root.quit)
 
-    def _editar_config(self) -> None:
-        """Callback del ícono de bandeja: abre `config.toml` con la app del SO (RF-34)."""
-        ruta = (
-            Path(self._ruta_config)
-            if self._ruta_config is not None
-            else ruta_config_predeterminada()
+    def _edit_config(self) -> None:
+        """Tray icon callback: opens `config.toml` with the OS's associated app (RF-34)."""
+        path = (
+            Path(self._config_path)
+            if self._config_path is not None
+            else default_config_path()
         )
-        tray.abrir_config(ruta)
+        tray.open_config(path)
 
-    def _tras_reconocer(self, _ev: SeismicEvent) -> None:
-        """Tras reconocer: si la cola quedó vacía y procede, cierra la app (simulate)."""
+    def _after_acknowledge(self, _ev: SeismicEvent) -> None:
+        """After acknowledge: closes the app if the queue is now empty
+        and applicable (simulate).
+        """
         if (
-            self._salir_al_vaciar
+            self._exit_on_drain
             and self._ctrl is not None
-            and self._ctrl.cola.actual is None
-            and self._ctrl.cola.pendientes == 0
+            and self._ctrl.alert_queue.current is None
+            and self._ctrl.alert_queue.pending == 0
             and self._root is not None
         ):
             self._root.after(150, self._root.quit)
 
-    # --- Construcción de la GUI real ---
+    # --- Real GUI construction ---
 
-    def _preparar(self, *, resolver_ubicacion: bool = False) -> None:
-        configurar_logging(self.cfg.logging)
-        self.estado.cargar()
-        if resolver_ubicacion and not self._referencia_manual:
-            self._resolver_referencia_automatica()
+    def _prepare(self, *, resolve_location: bool = False) -> None:
+        configure_logging(self.cfg.logging)
+        self.state.load()
+        if resolve_location and not self._manual_reference:
+            self._resolve_automatic_reference()
 
-    def _resolver_referencia_automatica(self) -> None:
-        """Resuelve el punto de referencia por IP cuando no hay `[referencia]` manual (RF-33)."""
-        cacheada = self.estado.ubicacion_cacheada()
-        if cacheada is not None:
-            self.cfg.referencia = cacheada
-            self._log.info("ubicacion_ip_cache nombre=%s", cacheada.nombre)
+    def _resolve_automatic_reference(self) -> None:
+        """Resolves the reference point by IP when there's no manual `[reference]` (RF-33)."""
+        cached = self.state.cached_location()
+        if cached is not None:
+            self.cfg.reference = cached
+            self._log.info("ip_location_cache name=%s", cached.name)
             return
-        detectada = self._detectar_ubicacion()
-        if detectada is None:
-            self._log.warning("ubicacion_ip_fallback_default")
+        detected = self._detect_location()
+        if detected is None:
+            self._log.warning("ip_location_fallback_default")
             return
-        self.cfg.referencia = detectada
-        self.estado.cachear_ubicacion(detectada)
-        self.estado.guardar()
-        self._log.info("ubicacion_ip_detectada nombre=%s", detectada.nombre)
+        self.cfg.reference = detected
+        self.state.cache_location(detected)
+        self.state.save()
+        self._log.info("ip_location_detected name=%s", detected.name)
 
-    def _nuevo_root(self) -> Any:
+    def _new_root(self) -> Any:
         import tkinter as tk
 
         root = tk.Tk()
-        root.withdraw()  # root oculto; cada alerta es un Toplevel
+        root.withdraw()  # hidden root; each alert is a Toplevel
         self._root = root
         return root
 
-    def _controlador_para_gui(self, root: Any, *, modo_loop: bool) -> ControladorAlertas:
+    def _controller_for_gui(self, root: Any, *, loop_mode: bool) -> AlertController:
         import tkinter as tk
 
         from .notify.alert_window import AlertWindow
 
-        sound = SoundPlayer(habilitado=self.cfg.notificacion.sonido)
-        toaster = Toaster(nombre_referencia=self.cfg.referencia.nombre)
+        sound = SoundPlayer(enabled=self.cfg.notification.sound)
+        toaster = Toaster(reference_name=self.cfg.reference.name, locale_code=self._locale)
 
-        def crear_ventana(
-            datos: DatosAlerta, severidad: Severidad, al_reconocer: Callable[[], None]
+        def create_window(
+            data: AlertData, severity: SeverityLevel, on_acknowledge: Callable[[], None]
         ) -> AlertWindow:
             return AlertWindow(
-                datos,
-                al_reconocer=al_reconocer,
-                raiz=tk.Toplevel(root),
-                pantalla_completa=self.cfg.notificacion.pantalla_completa,
+                data,
+                on_acknowledge=on_acknowledge,
+                root=tk.Toplevel(root),
+                fullscreen=self.cfg.notification.fullscreen,
+                locale=self._locale,
             )
 
-        def reproducir(severidad: Severidad) -> None:
-            threading.Thread(target=sound.reproducir, args=(severidad,), daemon=True).start()
+        def play_sound(severity: SeverityLevel) -> None:
+            threading.Thread(target=sound.play, args=(severity,), daemon=True).start()
 
-        def publicar_toast(ev: SeismicEvent) -> None:
-            if modo_loop and self._loop is not None:
-                asyncio.run_coroutine_threadsafe(toaster.notificar(ev), self._loop)
+        def publish_toast(ev: SeismicEvent) -> None:
+            if loop_mode and self._loop is not None:
+                asyncio.run_coroutine_threadsafe(toaster.notify(ev), self._loop)
             else:
                 threading.Thread(
-                    target=lambda: asyncio.run(toaster.notificar(ev)), daemon=True
+                    target=lambda: asyncio.run(toaster.notify(ev)), daemon=True
                 ).start()
 
-        reproducir_fn = reproducir if self.cfg.notificacion.sonido else None
-        return self._construir_controlador(
-            crear_ventana, reproducir=reproducir_fn, publicar_toast=publicar_toast
+        play_sound_fn = play_sound if self.cfg.notification.sound else None
+        return self._build_controller(
+            create_window, play_sound=play_sound_fn, publish_toast=publish_toast
         )
 
-    # --- Modos de ejecución ---
+    # --- Run modes ---
 
-    def simular(self) -> None:
-        """Inyecta el evento simulado y muestra la alerta hasta reconocerla (RF-21)."""
-        self._preparar()
-        self._salir_al_vaciar = True
-        root = self._nuevo_root()
-        ctrl = self._controlador_para_gui(root, modo_loop=False)
-        ctrl.encolar(evento_simulado(self.cfg.referencia, self.cfg.severidad))
-        self._log.info("simulacion_iniciada")
+    def simulate(self) -> None:
+        """Injects the simulated event and shows the alert until acknowledged (RF-21)."""
+        self._prepare()
+        self._exit_on_drain = True
+        root = self._new_root()
+        ctrl = self._controller_for_gui(root, loop_mode=False)
+        ctrl.enqueue(simulated_event(self.cfg.reference, self.cfg.severity))
+        self._log.info("simulation_started")
         root.mainloop()
 
-    def ejecutar(self) -> None:
-        """Arranca el agente completo: ingestión + pipeline + notificación (CU-1, CU-2)."""
-        self._preparar(resolver_ubicacion=True)
-        root = self._nuevo_root()
-        ctrl = self._controlador_para_gui(root, modo_loop=True)
-        self._icono_bandeja = self._construir_tray()
-        if self._icono_bandeja is not None:
-            self._icono_bandeja.iniciar()
-        puente = PuenteAsyncioTk(sink=ctrl.encolar)
-        puente.iniciar_sondeo(root, intervalo_ms=100)
-        hilo = threading.Thread(target=self._correr_loop, args=(puente,), daemon=True)
-        hilo.start()
-        self._log.info("agente_iniciado")
+    def execute(self) -> None:
+        """Starts the full agent: ingestion + pipeline + notification (CU-1, CU-2)."""
+        self._prepare(resolve_location=True)
+        root = self._new_root()
+        ctrl = self._controller_for_gui(root, loop_mode=True)
+        self._tray_icon = self._build_tray()
+        if self._tray_icon is not None:
+            self._tray_icon.start()
+        bridge = AsyncioTkBridge(sink=ctrl.enqueue)
+        bridge.start_polling(root, interval_ms=100)
+        thread = threading.Thread(target=self._run_loop, args=(bridge,), daemon=True)
+        thread.start()
+        self._log.info("agent_started")
         try:
             root.mainloop()
         except KeyboardInterrupt:
-            self._log.info("interrupcion_teclado")
+            self._log.info("keyboard_interrupt")
         finally:
-            self._detener(hilo)
+            self._stop(thread)
 
-    def _correr_loop(self, puente: PuenteAsyncioTk) -> None:
+    def _run_loop(self, bridge: AsyncioTkBridge) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         self._loop = loop
         raw_queue: asyncio.Queue[RawMessage] = asyncio.Queue()
-        procesador = Procesador(
+        processor = Processor(
             raw_queue,
-            Normalizer(self.cfg.referencia, self.cfg.severidad),
-            GeoFilter(self.cfg.filtro),
-            Deduplicator(self.cfg.dedup, self.estado),
-            al_alertar=puente.publicar,
-            al_actualizar=puente.publicar,
+            Normalizer(self.cfg.reference, self.cfg.severity),
+            GeoFilter(self.cfg.filter),
+            Deduplicator(self.cfg.dedup, self.state),
+            on_alert=bridge.publish,
+            on_update=bridge.publish,
         )
-        sup = self._construir_supervisor(raw_queue, procesador)
+        sup = self._build_supervisor(raw_queue, processor)
         self._sup = sup
         try:
             loop.run_until_complete(sup.run())
-        except Exception as exc:  # noqa: BLE001 - registrar cualquier fallo del bucle
-            self._log.warning("loop_error tipo=%s detalle=%s", type(exc).__name__, exc)
+        except Exception as exc:  # noqa: BLE001 - log any loop failure
+            self._log.warning("loop_error type=%s detail=%s", type(exc).__name__, exc)
         finally:
             loop.close()
 
-    def _detener(self, hilo: threading.Thread) -> None:
-        """Cierre coordinado: para el ícono de bandeja, el supervisor y el hilo asyncio."""
-        if self._icono_bandeja is not None:
-            self._icono_bandeja.detener()
+    def _stop(self, thread: threading.Thread) -> None:
+        """Coordinated shutdown: stops the tray icon, the supervisor, and the asyncio thread."""
+        if self._tray_icon is not None:
+            self._tray_icon.stop()
         if self._loop is not None and self._sup is not None:
-            self._loop.call_soon_threadsafe(self._sup.solicitar_parada)
-        hilo.join(timeout=5.0)
+            self._loop.call_soon_threadsafe(self._sup.request_stop)
+        thread.join(timeout=5.0)
         if self._root is not None:
             try:
                 self._root.destroy()
-            except Exception:  # noqa: BLE001 - el root puede estar ya destruido
+            except Exception:  # noqa: BLE001 - root may already be destroyed
                 pass

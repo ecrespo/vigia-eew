@@ -1,9 +1,10 @@
-"""Persistencia de estado (RF-06, RF-10).
+"""State persistence (RF-06, RF-10).
 
-`StateStore` guarda y carga `AppState` como JSON con **escritura atómica** (archivo
-temporal + `os.replace`) para no corromper el archivo ante una caída. Mantiene los
-`ids_alertados` (para no repetir alertas tras reinicios, RF-10) y el `cursor_usgs`
-(para reconciliar sin reprocesar histórico, RF-06). Aplica poda por antigüedad.
+`StateStore` saves and loads `AppState` as JSON with **atomic writes** (temp
+file + `os.replace`) so a crash never corrupts the file. It keeps the
+`alerted_ids` (to avoid repeating alerts after restarts, RF-10) and the
+`cursor_usgs` (to reconcile without reprocessing history, RF-06). Applies
+pruning by age.
 """
 
 from __future__ import annotations
@@ -16,114 +17,114 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-from .config import APP_NAME, Referencia
-from .models import AlertedId, AppState, EventSignature, UbicacionDetectada
+from .config import APP_NAME, ReferencePoint
+from .models import AlertedId, AppState, DetectedLocation, EventSignature
 
-NOMBRE_ARCHIVO_ESTADO = "state.json"
-# Antigüedad máxima de ids/firmas antes de podarlos (DATA-MODEL §2.2).
-ANTIGUEDAD_MAX = timedelta(hours=24)
+STATE_FILE_NAME = "state.json"
+# Maximum age of ids/signatures before pruning them (DATA-MODEL §2.2).
+MAX_AGE = timedelta(hours=24)
 
 
-def ruta_estado_predeterminada() -> Path:
-    """Ruta de `state.json` en el directorio de datos del usuario (multiplataforma)."""
-    return Path(user_data_dir(APP_NAME)) / NOMBRE_ARCHIVO_ESTADO
+def default_state_path() -> Path:
+    """Path to `state.json` in the user's data directory (cross-platform)."""
+    return Path(user_data_dir(APP_NAME)) / STATE_FILE_NAME
 
 
 class StateStore:
-    """Almacén de estado persistente con escritura atómica."""
+    """Persistent state store with atomic writes."""
 
-    def __init__(self, ruta: Path | str | None = None) -> None:
-        self.ruta = Path(ruta) if ruta is not None else ruta_estado_predeterminada()
-        self._estado: AppState = AppState()
+    def __init__(self, path: Path | str | None = None) -> None:
+        self.path = Path(path) if path is not None else default_state_path()
+        self._state: AppState = AppState()
 
     @property
-    def estado(self) -> AppState:
-        return self._estado
+    def state(self) -> AppState:
+        return self._state
 
-    def cargar(self) -> AppState:
-        """Carga el estado desde disco. Si no existe o está corrupto, parte de cero.
+    def load(self) -> AppState:
+        """Loads the state from disk. If missing or corrupt, starts fresh.
 
-        La robustez es deliberada (RNF-03): un `state.json` corrupto no debe impedir
-        que el agente arranque; se descarta y se reinicia el estado.
+        The robustness here is deliberate (RNF-03): a corrupt `state.json` must not
+        prevent the agent from starting; it's discarded and the state is reset.
         """
-        if not self.ruta.exists():
-            self._estado = AppState()
-            return self._estado
+        if not self.path.exists():
+            self._state = AppState()
+            return self._state
         try:
-            data = json.loads(self.ruta.read_text(encoding="utf-8"))
-            self._estado = AppState.model_validate(data)
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            self._state = AppState.model_validate(data)
         except (json.JSONDecodeError, ValueError, OSError):
-            # Estado corrupto o ilegible: empezar limpio en lugar de fallar.
-            self._estado = AppState()
-        return self._estado
+            # Corrupt or unreadable state: start clean instead of failing.
+            self._state = AppState()
+        return self._state
 
-    def guardar(self) -> None:
-        """Persiste el estado a disco de forma atómica."""
-        self.ruta.parent.mkdir(parents=True, exist_ok=True)
-        # pydantic v2: serialización JSON con datetimes en ISO-8601.
-        contenido = self._estado.model_dump_json(indent=2)
-        # Escritura atómica: escribir a temporal en el mismo directorio y reemplazar.
-        fd, tmp = tempfile.mkstemp(dir=self.ruta.parent, suffix=".tmp")
+    def save(self) -> None:
+        """Persists the state to disk atomically."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        # pydantic v2: JSON serialization with ISO-8601 datetimes.
+        content = self._state.model_dump_json(indent=2)
+        # Atomic write: write to a temp file in the same directory and replace.
+        fd, tmp = tempfile.mkstemp(dir=self.path.parent, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(contenido)
-            os.replace(tmp, self.ruta)  # atómico en el mismo sistema de archivos
+                fh.write(content)
+            os.replace(tmp, self.path)  # atomic on the same filesystem
         except BaseException:
-            # Limpiar el temporal si algo falla antes del replace.
+            # Clean up the temp file if something fails before the replace.
             if os.path.exists(tmp):
                 os.unlink(tmp)
             raise
 
-    # --- Operaciones de dominio ---
+    # --- Domain operations ---
 
-    def ya_alertado(self, id_evento: str) -> bool:
-        """Indica si un id de evento ya fue alertado (RF-10)."""
-        return any(a.id == id_evento for a in self._estado.ids_alertados)
+    def already_alerted(self, event_id: str) -> bool:
+        """Indicates whether an event id was already alerted (RF-10)."""
+        return any(a.id == event_id for a in self._state.alerted_ids)
 
-    def registrar_alertado(self, alerta: AlertedId) -> None:
-        """Añade un id alertado si no estaba ya presente."""
-        if not self.ya_alertado(alerta.id):
-            self._estado.ids_alertados.append(alerta)
+    def register_alerted(self, alert: AlertedId) -> None:
+        """Adds an alerted id if it wasn't already present."""
+        if not self.already_alerted(alert.id):
+            self._state.alerted_ids.append(alert)
 
-    def marcar_reconocido(self, id_evento: str, cuando: datetime | None = None) -> None:
-        """Registra el reconocimiento (acknowledge) de una alerta (auditoría, OBJ-1)."""
-        cuando = cuando or datetime.now(UTC)
-        for a in self._estado.ids_alertados:
-            if a.id == id_evento:
-                a.reconocido_utc = cuando
+    def mark_acknowledged(self, event_id: str, when: datetime | None = None) -> None:
+        """Records the acknowledgment of an alert (audit trail, OBJ-1)."""
+        when = when or datetime.now(UTC)
+        for a in self._state.alerted_ids:
+            if a.id == event_id:
+                a.acknowledged_utc = when
                 break
 
-    def agregar_firma(self, firma: EventSignature) -> None:
-        """Guarda una firma reciente para la dedup inter-fuente (RF-09)."""
-        self._estado.firmas_recientes.append(firma)
+    def add_signature(self, signature: EventSignature) -> None:
+        """Stores a recent signature for inter-source dedup (RF-09)."""
+        self._state.recent_signatures.append(signature)
 
-    def actualizar_cursor_usgs(self, cursor_ms: int) -> None:
-        """Avanza el cursor de USGS al máximo visto (RF-06)."""
-        actual = self._estado.cursor_usgs_ms
-        if actual is None or cursor_ms > actual:
-            self._estado.cursor_usgs_ms = cursor_ms
+    def update_usgs_cursor(self, cursor_ms: int) -> None:
+        """Advances the USGS cursor to the highest value seen (RF-06)."""
+        current = self._state.cursor_usgs_ms
+        if current is None or cursor_ms > current:
+            self._state.cursor_usgs_ms = cursor_ms
 
-    def ubicacion_cacheada(self) -> Referencia | None:
-        """Última ubicación detectada por IP y cacheada, si hay una (RF-33)."""
-        ub = self._estado.ubicacion_detectada
-        if ub is None:
+    def cached_location(self) -> ReferencePoint | None:
+        """Last IP-detected and cached location, if any (RF-33)."""
+        loc = self._state.detected_location
+        if loc is None:
             return None
-        return Referencia(nombre=ub.nombre, lat=ub.lat, lon=ub.lon)
+        return ReferencePoint(name=loc.name, lat=loc.lat, lon=loc.lon)
 
-    def cachear_ubicacion(self, referencia: Referencia, *, cuando: datetime | None = None) -> None:
-        """Persiste una ubicación detectada por IP para no repetir la llamada al reiniciar."""
-        self._estado.ubicacion_detectada = UbicacionDetectada(
-            nombre=referencia.nombre,
-            lat=referencia.lat,
-            lon=referencia.lon,
-            detectado_utc=cuando or datetime.now(UTC),
+    def cache_location(self, reference: ReferencePoint, *, when: datetime | None = None) -> None:
+        """Persists an IP-detected location to avoid repeating the call on restart."""
+        self._state.detected_location = DetectedLocation(
+            name=reference.name,
+            lat=reference.lat,
+            lon=reference.lon,
+            detected_utc=when or datetime.now(UTC),
         )
 
-    def podar(self, ahora: datetime | None = None) -> None:
-        """Elimina ids y firmas más antiguos que `ANTIGUEDAD_MAX` (DATA-MODEL §2.2)."""
-        ahora = ahora or datetime.now(UTC)
-        limite = ahora - ANTIGUEDAD_MAX
-        self._estado.ids_alertados = [a for a in self._estado.ids_alertados if a.hora_utc >= limite]
-        self._estado.firmas_recientes = [
-            f for f in self._estado.firmas_recientes if f.hora_utc >= limite
+    def prune(self, now: datetime | None = None) -> None:
+        """Removes ids and signatures older than `MAX_AGE` (DATA-MODEL §2.2)."""
+        now = now or datetime.now(UTC)
+        cutoff = now - MAX_AGE
+        self._state.alerted_ids = [a for a in self._state.alerted_ids if a.time_utc >= cutoff]
+        self._state.recent_signatures = [
+            f for f in self._state.recent_signatures if f.time_utc >= cutoff
         ]

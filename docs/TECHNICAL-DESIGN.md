@@ -1,63 +1,65 @@
 # Technical Design — Vigía-eew
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Documento | Diseño técnico y decisiones de arquitectura (ADRs) |
-| Versión | 1.0 (borrador para revisión) |
-| Estado | 🟡 Pendiente de aprobación |
-| Relacionado | `PRD.md`, `API-SPEC.md`, `DATA-MODEL.md`, `ARCHITECTURE.md`, `IMPLEMENTATION-PLAN.md` |
+| Document | Technical design and architecture decisions (ADRs) |
+| Version | 1.0 (draft for review) |
+| Status | 🟡 Pending approval |
+| Related | `PRD.md`, `API-SPEC.md`, `DATA-MODEL.md`, `ARCHITECTURE.md`, `IMPLEMENTATION-PLAN.md` |
 
 ---
 
-## 1. Resumen
+## 1. Summary
 
-Vigía es un **único proceso asyncio** de larga vida por máquina. Una **vía primaria de push**
-(WebSocket EMSC) y una **red de seguridad de bajo peso** (polling USGS cada 60 s) alimentan una
-**cola interna**. Un *pipeline* normaliza → filtra → deduplica y, cuando un evento es nuevo y
-relevante, lo entrega a la **capa de notificación**, que muestra una **ventana de alerta
-no descartable** además de un toast nativo. El estado crítico (ids alertados, cursor USGS) se
-**persiste** para sobrevivir reinicios.
+Vigía is a single long-lived **asyncio process** per machine. A **primary push channel**
+(EMSC WebSocket) and a **lightweight safety net** (USGS polling every 60 s) feed an
+**internal queue**. A *pipeline* normalizes → filters → deduplicates and, when an event is new
+and relevant, delivers it to the **notification layer**, which shows a **non-dismissable alert
+window** in addition to a native toast. Critical state (alerted ids, USGS cursor) is
+**persisted** to survive restarts.
 
-Principios rectores: **push primero** (RF-01), **nunca morir** por fallos transitorios (RNF-03),
-**no descartable** (RF-19/RNF-05) y **trazabilidad** RF→código (RNF-08).
+Guiding principles: **push first** (RF-01), **never die** from transient failures (RNF-03),
+**non-dismissable** (RF-19/RNF-05), and **traceability** RF→code (RNF-08).
 
-## 2. Arquitectura lógica (capas)
+## 2. Logical architecture (layers)
 
 ```
-Fuentes externas ──▶ Ingestión ──▶ Cola asyncio ──▶ Normalización ──▶ Filtro ──▶ Dedup ──▶ Notificación
+External sources ──▶ Ingestion ──▶ Asyncio queue ──▶ Normalization ──▶ Filter ──▶ Dedup ──▶ Notification
                                                                                   │
-                                                                        Persistencia (estado)
+                                                                        Persistence (state)
 ```
 
-| Capa | Componente | Responsabilidad | RF |
+| Layer | Component | Responsibility | RF |
 |---|---|---|---|
-| Ingestión | `WSIngestor` (EMSC) | Conexión WS, keepalive, reconexión, emitir crudos | RF-01..RF-04 |
-| Ingestión | `RESTReconciler` (USGS) | Polling 60 s, cursor, emitir crudos | RF-05, RF-06 |
-| Normalización | `Normalizer` | Crudo→evento normalizado, distancia, severidad | RF-07, RF-08, RF-13 |
-| Filtro | `GeoFilter` | Radio + magnitud mínima | RF-12 |
-| Dedup | `Deduplicator` | Heurística inter-fuente; updates; ids persistidos | RF-09..RF-11 |
-| Notificación | `Notifier` (toast) + `AlertWindow` (overlay) + `AlertQueue` | Toast + ventana + cola + sonido | RF-14..RF-21 |
-| Persistencia | `StateStore` | ids alertados + cursor en disco | RF-06, RF-10 |
-| Config | `Settings` (pydantic) | Cargar/validar `config.toml` | RF-24 |
-| Plataforma | `autostart/` | systemd/LaunchAgent/tarea programada | RF-22, RF-23 |
-| CLI | `cli` (`vigia-eew`) | Arranque, `--simulate`, autostart | RF-21, RF-26 |
+| Ingestion | `WSIngestor` (EMSC) | WS connection, keepalive, reconnection, emit raw messages | RF-01..RF-04 |
+| Ingestion | `RESTReconciler` (USGS) | 60 s polling, cursor, emit raw messages | RF-05, RF-06 |
+| Normalization | `Normalizer` | Raw→normalized event, distance, severity | RF-07, RF-08, RF-13 |
+| Filter | `GeoFilter` | Radius + minimum magnitude | RF-12 |
+| Dedup | `Deduplicator` | Cross-source heuristic; updates; persisted ids | RF-09..RF-11 |
+| Notification | `Notifier` (toast) + `AlertWindow` (overlay) + `AlertQueue` | Toast + window + queue + sound | RF-14..RF-21 |
+| Persistence | `StateStore` | Alerted ids + cursor on disk | RF-06, RF-10 |
+| Config | `Settings` (pydantic) | Load/validate `config.toml` | RF-24 |
+| Platform | `autostart/` | systemd/LaunchAgent/scheduled task | RF-22, RF-23 |
+| CLI | `cli` (`vigia-eew`) | Startup, `--simulate`, autostart | RF-21, RF-26 |
 
-## 3. Modelo de concurrencia (asyncio) — RNF-04
+## 3. Concurrency model (asyncio) — RNF-04
 
-Tareas `asyncio` coordinadas por un orquestador (`Supervisor`):
+Asyncio tasks coordinated by an orchestrator (`Supervisor`):
 
-- **T1 `ws_task`**: mantiene el WS vivo (keepalive + reconexión), publica crudos en `raw_queue`.
-- **T2 `rest_task`**: bucle de 60 s; publica crudos en `raw_queue`.
-- **T3 `pipeline_task`**: consume `raw_queue` → normaliza → filtra → dedup → si procede, `alert_queue`.
-- **T4 capa UI**: la GUI (Tkinter) corre en el **hilo principal**; un *bridge* thread-safe pasa
-  eventos desde `alert_queue` (asyncio) a la UI (ver ADR-006).
-- **T5 ícono de bandeja** (RF-34, ADR-012): `pystray.Icon.run()` corre en su **propio hilo** de
-  trabajo (ni asyncio ni Tk); sus callbacks que tocan Tk (pausar/reanudar, salir) se agendan de
-  vuelta al hilo principal con `root.after(0, ...)`, igual patrón que el *bridge* de T4.
+- **T1 `ws_task`**: keeps the WS alive (keepalive + reconnection), publishes raw messages to
+  `raw_queue`.
+- **T2 `rest_task`**: 60 s loop; publishes raw messages to `raw_queue`.
+- **T3 `pipeline_task`**: consumes `raw_queue` → normalizes → filters → dedups → if applicable,
+  `alert_queue`.
+- **T4 UI layer**: the GUI (Tkinter) runs on the **main thread**; a thread-safe *bridge* passes
+  events from `alert_queue` (asyncio) to the UI (see ADR-006).
+- **T5 tray icon** (RF-34, ADR-012): `pystray.Icon.run()` runs on its own **worker thread**
+  (neither asyncio nor Tk); its callbacks that touch Tk (pause/resume, quit) are scheduled back
+  onto the main thread with `root.after(0, ...)`, the same pattern as the T4 bridge.
 
-Resiliencia: cada *task* va envuelta en un guard que captura excepciones, las registra y **reinicia
-la task con backoff** sin tumbar el proceso (patrón "supervisor que reincia hijos"). Cierre limpio
-con `asyncio` + señales (SIGINT/SIGTERM).
+Resilience: each *task* is wrapped in a guard that catches exceptions, logs them, and **restarts
+the task with backoff** without bringing down the process (a "supervisor that restarts children"
+pattern). Clean shutdown via `asyncio` + signals (SIGINT/SIGTERM).
 
 ```
 Supervisor
@@ -66,328 +68,353 @@ Supervisor
  └─ watchdog      ┘
 ```
 
-## 4. Estrategia tiempo real: push-primario / polling-respaldo
+## 4. Real-time strategy: push-primary / polling-backup
 
-- **Primario (push)**: el WS entrega eventos con latencia mínima (RF-01). Keepalive 15 s (RF-02)
-  y reconexión perpetua con backoff (RF-03) garantizan continuidad.
-- **Respaldo (polling)**: USGS cada 60 s (RF-05) **solo** recupera lo que el WS perdió y cubre
-  pequeños locales. No compite con el push: baja frecuencia, bajo peso.
-- **Por qué no polling principal**: latencia alta y carga innecesaria; el WS ya entrega push real.
-- **Por qué USGS por polling y no WS**: USGS no ofrece WebSocket público simple (su push es PDL,
-  pesado/Java) → polling con cursor es la opción de bajo costo (ADR-002).
+- **Primary (push)**: the WS delivers events with minimal latency (RF-01). A 15 s keepalive
+  (RF-02) and perpetual reconnection with backoff (RF-03) guarantee continuity.
+- **Backup (polling)**: USGS every 60 s (RF-05) **only** recovers what the WS missed and covers
+  small local events. It doesn't compete with the push: low frequency, lightweight.
+- **Why not polling as primary**: high latency and unnecessary load; the WS already delivers
+  real push.
+- **Why USGS via polling and not WS**: USGS doesn't offer a simple public WebSocket (its push
+  mechanism is PDL, heavy/Java) → cursor-based polling is the low-cost option (ADR-002).
 
-## 5. Deduplicación y manejo de `update`
+## 5. Deduplication and handling of `update`
 
-### 5.1 Reglas (RF-09..RF-11)
-1. **Dedup intra-fuente por id**: si el `id`/`unid` ya está en `ids_alertados`, no re-alertar.
-2. **`update` de EMSC**: mismo `unid` ya visto → **actualizar** el evento (p. ej. magnitud) en la
-   ventana si está en pantalla/cola; **no** generar alerta nueva (RF-11).
-3. **Dedup inter-fuente (heurística)**: dos eventos de fuentes distintas son el mismo sismo si
-   **Δdistancia ≤ 100 km** y **Δtiempo ≤ 90 s** y **Δmagnitud ≤ 0.5** (RF-09). Se mantiene una
-   ventana temporal de eventos recientes para comparar.
-4. **Persistencia**: `ids_alertados` y las "firmas" recientes se guardan para no repetir tras
-   reinicios (RF-10).
+### 5.1 Rules (RF-09..RF-11)
+1. **Intra-source dedup by id**: if the `id`/`unid` is already in `alerted_ids`, don't re-alert.
+2. **EMSC `update`**: same `unid` already seen → **update** the event (e.g. magnitude) in the
+   window if it's on screen/in the queue; **do not** generate a new alert (RF-11).
+3. **Cross-source dedup (heuristic)**: two events from different sources are the same earthquake
+   if **Δdistance ≤ 100 km** and **Δtime ≤ 90 s** and **Δmagnitude ≤ 0.5** (RF-09). A time
+   window of recent events is kept for comparison.
+4. **Persistence**: `alerted_ids` and recent "signatures" are saved so they aren't repeated
+   after restarts (RF-10).
 
-### 5.2 Pseudocódigo
+### 5.2 Pseudocode
 ```python
-def es_duplicado(ev, recientes, ids_alertados):
-    if ev.id in ids_alertados:
-        return True                      # ya alertado (mismo id)
-    for r in recientes:                  # heurística inter-fuente
+def is_duplicate(ev, recent, alerted_ids):
+    if ev.id in alerted_ids:
+        return True                      # already alerted (same id)
+    for r in recent:                     # cross-source heuristic
         if (haversine(ev, r) <= 100 and
-            abs(ev.hora - r.hora) <= 90 and
+            abs(ev.time - r.time) <= 90 and
             abs(ev.mag - r.mag) <= 0.5):
             return True
     return False
 ```
 
-## 6. Filtrado y severidad
+## 6. Filtering and severity
 
-- **Filtro** (RF-12): descartar si `distancia_km > radio` o `magnitud < magnitud_minima`.
-- **Severidad** (RF-13): umbrales configurables; por defecto `<4 info`, `4–5.5 atencion`, `5.5+ critico`.
-  Cada nivel define **color** y **perfil de sonido** de la alerta.
-- **Punto de referencia** (RF-12/RF-33): si el usuario no define `[referencia]`, `Aplicacion`
-  resuelve una por geolocalización de IP antes de arrancar el pipeline (detalle en ADR-011).
+- **Filter** (RF-12): discard if `distance_km > radius` or `magnitude < min_magnitude`.
+- **Severity** (RF-13): configurable thresholds; by default `<4 info`, `4–5.5 warning`,
+  `5.5+ critical`. Each level defines the alert's **color** and **sound profile**.
+- **Reference point** (RF-12/RF-33): if the user doesn't define `[reference]`, `Application`
+  resolves one via IP geolocation before starting the pipeline (details in ADR-011).
 
-## 7. Persistencia de estado — RF-06, RF-10
+## 7. State persistence — RF-06, RF-10
 
-- Formato: **JSON** en directorio de datos del usuario (`platformdirs`): p. ej.
-  `~/.local/share/vigia-eew/state.json` (Linux), `%LOCALAPPDATA%` (Windows), `~/Library/Application Support` (macOS).
-- Contenido: `cursor_usgs` (epoch ms), `ids_alertados` (con poda por antigüedad), `firmas_recientes`,
-  `ubicacion_detectada` (caché de la geolocalización por IP, RF-33).
-- Escritura **atómica** (escribir a temp + `os.replace`) para no corromper ante caída.
-- Esquema en `DATA-MODEL.md`.
+- Format: **JSON** in the user's data directory (`platformdirs`): e.g.
+  `~/.local/share/vigia-eew/state.json` (Linux), `%LOCALAPPDATA%` (Windows),
+  `~/Library/Application Support` (macOS).
+- Content: `usgs_cursor` (epoch ms), `alerted_ids` (pruned by age), `recent_signatures`,
+  `detected_location` (cache of the IP geolocation, RF-33).
+- **Atomic** writes (write to temp + `os.replace`) to avoid corruption on crash.
+- Schema in `DATA-MODEL.md`.
 
-## 8. Manejo de errores y reconexión — RNF-03
+## 8. Error handling and reconnection — RNF-03
 
-| Fallo | Estrategia |
+| Failure | Strategy |
 |---|---|
-| WS cerrado / ping_timeout | Reconexión perpetua con **backoff exponencial + jitter** (p. ej. 1,2,4,8…≤60 s). |
-| USGS 429 | Respetar `Retry-After`; saltar ciclo; mantener cursor. |
-| USGS 5xx / timeout | Log de advertencia; reintento en el siguiente ciclo. |
-| JSON inválido / esquema | Validar con pydantic; descartar el item; continuar. |
-| Pérdida de red total | Ambas ingestas reintentan; el proceso sigue vivo; al volver la red, USGS reconcilia. |
-| Excepción en una task | El `Supervisor` la captura, registra y reinicia esa task con backoff. |
-| Fallo de la UI | Aislado del pipeline; la ingestión sigue; se reintenta mostrar. |
-| Geolocalización por IP falla (red/timeout/JSON/status) | `geoloc.py` nunca lanza: devuelve `None`; `Aplicacion` cae al default (Caracas) sin bloquear el arranque (ADR-011). |
-| Ícono de bandeja no arranca (backend gráfico ausente, GNOME/Wayland sin extensión, excepción de `pystray`) | `IconoBandeja` captura la excepción **dentro de su propio hilo** y loguea un *warning*; el agente sigue funcionando con normalidad, sin ícono (ADR-012). |
+| WS closed / ping_timeout | Perpetual reconnection with **exponential backoff + jitter** (e.g. 1,2,4,8…≤60 s). |
+| USGS 429 | Honor `Retry-After`; skip the cycle; keep the cursor. |
+| USGS 5xx / timeout | Warning log; retry on the next cycle. |
+| Invalid JSON / schema | Validate with pydantic; discard the item; continue. |
+| Total network loss | Both ingestors keep retrying; the process stays alive; once the network returns, USGS reconciles. |
+| Exception in a task | The `Supervisor` catches it, logs it, and restarts that task with backoff. |
+| UI failure | Isolated from the pipeline; ingestion continues; showing the alert is retried. |
+| IP geolocation fails (network/timeout/JSON/status) | `geoloc.py` never raises: it returns `None`; `Application` falls back to the default (Caracas) without blocking startup (ADR-011). |
+| Tray icon fails to start (no graphical backend, GNOME/Wayland without the extension, exception from `pystray`) | `TrayIcon` catches the exception **inside its own thread** and logs a *warning*; the agent keeps running normally, without the icon (ADR-012). |
 
-## 9. Logging y observabilidad — RNF-07
+## 9. Logging and observability — RNF-07
 
-- Logging **estructurado** (clave=valor / JSON opcional) a **consola** y **archivo rotativo**
+- **Structured** logging (key=value / optional JSON) to the **console** and a **rotating file**
   (`logging.handlers.RotatingFileHandler`).
-- Eventos registrados: conexión/desconexión WS, reconexiones y backoff, polls USGS (conteo,
-  cursor), eventos filtrados, alertas mostradas y **reconocimientos** (auditoría, OBJ-1).
+- Logged events: WS connection/disconnection, reconnections and backoff, USGS polls (count,
+  cursor), filtered events, alerts shown, and **acknowledgments** (audit trail, OBJ-1).
 
-## 10. Seguridad y privacidad — RNF-09
-- Sin claves de API; solo lectura de fuentes públicas; sin envío de datos del usuario a terceros.
-- **Excepción** (RF-34, ADR-012): `pystray` + `Pillow` son dependencias nuevas exclusivas del
-  ícono de bandeja, excepción documentada a RNF-06 ("cero dependencias extra" de la UI por
-  defecto). No hacen red ni telemetría; solo GUI local.
-- Validación estricta de entrada (pydantic) para mensajes externos.
-- **Excepción explícita** (RF-33, ADR-011): si no hay `[referencia]` manual, se consulta un servicio
-  de geolocalización por IP (`ipapi.co`) — la IP de origen queda visible a ese tercero, igual que en
-  cualquier request HTTP. Se activa solo por ausencia de configuración manual (nunca con datos
-  explícitos del usuario) y se puede desactivar por completo fijando `[referencia]` en `config.toml`.
+## 10. Security and privacy — RNF-09
+- No API keys; read-only access to public sources; no user data is sent to third parties.
+- **Exception** (RF-34, ADR-012): `pystray` + `Pillow` are new dependencies exclusive to the
+  tray icon, a documented exception to RNF-06 ("zero extra dependencies" for the default UI).
+  They do no networking or telemetry; local GUI only.
+- Strict input validation (pydantic) for external messages.
+- **Explicit exception** (RF-33, ADR-011): if there is no manual `[reference]`, an IP
+  geolocation service is queried (`ipapi.co`) — the source IP is visible to that third party,
+  just as in any HTTP request. It's triggered only by the absence of manual configuration
+  (never with explicit user data) and can be disabled entirely by setting `[reference]` in
+  `config.toml`.
 
 ---
 
-## 11. Decisiones de diseño (ADRs)
+## 11. Design decisions (ADRs)
 
-> Formato corto: contexto → decisión → alternativas descartadas → consecuencias.
+> Short format: context → decision → alternatives considered and rejected → consequences.
 
-### ADR-001 — Push WebSocket como vía primaria (no polling)
-- **Contexto**: se necesita latencia mínima (OBJ-2) y no perder eventos (OBJ-3).
-- **Decisión**: WebSocket EMSC como **primario** (RF-01); polling USGS solo como **respaldo** (RF-05).
-- **Alternativas descartadas**: *(a)* solo polling → latencia alta y carga; *(b)* solo WS → el WS
-  documenta pérdida de mensajes; sin red de seguridad se perderían eventos.
-- **Consecuencias**: doble fuente → necesidad de **dedup inter-fuente** (ADR-004).
+### ADR-001 — WebSocket push as the primary channel (not polling)
+- **Context**: minimal latency is required (OBJ-2) and no events should be lost (OBJ-3).
+- **Decision**: EMSC WebSocket as **primary** (RF-01); USGS polling only as **backup** (RF-05).
+- **Alternatives considered and rejected**: *(a)* polling only → high latency and load;
+  *(b)* WS only → the WS documents message loss; without a safety net, events would be lost.
+- **Consequences**: dual source → need for **cross-source dedup** (ADR-004).
 
-### ADR-002 — USGS por polling con cursor (no PDL)
-- **Contexto**: USGS no ofrece WS público simple; su push (PDL) es pesado/Java.
-- **Decisión**: polling FDSN cada 60 s con **cursor persistido** (RF-05, RF-06).
-- **Alternativas descartadas**: integrar PDL (complejidad/JVM, contra "auto-alojado y ligero").
-- **Consecuencias**: ventana de hasta ~60 s para recuperar lo perdido por el WS (aceptable como respaldo).
+### ADR-002 — USGS via cursor-based polling (not PDL)
+- **Context**: USGS doesn't offer a simple public WS; its push mechanism (PDL) is heavy/Java.
+- **Decision**: FDSN polling every 60 s with a **persisted cursor** (RF-05, RF-06).
+- **Alternatives considered and rejected**: integrating PDL (complexity/JVM, against
+  "self-hosted and lightweight").
+- **Consequences**: a window of up to ~60 s to recover what the WS missed (acceptable as a
+  backup).
 
-### ADR-003 — Tkinter por defecto para la alerta (no PyQt/PySide)
-- **Contexto**: alerta multiplataforma *topmost* con foco, sin dependencias pesadas (RNF-06).
-- **Decisión**: **Tkinter** (incluido en CPython, cero dependencias extra). Cumple `-topmost`,
-  `overrideredirect`, `attributes('-fullscreen')`, `focus_force`, `lift`.
-- **Alternativas descartadas**: PyQt/PySide (mejor estética/teclado, pero +50–100 MB, licencias,
-  empaquetado más complejo). Se reconsiderará **solo** si Tkinter no logra el "siempre al frente"
-  fiable en algún SO. *Disparador de reevaluación*: si en macOS no se puede forzar foco de forma
-  fiable, o en **GNOME/Wayland** donde el compositor restringe topmost/foco (decisión en **ADR-010**).
-- **Consecuencias**: UI más austera; el sonido se maneja por capa aparte (ADR-005).
+### ADR-003 — Tkinter by default for the alert (not PyQt/PySide)
+- **Context**: a cross-platform, *topmost*, focus-stealing alert, without heavy dependencies
+  (RNF-06).
+- **Decision**: **Tkinter** (bundled with CPython, zero extra dependencies). It supports
+  `-topmost`, `overrideredirect`, `attributes('-fullscreen')`, `focus_force`, `lift`.
+- **Alternatives considered and rejected**: PyQt/PySide (better aesthetics/keyboard handling,
+  but +50–100 MB, licensing, more complex packaging). It will only be reconsidered if Tkinter
+  fails to reliably deliver "always on top" on some OS. *Re-evaluation trigger*: if focus can't
+  be reliably forced on macOS, or on **GNOME/Wayland** where the compositor restricts
+  topmost/focus (decision in **ADR-010**).
+- **Consequences**: a plainer UI; sound is handled by a separate layer (ADR-005).
 
-### ADR-004 — Dedup heurística por (distancia, tiempo, magnitud)
-- **Contexto**: EMSC y USGS asignan ids distintos al mismo sismo.
-- **Decisión**: mismo sismo si ≤100 km, ≤90 s, ≤0.5 mag (RF-09) + dedup por id intra-fuente + manejo de `update` (RF-11).
-- **Alternativas descartadas**: confiar en un id común (no existe entre fuentes); *match* exacto (frágil).
-- **Consecuencias**: posibles falsos positivos/negativos en enjambres; umbrales **configurables**.
+### ADR-004 — Heuristic dedup by (distance, time, magnitude)
+- **Context**: EMSC and USGS assign different ids to the same earthquake.
+- **Decision**: same earthquake if ≤100 km, ≤90 s, ≤0.5 mag (RF-09) + intra-source dedup by id +
+  handling of `update` (RF-11).
+- **Alternatives considered and rejected**: relying on a shared id (none exists across sources);
+  exact matching (fragile).
+- **Consequences**: possible false positives/negatives during swarms; configurable thresholds.
 
-### ADR-005 — Sonido desacoplado y multiplataforma
-- **Contexto**: el sonido debe escalar con severidad y funcionar en 3 SO (RF-17).
-- **Decisión**: capa de audio propia; estrategia por SO (reproducción de WAV empaquetado; *fallback*
-  a *bell* del sistema). Selección de assets por severidad.
-- **Alternativas descartadas**: depender solo del sonido del toast (silenciable por "No molestar").
-- **Consecuencias**: incluir assets de audio en el paquete; ruta de assets resuelta en runtime.
+### ADR-005 — Decoupled, cross-platform sound
+- **Context**: sound must scale with severity and work across 3 OSes (RF-17).
+- **Decision**: a dedicated audio layer; a per-OS strategy (playing a bundled WAV; fallback to
+  the system bell). Asset selection based on severity.
+- **Alternatives considered and rejected**: relying only on the toast's sound (mutable by
+  "Do Not Disturb").
+- **Consequences**: audio assets must be bundled with the package; the asset path is resolved
+  at runtime.
 
-### ADR-006 — Puente asyncio↔Tkinter (UI en hilo principal)
-- **Contexto**: Tkinter exige hilo principal; la ingestión vive en asyncio.
-- **Decisión**: ejecutar el *event loop* de Tkinter en el hilo principal y el bucle asyncio en un
-  hilo de trabajo; pasar eventos con una cola thread-safe + `widget.after()` para *poll* de la cola.
-- **Alternativas descartadas**: correr asyncio en el hilo principal y Tk en otro (Tk no es thread-safe).
-- **Consecuencias**: un punto de integración bien acotado; cierre coordinado de ambos bucles.
+### ADR-006 — Asyncio↔Tkinter bridge (UI on the main thread)
+- **Context**: Tkinter requires the main thread; ingestion lives in asyncio.
+- **Decision**: run Tkinter's event loop on the main thread and the asyncio loop on a worker
+  thread; pass events through a thread-safe queue + `widget.after()` to poll the queue.
+- **Alternatives considered and rejected**: running asyncio on the main thread and Tk on another
+  (Tk isn't thread-safe).
+- **Consequences**: a single, well-bounded integration point; coordinated shutdown of both loops.
 
-### ADR-007 — Config en `config.toml` (pydantic) + gestor `uv`/hatchling
-- **Contexto**: config estructurada (severidades anidadas) y *tooling* moderno.
-- **Decisión**: **`config.toml`** leído con `tomllib` (stdlib 3.11+) y validado por **pydantic**
-  (RF-24); proyecto gestionado con **uv**; build con **hatchling** (RF-27).
-- **Alternativas descartadas**: `.env` (incómodo para estructuras anidadas); setuptools (más verboso).
-- **Consecuencias**: `tomllib` es solo lectura (la escritura de config no es necesaria en v1).
+### ADR-007 — Config in `config.toml` (pydantic) + `uv`/hatchling tooling
+- **Context**: structured config (nested severities) and modern tooling.
+- **Decision**: **`config.toml`** read with `tomllib` (stdlib 3.11+) and validated by
+  **pydantic** (RF-24); the project is managed with **uv**; built with **hatchling** (RF-27).
+- **Alternatives considered and rejected**: `.env` (awkward for nested structures); setuptools
+  (more verbose).
+- **Consequences**: `tomllib` is read-only (writing config isn't needed in v1).
 
-### ADR-008 — Sin relay central en v1 (cada máquina, su agente)
-- **Contexto**: evitar punto único de fallo (RNF-02); simplicidad de v1.
-- **Decisión**: cada máquina corre su propio agente. Se **documenta** la migración a un relay
-  FastAPI con *fan-out* WS reutilizando el contrato interno (API Spec §4).
-- **Alternativas descartadas**: relay central en v1 (SPOF, más operación).
-- **Consecuencias**: N conexiones a EMSC (aceptable); evolución no rompe el modelo de datos.
+### ADR-008 — No central relay in v1 (one agent per machine)
+- **Context**: avoiding a single point of failure (RNF-02); simplicity for v1.
+- **Decision**: each machine runs its own agent. The migration path to a central relay
+  (FastAPI) with WS *fan-out* reusing the internal contract is **documented** (API Spec §4).
+- **Alternatives considered and rejected**: a central relay in v1 (SPOF, more ops overhead).
+- **Consequences**: N connections to EMSC (acceptable); the future evolution doesn't break the
+  data model.
 
-### ADR-009 — `websockets` + `httpx` (no Tornado)
-- **Contexto**: el ejemplo oficial de EMSC usa Tornado; el stack objetivo es asyncio moderno.
-- **Decisión**: **`websockets`** para WS (keepalive nativo `ping_interval`) y **`httpx`** async para REST.
-- **Alternativas descartadas**: Tornado (framework completo innecesario), `aiohttp` (válido; `httpx` por ergonomía/timeouts).
-- **Consecuencias**: dependencias mínimas y idiomáticas con asyncio.
+### ADR-009 — `websockets` + `httpx` (not Tornado)
+- **Context**: EMSC's official example uses Tornado; the target stack is modern asyncio.
+- **Decision**: **`websockets`** for WS (native `ping_interval` keepalive) and async **`httpx`**
+  for REST.
+- **Alternatives considered and rejected**: Tornado (a full framework that's unnecessary),
+  `aiohttp` (valid; `httpx` chosen for ergonomics/timeouts).
+- **Consequences**: minimal dependencies, idiomatic with asyncio.
 
-### ADR-010 — Frontend de presentación desacoplado por D-Bus + extensión GNOME Shell opcional
-- **Contexto**: la garantía central "imposible de ignorar" (OBJ-1, RF-15/16/19) depende de
-  *topmost* + robo de foco + sin decoración. Bajo **Wayland** (default de GNOME hoy), una app
-  X11/XWayland como **Tkinter** **no puede** forzar de forma fiable `-topmost`, `focus_force` ni
-  `overrideredirect`: el compositor controla apilamiento y foco. Es el *disparador de
-  reevaluación* anticipado en el ADR-003. El núcleo (ingestión/pipeline/estado) es Python y
-  multiplataforma (RNF-06) y no queremos perderlo.
-- **Decisión**: separar **presentación** de **núcleo**. El agente Python sigue siendo la única
-  fuente de verdad (ingestión → pipeline → `SeismicEvent` normalizado) y publica las alertas por
-  un **canal D-Bus** opcional; los frontends de presentación se **suscriben**.
-  - Frontend **por defecto**: la ventana **Tkinter** (ADR-003), empaquetada y multiplataforma.
-  - Frontend **opcional en GNOME**: una **extensión de GNOME Shell** (GJS) que escucha el canal
-    D-Bus y muestra un `ModalDialog` con *grab* real de pantalla/teclado — la forma **más fiable**
-    de "imposible de ignorar" en GNOME/Wayland, al vivir dentro del compositor.
-  - El reconocimiento (RECONOCIDO) fluye **de vuelta** al agente por D-Bus, de modo que el estado
-    y la auditoría (`reconocido_utc`, RF-10) permanecen en el núcleo Python.
-  - **v1: no implementado**; se documenta como evolución. Tkinter sigue siendo el default en los 3 SO.
-- **Alternativas descartadas**:
-  - *Reescribir toda la app como extensión GNOME (GJS)*: pierde portabilidad (RNF-06), el núcleo
-    Python y mete el agente dentro del proceso del shell (riesgo para 24/7, RNF-02/03).
-  - *Forzar más el topmost de Tkinter en Wayland*: no es fiable; el compositor manda.
-  - *Depender solo del toast crítico (`desktop-notifier`)*: silenciable por "No molestar" (RF-19).
-- **Consecuencias**:
-  - Hay que definir un **contrato D-Bus** mínimo (reutilizando el `SeismicEvent` interno, igual que
-    el relay del ADR-008): el agente emite `Alerta(evento)` y el frontend invoca `Reconocer(id)`.
-    El diseño detallado de este puente queda pendiente (ítem de evolución).
-  - El `ControladorAlertas` gana un segundo "backend" de salida (publicar a D-Bus) junto a la
-    ventana Tk; la selección es por plataforma/configuración.
-  - La distribución suma un artefacto opcional (extensión vía extensions.gnome.org o empaquetada),
-    independiente del paquete Python.
+### ADR-010 — Decoupled presentation frontend via D-Bus + optional GNOME Shell extension
+- **Context**: the core "impossible to ignore" guarantee (OBJ-1, RF-15/16/19) depends on
+  *topmost* + focus stealing + no window decoration. Under **Wayland** (GNOME's default today),
+  an X11/XWayland app like **Tkinter** **cannot** reliably force `-topmost`, `focus_force`, or
+  `overrideredirect`: the compositor controls stacking and focus. This is the *re-evaluation
+  trigger* anticipated in ADR-003. The core (ingestion/pipeline/state) is Python and
+  cross-platform (RNF-06), and we don't want to lose that.
+- **Decision**: decouple **presentation** from the **core**. The Python agent remains the only
+  source of truth (ingestion → pipeline → normalized `SeismicEvent`) and publishes alerts over
+  an optional **D-Bus channel**; presentation frontends **subscribe** to it.
+  - **Default** frontend: the **Tkinter** window (ADR-003), bundled and cross-platform.
+  - **Optional GNOME** frontend: a **GNOME Shell extension** (GJS) that listens on the D-Bus
+    channel and shows a `ModalDialog` with a real screen/keyboard *grab* — the **most reliable**
+    way to be "impossible to ignore" on GNOME/Wayland, by living inside the compositor.
+  - The acknowledgment (ACKNOWLEDGED) flows **back** to the agent over D-Bus, so that the state
+    and audit trail (`acknowledged_utc`, RF-10) remain in the Python core.
+  - **v1: not implemented**; documented as a future evolution. Tkinter remains the default on
+    all 3 OSes.
+- **Alternatives considered and rejected**:
+  - *Rewriting the whole app as a GNOME extension (GJS)*: loses portability (RNF-06) and the
+    Python core, and puts the agent inside the shell's process (a risk for 24/7 operation,
+    RNF-02/03).
+  - *Forcing Tkinter's topmost harder on Wayland*: not reliable; the compositor has the final
+    say.
+  - *Relying only on the critical toast (`desktop-notifier`)*: mutable by "Do Not Disturb"
+    (RF-19).
+- **Consequences**:
+  - A minimal **D-Bus contract** needs to be defined (reusing the internal `SeismicEvent`, the
+    same way as the ADR-008 relay): the agent emits `Alert(event)` and the frontend calls
+    `Acknowledge(id)`. The detailed design of this bridge is left as a future item.
+  - The `AlertController` gains a second output "backend" (publishing to D-Bus) alongside the
+    Tk window; the choice is made per platform/configuration.
+  - The distribution gains an optional artifact (extension via extensions.gnome.org or
+    bundled), independent of the Python package.
 
-#### Diseño detallado del contrato D-Bus (elaboración de ADR-010 — solo diseño, no implementado)
+#### Detailed D-Bus contract design (elaboration of ADR-010 — design only, not implemented)
 
-> Profundiza la "Opción 3" pendiente del ADR-010. No cambia la decisión, la hace codificable.
+> Elaborates on ADR-010's pending "Option 3". It doesn't change the decision, it makes it
+> implementable.
 
-**Bus y nombres** (convención D-Bus reverse-DNS, sesión de usuario — no *system bus*, no root):
-- Bus: **session bus** (`DBUS_SESSION_BUS_ADDRESS`), coherente con "sin privilegios" (RNF-09).
-- Nombre de servicio: `org.vigia_eew.Agente`.
-- Ruta de objeto: `/org/vigia_eew/Agente`.
-- Interfaz **versionada** (permite romper sin ambigüedad): `org.vigia_eew.Agente.Alertas1`.
+**Bus and names** (D-Bus reverse-DNS convention, user session — not the *system bus*, not root):
+- Bus: **session bus** (`DBUS_SESSION_BUS_ADDRESS`), consistent with "unprivileged" (RNF-09).
+- Service name: `org.vigia_eew.Agent`.
+- Object path: `/org/vigia_eew/Agent`.
+- **Versioned** interface (allows breaking changes without ambiguity): `org.vigia_eew.Agent.Alerts1`.
 
-**Superficie de la interfaz `Alertas1`**
+**Surface of the `Alerts1` interface**
 
-| Miembro | Tipo | Dirección | Payload | Equivalente interno |
+| Member | Type | Direction | Payload | Internal equivalent |
 |---|---|---|---|---|
-| señal `AlertaNueva` | `(s)` | agente → frontend(s) | `SeismicEvent` como JSON (mismo esquema de API-SPEC §3) | `ControladorAlertas._mostrar` |
-| señal `AlertaActualizada` | `(s)` | agente → frontend(s) | `SeismicEvent` JSON, `accion="update"` (RF-11) | `ControladorAlertas._actualizar` |
-| método `Reconocer` | `(s) -> (b)` | frontend → agente | `id` del evento | `AlertQueue.reconocer` → `ControladorAlertas._reconocido` |
-| método `ObtenerActiva` | `() -> (s)` | frontend → agente | `"" ` si no hay alerta en curso, o el `SeismicEvent` JSON actual | estado interno de `ControladorAlertas` |
-| método `Ping` | `() -> (s)` | frontend → agente | versión del agente (`"1.0"`) | detección de disponibilidad del agente |
+| signal `NewAlert` | `(s)` | agent → frontend(s) | `SeismicEvent` as JSON (same schema as API-SPEC §3) | `AlertController._show` |
+| signal `AlertUpdated` | `(s)` | agent → frontend(s) | `SeismicEvent` JSON, `action="update"` (RF-11) | `AlertController._update` |
+| method `Acknowledge` | `(s) -> (b)` | frontend → agent | event `id` | `AlertQueue.acknowledge` → `AlertController._acknowledged` |
+| method `GetActive` | `() -> (s)` | frontend → agent | `""` if there is no active alert, or the current `SeismicEvent` JSON | `AlertController`'s internal state |
+| method `Ping` | `() -> (s)` | frontend → agent | agent version (`"1.0"`) | agent-availability detection |
 
-Se reutiliza literalmente el **contrato interno** (`SeismicEvent`, API-SPEC §3) serializado con
-`model_dump_json()`: un solo `string` como argumento evita definir una *struct* D-Bus paralela y
-mantiene un único punto de verdad para el esquema (igual criterio que el relay del ADR-008).
+The internal contract (`SeismicEvent`, API-SPEC §3) is reused verbatim, serialized with
+`model_dump_json()`: a single `string` argument avoids defining a parallel D-Bus *struct* and
+keeps a single source of truth for the schema (the same approach as the ADR-008 relay).
 
-**Encaje con `ControladorAlertas` (segundo backend de salida)**
+**Fit with `AlertController` (second output backend)**
 
-`ControladorAlertas` hoy invoca directamente `crear_ventana` (Tk), `reproducir_sonido` y
-`enviar_toast` como *callbacks* inyectables. El puente D-Bus se modela como un **cuarto callback
-del mismo tipo** (`publicar_dbus: Callable[[SeismicEvent], None] | None`), llamado desde `_mostrar`
-y `_actualizar` junto a los existentes — **no** reemplaza a Tk, se suma:
+`AlertController` today directly invokes `create_window` (Tk), `play_sound`, and `send_toast`
+as injectable callbacks. The D-Bus bridge is modeled as a **fourth callback of the same kind**
+(`publish_dbus: Callable[[SeismicEvent], None] | None`), invoked from `_show` and `_update`
+alongside the existing ones — it does **not** replace Tk, it's added on top:
 
 ```
-_mostrar(ev)      → crear_ventana(...) + reproducir_sonido(...) + enviar_toast(...) + publicar_dbus(ev)
-_actualizar(ev)   → ventana.actualizar(...)                                          + publicar_dbus(ev)
-Reconocer(id) (entrante) → self._cola.reconocer(...)   # mismo camino que "RECONOCIDO" de la ventana Tk
+_show(ev)      → create_window(...) + play_sound(...) + send_toast(...) + publish_dbus(ev)
+_update(ev)    → window.update(...)                                       + publish_dbus(ev)
+Acknowledge(id) (incoming) → self._alert_queue.acknowledge(...)   # same path as the Tk window's "ACKNOWLEDGED"
 ```
 
-El servicio D-Bus (`org.vigia_eew.Agente`) corre en el mismo proceso asyncio del agente (librería
-`dbus-fast`, ya presente como dependencia transitiva de `desktop-notifier`); `Reconocer` recibido
-por D-Bus se despacha al hilo/loop correcto igual que hoy se despacha el clic "RECONOCIDO" de la
-ventana Tk (mismo puente asyncio↔UI de ADR-006, no uno nuevo).
+The D-Bus service (`org.vigia_eew.Agent`) runs in the agent's same asyncio process (the
+`dbus-fast` library, already present as a transitive dependency of `desktop-notifier`);
+`Acknowledge` received over D-Bus is dispatched to the correct thread/loop the same way the Tk
+window's "ACKNOWLEDGED" click is dispatched today (the same asyncio↔UI bridge from ADR-006, not
+a new one).
 
-**Selección de frontend por plataforma/config (RF-22 no aplica; es config de presentación)**
+**Frontend selection by platform/config (RF-22 doesn't apply; this is presentation config)**
 
-- Config nueva (v1 del diseño, futura en `config.toml`): `[notificacion] frontend = "tk" | "auto"`.
-  Default **`"tk"`** en los 3 SO (comportamiento actual, sin cambios).
-- Con `"auto"` en Linux: el agente detecta GNOME + Wayland (`XDG_CURRENT_DESKTOP` contiene
-  `"GNOME"`, `XDG_SESSION_TYPE == "wayland"`) **y** que la extensión esté activa, consultando
-  `org.freedesktop.DBus.NameHasOwner` sobre un nombre bien conocido que publicaría la extensión
-  (p. ej. `org.gnome.Shell.Extensions.VigiaEew`). Si ambas condiciones se cumplen, la ventana Tk
-  se **omite** para esa alerta (evita dos overlays no descartables compitiendo por foco) y solo se
-  emite la señal D-Bus; en cualquier otro caso (extensión ausente, otro SO, X11), Tk sigue siendo
-  el único frontend, igual que hoy.
-- El toast (`desktop-notifier`) y el sonido (`sound.py`) **no** se ven afectados por esta selección:
-  siguen disparándose siempre, son canales redundantes independientes (RF-14, RF-17).
+- New config (v1 of the design, to be added later to `config.toml`): `[notification] frontend =
+  "tk" | "auto"`. Default **`"tk"`** on all 3 OSes (current behavior, unchanged).
+- With `"auto"` on Linux: the agent detects GNOME + Wayland (`XDG_CURRENT_DESKTOP` contains
+  `"GNOME"`, `XDG_SESSION_TYPE == "wayland"`) **and** that the extension is active, by querying
+  `org.freedesktop.DBus.NameHasOwner` for a well-known name that the extension would publish
+  (e.g. `org.gnome.Shell.Extensions.VigiaEew`). If both conditions hold, the Tk window is
+  **skipped** for that alert (avoiding two non-dismissable overlays competing for focus) and
+  only the D-Bus signal is emitted; in any other case (extension absent, other OS, X11), Tk
+  remains the only frontend, just as it does today.
+- The toast (`desktop-notifier`) and the sound (`sound.py`) are **not** affected by this
+  selection: they always keep firing, as they are independent redundant channels (RF-14,
+  RF-17).
 
-**Aislamiento de fallos (RNF-03 — nunca morir por esto)**
+**Failure isolation (RNF-03 — never die because of this)**
 
-Publicar en D-Bus (o que nadie escuche) **nunca** debe impedir mostrar la ventana Tk: mismo patrón
-que `toast.py` (fallo aislado, log de advertencia, la alerta sigue mostrándose). Si `"auto"`
-detecta la extensión pero la señal falla al emitirse (bus caído, extensión se cerró entre la
-detección y el envío), el agente debe **repetir el fallback a Tk** para esa alerta puntual, no
-asumir que quedó mostrada.
+Publishing to D-Bus (or nobody listening) must **never** prevent the Tk window from showing:
+the same pattern as `toast.py` (isolated failure, warning log, the alert still gets shown). If
+`"auto"` detects the extension but the signal fails to emit (bus down, extension closed between
+detection and sending), the agent must **fall back to Tk again** for that specific alert, rather
+than assuming it was shown.
 
-**Qué falta para pasar de diseño a código** (fuera de alcance mientras no se pida explícitamente):
-implementar el servicio D-Bus (`dbus-fast` `ServiceInterface`), el `publicar_dbus` callback y su
-cableado en `app.py`/`config.py`, la detección `"auto"`, y — en el otro extremo, fuera del paquete
-Python — la extensión GNOME Shell (GJS) que consume la señal y llama `Reconocer`.
+**What's left to go from design to code** (out of scope unless explicitly requested):
+implementing the D-Bus service (`dbus-fast` `ServiceInterface`), the `publish_dbus` callback and
+its wiring in `app.py`/`config.py`, the `"auto"` detection, and — on the other end, outside the
+Python package — the GNOME Shell extension (GJS) that consumes the signal and calls
+`Acknowledge`.
 
-### ADR-011 — Punto de referencia: manual con fallback automático por IP (RF-33)
+### ADR-011 — Reference point: manual with automatic IP-based fallback (RF-33)
 
-- **Contexto**: RF-12 exige un punto de referencia (lat/lon) configurable, pero hasta ahora era
-  **100% manual** (`config.toml`, default Caracas). Un usuario nuevo sin configurar nada obtiene un
-  filtro geográfico centrado en un punto que no es el suyo, sin darse cuenta.
-- **Decisión**: si el usuario **no** define `[referencia]` en `config.toml`, `Aplicacion` detecta la
-  ubicación por IP (`geoloc.py`, endpoint documentado en `API-SPEC.md` §4) **una sola vez**, antes de
-  arrancar el pipeline, y la persiste en `state.json` (`ubicacion_detectada`) para no repetir la
-  consulta en arranques siguientes. Si ya hay `[referencia]` manual, o ya hay una ubicación
-  cacheada, **nunca** se llama a la API. Si la detección falla (sin red, timeout, respuesta
-  inesperada), se cae al default hardcodeado (Caracas) sin cachear el fallo, para reintentar en el
-  próximo arranque.
-- **Dónde vive la decisión**: en `app.py` (`Aplicacion._preparar`/`_resolver_referencia_automatica`),
-  no en `config.py`. `config.py` sigue siendo una función pura de lectura/validación de TOML (sin
-  red ni I/O de estado); solo expone si `[referencia]` estaba presente (`tiene_referencia_manual`).
-  `cli.py` calcula ese booleano y se lo pasa a `Aplicacion` en su construcción.
-- **Por qué no en `--simulate`**: RF-21 exige que el modo simulación funcione **sin red**; por eso
-  `simular()` nunca pasa `resolver_ubicacion=True` a `_preparar`, sin importar si hay referencia
-  manual o no.
-- **Alternativas descartadas**: (a) geolocalización real del SO (CoreLocation/Windows Location
-  API/GeoClue) — mucho más precisa, pero exige tres integraciones nativas distintas y permisos del
-  sistema, en contra de RNF-06 (un solo core Python portable); (b) detectar y sobreescribir la
-  referencia en **cada** arranque — descartado por depender de red en cada arranque y gastar más
-  rápido la cuota del servicio gratuito, sin beneficio real (la ubicación de una máquina no cambia
-  entre arranques).
-- **Consecuencias**: nueva dependencia externa opcional (RNF-09, ver §10); nuevo campo en el estado
-  persistido (`DATA-MODEL.md` §2); `geoloc.py` sigue el mismo patrón de aislamiento de fallos que
-  `notify/toast.py` (nunca lanza, siempre hay un fallback).
+- **Context**: RF-12 requires a configurable reference point (lat/lon), but until now it was
+  **100% manual** (`config.toml`, defaulting to Caracas). A new user who configures nothing ends
+  up with a geographic filter centered on a point that isn't theirs, without realizing it.
+- **Decision**: if the user does **not** define `[reference]` in `config.toml`, `Application`
+  detects the location by IP (`geoloc.py`, endpoint documented in `API-SPEC.md` §4) **exactly
+  once**, before starting the pipeline, and persists it in `state.json` (`detected_location`) so
+  the lookup isn't repeated on subsequent startups. If a manual `[reference]` already exists, or
+  a location is already cached, the API is **never** called. If detection fails (no network,
+  timeout, unexpected response), it falls back to the hardcoded default (Caracas) without
+  caching the failure, so it can be retried on the next startup.
+- **Where the decision lives**: in `app.py` (`Application._prepare`/
+  `_resolve_automatic_reference`), not in `config.py`. `config.py` remains a pure TOML
+  read/validation function (no networking or state I/O); it only exposes whether `[reference]`
+  was present (`has_manual_reference`). `cli.py` computes that boolean and passes it to
+  `Application` when constructing it.
+- **Why not in `--simulate`**: RF-21 requires simulation mode to work **without a network**;
+  that's why `simulate()` never passes `resolve_location=True` to `_prepare`, regardless of
+  whether a manual reference exists or not.
+- **Alternatives considered and rejected**: (a) real OS-level geolocation
+  (CoreLocation/Windows Location API/GeoClue) — much more accurate, but requires three separate
+  native integrations and system permissions, against RNF-06 (a single portable Python core);
+  (b) detecting and overwriting the reference on **every** startup — rejected because it depends
+  on the network on every startup and burns through the free service's quota faster, with no
+  real benefit (a machine's location doesn't change between startups).
+- **Consequences**: a new optional external dependency (RNF-09, see §10); a new field in the
+  persisted state (`DATA-MODEL.md` §2); `geoloc.py` follows the same failure-isolation pattern
+  as `notify/toast.py` (never raises, there's always a fallback).
 
-### ADR-012 — Ícono de bandeja con `pystray`, hilo separado, mejor esfuerzo (RF-34)
+### ADR-012 — Tray icon with `pystray`, separate thread, best effort (RF-34)
 
-- **Contexto**: el agente corre en segundo plano (autoarranque) sin ninguna UI persistente; el
-  usuario pidió un ícono de bandeja para ver estado, pausar notificaciones, editar la config y
-  salir sin depender de la terminal.
-- **Decisión**: `tray.py` arma un `pystray.Icon` (única librería práctica multiplataforma para
-  esto) y lo corre en un **hilo de trabajo aparte** (`IconoBandeja.iniciar`), dejando **Tkinter
-  como único dueño del hilo principal** (ADR-006 no cambia). Los callbacks del menú que pueden
-  tocar Tk (`reanudar` puede disparar la creación de una ventana) se agendan de vuelta al hilo de
-  Tk con `root.after(0, ...)`; los que no tocan Tk (`editar_config`, que solo hace
-  `subprocess.Popen`/`os.startfile`) corren directo en el hilo del ícono.
-- **Estado compartido**: `EstadoAgente` (nuevo, `estado_agente.py`) es un snapshot pequeño
-  protegido por `threading.Lock` — `WSIngestor` lo actualiza al conectar/reconectar (hilo
-  asyncio), `ControladorAlertas` al mostrar una alerta (hilo de Tk), y el ícono lo lee (hilo
-  propio) para el texto dinámico del menú. No se persiste: vive solo mientras el proceso corre.
-- **Pausar sin perder eventos**: `AlertQueue.pausar()` solo detiene `_mostrar_siguiente_si_libre`;
-  los eventos entrantes se siguen encolando normalmente. `reanudar()` vuelve a drenar lo
-  acumulado — mantiene OBJ-3 ("cero eventos perdidos") a costa de retrasar la presentación
-  mientras está pausado, una compensación deliberada frente a OBJ-1 que el usuario pidió
-  explícitamente.
-- **Mejor esfuerzo, aislado de fallos** (mismo principio que `toast.py`/`geoloc.py`): construir el
-  ícono (`Aplicacion._construir_tray`) y ejecutarlo (`IconoBandeja._ejecutar`, dentro de su propio
-  hilo) están envueltos en `try/except` que solo loguean un *warning*. Motivado por dos límites
-  conocidos y no resolubles desde este código: (a) bajo **GNOME + Wayland** sin la extensión
-  `AppIndicator`/`KStatusNotifierItem`, GNOME Shell no muestra íconos de bandeja legacy — el
-  agente arranca igual, simplemente no se ve; (b) en **macOS**, `pystray` exige que su `run()`
-  viva en el hilo principal (requisito de Cocoa), lo que potencialmente choca con Tkinter — sin
-  máquina macOS disponible en este entorno para validarlo (misma limitación que F7-2/F7-3), se
-  deja como mejor esfuerzo en vez de bloquear el diseño.
-- **Dependencias nuevas**: `pystray` + `Pillow` — excepción documentada a RNF-06 (ver §10);
-  `Pillow` es requisito de la API de `pystray` (`Icon(icon=PIL.Image)`), no evitable.
-- **Arte del ícono**: generado una vez con Pillow (círculo + ondas concéntricas, color de
-  severidad crítica) y committeado como `src/vigia_eew/assets/tray_icon.png` — mismo criterio que
-  los `.wav` de la Fase 4 (activo generado, sin mantener el script generador en el repo).
-- **Consecuencias**: nuevo módulo `tray.py`, nuevo `estado_agente.py`; `WSIngestor` y
-  `ControladorAlertas` ganan un parámetro `estado` opcional; `Aplicacion` gana `ruta_config` para
-  que "editar configuración" abra el archivo realmente en uso (no siempre el default).
+- **Context**: the agent runs in the background (autostart) with no persistent UI; the user
+  asked for a tray icon to see status, pause notifications, edit the config, and quit without
+  depending on the terminal.
+- **Decision**: `tray.py` builds a `pystray.Icon` (the only practical cross-platform library for
+  this) and runs it on a **separate worker thread** (`TrayIcon.start`), leaving **Tkinter as the
+  sole owner of the main thread** (ADR-006 is unchanged). Menu callbacks that may touch Tk
+  (`resume` can trigger the creation of a window) are scheduled back onto the Tk thread with
+  `root.after(0, ...)`; the ones that don't touch Tk (`edit_config`, which only does
+  `subprocess.Popen`/`os.startfile`) run directly on the icon's thread.
+- **Shared state**: `AgentState` (new, `agent_state.py`) is a small snapshot protected by a
+  `threading.Lock` — `WSIngestor` updates it on connect/reconnect (asyncio thread),
+  `AlertController` updates it when showing an alert (Tk thread), and the icon reads it (its own
+  thread) for the menu's dynamic text. It isn't persisted: it lives only while the process runs.
+- **Pausing without losing events**: `AlertQueue.pause()` only stops
+  `_show_next_if_free`; incoming events keep being queued normally. `resume()` drains what
+  accumulated — preserving OBJ-3 ("zero lost events") at the cost of delaying presentation
+  while paused, a deliberate trade-off against OBJ-1 that the user explicitly asked for.
+- **Best effort, isolated from failures** (the same principle as `toast.py`/`geoloc.py`):
+  building the icon (`Application._build_tray`) and running it (`TrayIcon._run`, inside its own
+  thread) are wrapped in `try/except` blocks that only log a *warning*. This is motivated by two
+  known limitations that can't be solved from this codebase: (a) under **GNOME + Wayland**
+  without the `AppIndicator`/`KStatusNotifierItem` extension, GNOME Shell doesn't show legacy
+  tray icons — the agent still starts, it just isn't visible; (b) on **macOS**, `pystray`
+  requires its `run()` to live on the main thread (a Cocoa requirement), which potentially
+  conflicts with Tkinter — with no macOS machine available in this environment to validate it
+  (the same limitation as F7-2/F7-3), it's left as best effort rather than blocking the design.
+- **New dependencies**: `pystray` + `Pillow` — a documented exception to RNF-06 (see §10);
+  `Pillow` is required by `pystray`'s API (`Icon(icon=PIL.Image)`), and can't be avoided.
+- **Icon artwork**: generated once with Pillow (circle + concentric waves, critical-severity
+  color) and committed as `src/vigia_eew/assets/tray_icon.png` — the same approach as the
+  `.wav` files from Phase 4 (a generated asset, without keeping the generator script in the
+  repo).
+- **Consequences**: a new `tray.py` module, a new `agent_state.py`; `WSIngestor` and
+  `AlertController` gain an optional `state` parameter; `Application` gains `config_path` so
+  that "edit configuration" opens the file actually in use (not always the default).
 
-## 12. Trazabilidad
+## 12. Traceability
 
-Cada ADR y componente referencia RF del `PRD.md`. La matriz completa RF→módulo está en
-`IMPLEMENTATION-PLAN.md`. Las estructuras concretas, en `DATA-MODEL.md`. Los contratos externos,
-en `API-SPEC.md`. Las vistas y diagramas, en `ARCHITECTURE.md`.
+Every ADR and component references an RF from `PRD.md`. The complete RF→module matrix is in
+`IMPLEMENTATION-PLAN.md`. The concrete data structures are in `DATA-MODEL.md`. The external
+contracts are in `API-SPEC.md`. The views and diagrams are in `ARCHITECTURE.md`.

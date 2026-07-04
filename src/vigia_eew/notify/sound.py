@@ -1,12 +1,13 @@
-"""Capa de audio de la alerta (RF-17, ADR-005).
+"""Alert audio layer (RF-17, ADR-005).
 
-Reproduce un sonido por severidad, **más insistente cuanto más grave** (más
-repeticiones). El reproductor real depende del SO (paplay/aplay/ffplay en Linux,
-afplay en macOS, `winsound` en Windows) con *fallback* a la campana del terminal;
-esa elección se aísla en `comando_reproductor` (pura) y en `_reproductor_por_defecto`.
+Plays a sound per severity, **more insistent the more severe** (more repetitions).
+The actual player depends on the OS (paplay/aplay/ffplay on Linux, afplay on macOS,
+`winsound` on Windows) with a *fallback* to the terminal bell; that choice is
+isolated in `player_command` (pure) and in `_default_player`.
 
-El reproductor es inyectable para probar la lógica de repetición sin reproducir audio.
-Un fallo al reproducir nunca interrumpe la alerta (RNF-03): se registra y se continúa.
+The player is injectable to test the repetition logic without playing audio. A
+playback failure never interrupts the alert (RNF-03): it is logged and execution
+continues.
 """
 
 from __future__ import annotations
@@ -20,102 +21,102 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..models import Severidad
+from ..models import SeverityLevel
 
-_Reproductor = Callable[[Path], None]
+_Player = Callable[[Path], None]
 _SleepFn = Callable[[float], None]
 
 
 @dataclass(frozen=True, slots=True)
-class PerfilSonido:
-    """Perfil de reproducción de una severidad: asset y patrón de repetición."""
+class SoundProfile:
+    """Playback profile for a severity: asset and repetition pattern."""
 
     asset: str
-    repeticiones: int
-    intervalo_s: float
+    repetitions: int
+    interval_s: float
 
 
-# Insistencia creciente con la severidad (RF-17).
-PERFILES: dict[Severidad, PerfilSonido] = {
-    "info": PerfilSonido("info.wav", 1, 0.0),
-    "atencion": PerfilSonido("atencion.wav", 2, 0.6),
-    "critico": PerfilSonido("critico.wav", 4, 0.4),
+# Increasing insistence with severity (RF-17).
+PROFILES: dict[SeverityLevel, SoundProfile] = {
+    "info": SoundProfile("info.wav", 1, 0.0),
+    "warning": SoundProfile("warning.wav", 2, 0.6),
+    "critical": SoundProfile("critical.wav", 4, 0.4),
 }
 
 
-def ruta_assets() -> Path:
-    """Directorio de assets de audio empaquetados (`vigia_eew/assets`)."""
+def assets_path() -> Path:
+    """Directory of packaged audio assets (`vigia_eew/assets`)."""
     return Path(__file__).resolve().parent.parent / "assets"
 
 
-def comando_reproductor(
-    ruta: str | Path, plataforma: str, disponibles: set[str]
+def player_command(
+    path: str | Path, platform: str, available: set[str]
 ) -> list[str] | None:
-    """Elige el comando de reproducción según SO y binarios disponibles.
+    """Chooses the playback command based on OS and available binaries.
 
-    Devuelve la lista de argumentos para `subprocess`, o None si no hay reproductor
-    externo adecuado (el llamador usará un *fallback*).
+    Returns the argument list for `subprocess`, or None if there is no suitable
+    external player (the caller will use a *fallback*).
     """
-    ruta = str(ruta)
-    if plataforma == "darwin":
-        return ["afplay", ruta]
-    if plataforma == "win32":
-        return None  # en Windows se usa `winsound`, no un comando externo
-    if "paplay" in disponibles:
-        return ["paplay", ruta]
-    if "aplay" in disponibles:
-        return ["aplay", ruta]
-    if "ffplay" in disponibles:
-        return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", ruta]
+    path = str(path)
+    if platform == "darwin":
+        return ["afplay", path]
+    if platform == "win32":
+        return None  # on Windows `winsound` is used, not an external command
+    if "paplay" in available:
+        return ["paplay", path]
+    if "aplay" in available:
+        return ["aplay", path]
+    if "ffplay" in available:
+        return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path]
     return None
 
 
-def _disponibles() -> set[str]:
+def _available() -> set[str]:
     return {c for c in ("paplay", "aplay", "ffplay") if shutil.which(c)}
 
 
-def _reproductor_por_defecto(ruta: Path) -> None:
-    """Reproductor real por SO; *fallback* a la campana del terminal."""
+def _default_player(path: Path) -> None:
+    """Real player per OS; *fallback* to the terminal bell."""
     if sys.platform == "win32":
-        import winsound  # solo disponible en Windows
+        import winsound  # only available on Windows
 
-        winsound.PlaySound(str(ruta), winsound.SND_FILENAME)
+        winsound.PlaySound(str(path), winsound.SND_FILENAME)
         return
-    comando = comando_reproductor(ruta, sys.platform, _disponibles())
-    if comando is None:
-        print("\a", end="", flush=True)  # campana del terminal como último recurso
+    command = player_command(path, sys.platform, _available())
+    if command is None:
+        print("\a", end="", flush=True)  # terminal bell as a last resort
         return
-    subprocess.run(comando, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 class SoundPlayer:
-    """Reproduce el sonido de alerta según la severidad (RF-17)."""
+    """Plays the alert sound according to severity (RF-17)."""
 
     def __init__(
         self,
         *,
-        reproductor: _Reproductor | None = None,
+        player: _Player | None = None,
         sleep: _SleepFn = time.sleep,
-        habilitado: bool = True,
+        enabled: bool = True,
         assets_dir: Path | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._reproductor = reproductor or _reproductor_por_defecto
+        self._player = player or _default_player
         self._sleep = sleep
-        self._habilitado = habilitado
-        self._assets_dir = assets_dir or ruta_assets()
+        self._enabled = enabled
+        self._assets_dir = assets_dir or assets_path()
         self._log = logger or logging.getLogger("vigia_eew.notify.sound")
 
-    def reproducir(self, severidad: Severidad) -> None:
-        """Reproduce el perfil de la severidad (varias veces si es insistente)."""
-        if not self._habilitado:
+    def play(self, severity: SeverityLevel) -> None:
+        """Plays the severity's profile (multiple times if insistent)."""
+        if not self._enabled:
             return
-        perfil = PERFILES[severidad]
-        ruta = self._assets_dir / perfil.asset
-        for i in range(perfil.repeticiones):
+        profile = PROFILES[severity]
+        path = self._assets_dir / profile.asset
+        for i in range(profile.repetitions):
             try:
-                self._reproductor(ruta)
-            except Exception as exc:  # noqa: BLE001 - el audio nunca rompe la alerta
-                self._log.warning("sonido_fallo detalle=%s", exc)
-            if i < perfil.repeticiones - 1:
-                self._sleep(perfil.intervalo_s)
+                self._player(path)
+            except Exception as exc:  # noqa: BLE001 - audio never breaks the alert
+                self._log.warning("sound_failed detail=%s", exc)
+            if i < profile.repetitions - 1:
+                self._sleep(profile.interval_s)

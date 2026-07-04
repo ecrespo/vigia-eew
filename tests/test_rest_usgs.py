@@ -1,4 +1,4 @@
-"""Pruebas del reconciliador REST USGS (RF-05, RF-06, RNF-03)."""
+"""Tests for the USGS REST reconciler (RF-05, RF-06, RNF-03)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ import asyncio
 import httpx
 import pytest
 
-from vigia_eew.config import Filtro, FuenteUSGS, Referencia
+from vigia_eew.config import Filter, ReferencePoint, USGSSource
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.rest_usgs import RESTReconciler
 from vigia_eew.state import StateStore
 
-# Respuesta USGS de ejemplo (API-SPEC §2.4), recortada.
+# Sample USGS response (API-SPEC §2.4), trimmed.
 _FEATURE = {
     "type": "Feature",
     "id": "us6000t8sx",
@@ -34,11 +34,11 @@ _FEATURE_2 = {
 }
 
 
-def _coleccion(*features):
+def _collection(*features):
     return {"type": "FeatureCollection", "metadata": {"status": 200}, "features": list(features)}
 
 
-# --- Dobles de prueba para el cliente httpx ---
+# --- Test doubles for the httpx client ---
 
 
 class _FakeResp:
@@ -50,7 +50,7 @@ class _FakeResp:
 
     def json(self):
         if self._json_error:
-            raise ValueError("json inválido")
+            raise ValueError("invalid json")
         return self._payload
 
 
@@ -58,148 +58,148 @@ class _FakeClient:
     def __init__(self, resp=None, *, exc=None):
         self._resp = resp
         self._exc = exc
-        self.llamadas: list[dict] = []
+        self.calls: list[dict] = []
 
     async def get(self, url, *, params=None, timeout=None):
-        self.llamadas.append({"url": url, "params": params, "timeout": timeout})
+        self.calls.append({"url": url, "params": params, "timeout": timeout})
         if self._exc is not None:
             raise self._exc
         return self._resp
 
 
 def _reconciler(tmp_path, client, *, sleep=None):
-    estado = StateStore(tmp_path / "state.json")
-    estado.cargar()
+    state = StateStore(tmp_path / "state.json")
+    state.load()
     rec = RESTReconciler(
-        FuenteUSGS(),
-        Referencia(),
-        Filtro(),
-        estado,
+        USGSSource(),
+        ReferencePoint(),
+        Filter(),
+        state,
         asyncio.Queue(),
         client=client,
         sleep=sleep or asyncio.sleep,
     )
-    return rec, estado
+    return rec, state
 
 
-# --- Construcción de la consulta ---
+# --- Query construction ---
 
 
-async def test_params_fijos_y_sin_cursor(tmp_path):
-    client = _FakeClient(_FakeResp(payload=_coleccion()))
+async def test_fixed_params_and_no_cursor(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection()))
     rec, _ = _reconciler(tmp_path, client)
     await rec.poll_once()
 
-    params = client.llamadas[0]["params"]
+    params = client.calls[0]["params"]
     assert params["format"] == "geojson"
-    assert params["latitude"] == Referencia().lat
-    assert params["longitude"] == Referencia().lon
-    assert params["maxradiuskm"] == Filtro().radio_km
-    assert params["minmagnitude"] == Filtro().magnitud_minima
+    assert params["latitude"] == ReferencePoint().lat
+    assert params["longitude"] == ReferencePoint().lon
+    assert params["maxradiuskm"] == Filter().radius_km
+    assert params["minmagnitude"] == Filter().min_magnitude
     assert params["orderby"] == "time"
     assert params["eventtype"] == "earthquake"
-    assert "starttime" not in params  # sin cursor previo
+    assert "starttime" not in params  # no previous cursor
 
 
-async def test_params_incluyen_starttime_con_cursor(tmp_path):
-    client = _FakeClient(_FakeResp(payload=_coleccion()))
-    rec, estado = _reconciler(tmp_path, client)
-    estado.actualizar_cursor_usgs(1782639238852)
+async def test_params_include_starttime_with_cursor(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection()))
+    rec, state = _reconciler(tmp_path, client)
+    state.update_usgs_cursor(1782639238852)
     await rec.poll_once()
 
-    params = client.llamadas[0]["params"]
+    params = client.calls[0]["params"]
     assert "starttime" in params
-    assert params["starttime"].startswith("2026-")  # ISO-8601 derivado del cursor
+    assert params["starttime"].startswith("2026-")  # ISO-8601 derived from the cursor
 
 
-# --- Emisión y cursor ---
+# --- Emission and cursor ---
 
 
-async def test_emite_un_rawmessage_por_feature(tmp_path):
-    client = _FakeClient(_FakeResp(payload=_coleccion(_FEATURE, _FEATURE_2)))
+async def test_emits_one_rawmessage_per_feature(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection(_FEATURE, _FEATURE_2)))
     rec, _ = _reconciler(tmp_path, client)
     await rec.poll_once()
 
-    msgs = [rec._salida.get_nowait(), rec._salida.get_nowait()]
+    msgs = [rec._output.get_nowait(), rec._output.get_nowait()]
     assert all(isinstance(m, RawMessage) for m in msgs)
     assert {m.feature["id"] for m in msgs} == {"us6000t8sx", "us6000t900"}
-    assert msgs[0].fuente == "USGS" and msgs[0].action == "create"
+    assert msgs[0].source == "USGS" and msgs[0].action == "create"
 
 
-async def test_avanza_y_persiste_cursor(tmp_path):
-    client = _FakeClient(_FakeResp(payload=_coleccion(_FEATURE, _FEATURE_2)))
+async def test_advances_and_persists_cursor(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection(_FEATURE, _FEATURE_2)))
     rec, _ = _reconciler(tmp_path, client)
     await rec.poll_once()
 
-    # Cursor al `time` máximo visto y persistido en disco (RF-06).
-    recargado = StateStore(tmp_path / "state.json")
-    recargado.cargar()
-    assert recargado.estado.cursor_usgs_ms == 1782700000000
+    # Cursor at the maximum `time` seen and persisted to disk (RF-06).
+    reloaded = StateStore(tmp_path / "state.json")
+    reloaded.load()
+    assert reloaded.state.cursor_usgs_ms == 1782700000000
 
 
-async def test_respuesta_vacia_no_mueve_cursor(tmp_path):
-    client = _FakeClient(_FakeResp(payload=_coleccion()))
-    rec, estado = _reconciler(tmp_path, client)
+async def test_empty_response_does_not_move_cursor(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection()))
+    rec, state = _reconciler(tmp_path, client)
     await rec.poll_once()
-    assert estado.estado.cursor_usgs_ms is None
+    assert state.state.cursor_usgs_ms is None
 
 
-# --- Resiliencia (RNF-03) ---
+# --- Resilience (RNF-03) ---
 
 
-async def test_429_respeta_retry_after(tmp_path):
+async def test_429_honors_retry_after(tmp_path):
     client = _FakeClient(_FakeResp(status=429, headers={"Retry-After": "120"}))
-    rec, estado = _reconciler(tmp_path, client)
-    espera = await rec.poll_once()
-    assert espera == 120.0  # honra Retry-After
-    assert rec._salida.empty()
-    assert estado.estado.cursor_usgs_ms is None  # cursor intacto
+    rec, state = _reconciler(tmp_path, client)
+    wait = await rec.poll_once()
+    assert wait == 120.0  # honors Retry-After
+    assert rec._output.empty()
+    assert state.state.cursor_usgs_ms is None  # cursor untouched
 
 
-async def test_5xx_no_rompe_y_reintenta(tmp_path):
+async def test_5xx_does_not_break_and_retries(tmp_path):
     client = _FakeClient(_FakeResp(status=503))
     rec, _ = _reconciler(tmp_path, client)
-    espera = await rec.poll_once()  # no debe lanzar
-    assert espera == FuenteUSGS().intervalo_poll_s
-    assert rec._salida.empty()
+    wait = await rec.poll_once()  # must not raise
+    assert wait == USGSSource().poll_interval_s
+    assert rec._output.empty()
 
 
-async def test_timeout_no_rompe(tmp_path):
+async def test_timeout_does_not_break(tmp_path):
     client = _FakeClient(exc=httpx.TimeoutException("timeout"))
-    rec, estado = _reconciler(tmp_path, client)
-    await rec.poll_once()  # no debe lanzar
-    assert rec._salida.empty()
-    assert estado.estado.cursor_usgs_ms is None
+    rec, state = _reconciler(tmp_path, client)
+    await rec.poll_once()  # must not raise
+    assert rec._output.empty()
+    assert state.state.cursor_usgs_ms is None
 
 
-async def test_json_invalido_no_rompe(tmp_path):
+async def test_invalid_json_does_not_break(tmp_path):
     client = _FakeClient(_FakeResp(payload=None, json_error=True))
     rec, _ = _reconciler(tmp_path, client)
-    await rec.poll_once()  # no debe lanzar
-    assert rec._salida.empty()
+    await rec.poll_once()  # must not raise
+    assert rec._output.empty()
 
 
-# --- Bucle ---
+# --- Loop ---
 
 
-class _SleepControlado:
-    def __init__(self, romper_en):
-        self.esperas: list[float] = []
-        self._romper_en = romper_en
+class _ControlledSleep:
+    def __init__(self, break_at):
+        self.waits: list[float] = []
+        self._break_at = break_at
 
-    async def __call__(self, segundos):
-        self.esperas.append(segundos)
-        if len(self.esperas) >= self._romper_en:
+    async def __call__(self, seconds):
+        self.waits.append(seconds)
+        if len(self.waits) >= self._break_at:
             raise asyncio.CancelledError
 
 
-async def test_run_pollea_y_espera_intervalo(tmp_path):
-    client = _FakeClient(_FakeResp(payload=_coleccion(_FEATURE)))
-    sleep = _SleepControlado(romper_en=1)
+async def test_run_polls_and_waits_interval(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection(_FEATURE)))
+    sleep = _ControlledSleep(break_at=1)
     rec, _ = _reconciler(tmp_path, client, sleep=sleep)
 
     with pytest.raises(asyncio.CancelledError):
         await rec.run()
 
-    assert sleep.esperas == [float(FuenteUSGS().intervalo_poll_s)]
-    assert rec._salida.get_nowait().feature["id"] == "us6000t8sx"
+    assert sleep.waits == [float(USGSSource().poll_interval_s)]
+    assert rec._output.get_nowait().feature["id"] == "us6000t8sx"

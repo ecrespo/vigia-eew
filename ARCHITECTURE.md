@@ -1,73 +1,73 @@
 # ARCHITECTURE — Vigía-eew
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Documento | Arquitectura del sistema y diagramas |
-| Versión | 1.0 (borrador para revisión) |
-| Estado | 🟡 Pendiente de aprobación |
-| Relacionado | `docs/PRD.md`, `docs/API-SPEC.md`, `docs/TECHNICAL-DESIGN.md`, `docs/DATA-MODEL.md`, `docs/IMPLEMENTATION-PLAN.md` |
+| Document | System architecture and diagrams |
+| Version | 1.0 (draft for review) |
+| Status | 🟡 Pending approval |
+| Related | `docs/PRD.md`, `docs/API-SPEC.md`, `docs/TECHNICAL-DESIGN.md`, `docs/DATA-MODEL.md`, `docs/IMPLEMENTATION-PLAN.md` |
 
-> Los diagramas están en **Mermaid** (texto renderizable en GitHub y la mayoría de visores Markdown).
+> Diagrams are in **Mermaid** (renderable text on GitHub and most Markdown viewers).
 
 ---
 
-## 1. Visión general
+## 1. Overview
 
-Vigía es un **proceso asyncio único por máquina** sin punto único de fallo (RNF-02). Recibe sismos
-por **push** (WebSocket EMSC, vía primaria) y los reconcilia con un **respaldo de baja frecuencia**
-(polling USGS cada 60 s). Un *pipeline* los normaliza, filtra por zona y deduplica; los eventos
-nuevos y relevantes disparan una **alerta de escritorio no descartable** (ventana superpuesta +
-toast + sonido). El estado crítico se **persiste** para sobrevivir reinicios.
+Vigía is a **single asyncio process per machine** with no single point of failure (RNF-02). It
+receives earthquakes via **push** (WebSocket EMSC, primary channel) and reconciles them with a
+**low-frequency backup** (USGS polling every 60 s). A *pipeline* normalizes, filters by zone, and
+deduplicates them; new and relevant events trigger an **undismissable desktop alert** (overlay
+window + toast + sound). Critical state is **persisted** to survive restarts.
 
-## 2. Componentes
+## 2. Components
 
-| Componente | Rol | RF |
+| Component | Role | RF |
 |---|---|---|
-| **WSIngestor (EMSC)** | Conexión WebSocket, keepalive 15 s, reconexión con backoff, emite crudos | RF-01..RF-04 |
-| **RESTReconciler (USGS)** | Polling 60 s con cursor persistido; red de seguridad | RF-05, RF-06 |
-| **Normalizer** | Crudo→`SeismicEvent`; haversine; severidad | RF-07, RF-08, RF-13 |
-| **GeoFilter** | Descarta fuera de radio o bajo magnitud mínima | RF-12 |
-| **Deduplicator** | Heurística inter-fuente; ids persistidos; maneja `update` | RF-09..RF-11 |
-| **Notifier (toast)** | Toast nativo informativo (`desktop-notifier`) | RF-14 |
-| **AlertWindow (overlay)** | Ventana Tkinter topmost, con foco, no descartable | RF-15..RF-19 |
-| **AlertQueue + bridge** | Cola de eventos; puente asyncio↔Tk | RF-20 |
-| **Sound** | Audio por severidad | RF-17 |
-| **StateStore** | Persistencia JSON atómica (ids, cursor) | RF-06, RF-10 |
-| **Settings** | Carga/valida `config.toml` (pydantic) | RF-24 |
-| **Supervisor** | Orquesta tasks asyncio; reinicia ante fallo | RNF-03, RNF-04 |
-| **Autostart** | systemd / LaunchAgent / tarea programada | RF-22, RF-23 |
-| **CLI (`vigia-eew`)** | Arranque, `--simulate`, autostart | RF-21, RF-26 |
+| **WSIngestor (EMSC)** | WebSocket connection, 15 s keepalive, backoff reconnection, emits raw messages | RF-01..RF-04 |
+| **RESTReconciler (USGS)** | 60 s polling with persisted cursor; safety net | RF-05, RF-06 |
+| **Normalizer** | Raw→`SeismicEvent`; haversine; severity | RF-07, RF-08, RF-13 |
+| **GeoFilter** | Discards events outside radius or below minimum magnitude | RF-12 |
+| **Deduplicator** | Inter-source heuristic; persisted ids; handles `update` | RF-09..RF-11 |
+| **Notifier (toast)** | Native informational toast (`desktop-notifier`) | RF-14 |
+| **AlertWindow (overlay)** | Topmost Tkinter window, with focus, undismissable | RF-15..RF-19 |
+| **AlertQueue + bridge** | Event queue; asyncio↔Tk bridge | RF-20 |
+| **Sound** | Audio by severity | RF-17 |
+| **StateStore** | Atomic JSON persistence (ids, cursor) | RF-06, RF-10 |
+| **Settings** | Loads/validates `config.toml` (pydantic) | RF-24 |
+| **Supervisor** | Orchestrates asyncio tasks; restarts on failure | RNF-03, RNF-04 |
+| **Autostart** | systemd / LaunchAgent / scheduled task | RF-22, RF-23 |
+| **CLI (`vigia-eew`)** | Startup, `--simulate`, autostart | RF-21, RF-26 |
 
-## 3. Diagrama de arquitectura — flujo de datos
+## 3. Architecture diagram — data flow
 
 ```mermaid
 flowchart LR
-    subgraph Fuentes["Fuentes externas"]
-        EMSC["EMSC WebSocket<br/>(push primario)"]
-        USGS["USGS FDSN REST<br/>(respaldo 60 s)"]
+    subgraph Fuentes["External sources"]
+        EMSC["EMSC WebSocket<br/>(primary push)"]
+        USGS["USGS FDSN REST<br/>(60 s backup)"]
     end
 
-    subgraph Ingesta["Capa de ingestión (asyncio)"]
-        WS["WSIngestor<br/>keepalive + reconexión"]
-        REST["RESTReconciler<br/>cursor persistido"]
+    subgraph Ingesta["Ingestion layer (asyncio)"]
+        WS["WSIngestor<br/>keepalive + reconnection"]
+        REST["RESTReconciler<br/>persisted cursor"]
     end
 
     Q(["raw_queue<br/>(asyncio.Queue)"])
 
     subgraph Pipeline["Pipeline"]
-        NORM["Normalizer<br/>haversine + severidad"]
-        FILT["GeoFilter<br/>radio + mag mínima"]
-        DEDUP["Deduplicator<br/>heurística + ids"]
+        NORM["Normalizer<br/>haversine + severity"]
+        FILT["GeoFilter<br/>radius + min magnitude"]
+        DEDUP["Deduplicator<br/>heuristic + ids"]
     end
 
-    subgraph Estado["Persistencia"]
+    subgraph Estado["Persistence"]
         STATE[("StateStore<br/>state.json<br/>ids + cursor")]
     end
 
-    subgraph Notif["Notificación"]
-        AQ(["AlertQueue<br/>+ bridge Tk"])
+    subgraph Notif["Notification"]
+        AQ(["AlertQueue<br/>+ Tk bridge"])
         TOAST["Notifier (toast)"]
-        WIN["AlertWindow<br/>topmost · sonido · RECONOCIDO"]
+        WIN["AlertWindow<br/>topmost · sound · ACKNOWLEDGED"]
     end
 
     CFG["Settings<br/>config.toml"]
@@ -77,10 +77,10 @@ flowchart LR
     WS --> Q
     REST --> Q
     Q --> NORM --> FILT --> DEDUP
-    DEDUP -->|nuevo + relevante| AQ
+    DEDUP -->|new + relevant| AQ
     AQ --> TOAST
     AQ --> WIN
-    DEDUP <-->|ids alertados| STATE
+    DEDUP <-->|alerted ids| STATE
     REST <-->|cursor| STATE
     CFG -.config.-> NORM
     CFG -.config.-> FILT
@@ -88,100 +88,100 @@ flowchart LR
     CFG -.config.-> WIN
 ```
 
-## 4. Diagrama de secuencia — de EMSC a la ventana de alerta
+## 4. Sequence diagram — from EMSC to the alert window
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant EMSC as EMSC WebSocket
     participant WS as WSIngestor
-    participant PIPE as Pipeline (norm/filtro/dedup)
+    participant PIPE as Pipeline (normalize/filter/dedup)
     participant ST as StateStore
     participant UI as AlertQueue + AlertWindow
-    participant USR as Usuario
+    participant USR as User
 
-    EMSC->>WS: mensaje {action:"create", data: Feature}
-    WS->>PIPE: crudo (raw_queue)
-    PIPE->>PIPE: normaliza (haversine, severidad)
-    PIPE->>PIPE: filtra (radio, mag mínima)
-    PIPE->>ST: ¿id ya alertado? ¿duplicado?
-    ST-->>PIPE: no (evento nuevo)
-    PIPE->>ST: registra id alertado
-    PIPE->>UI: encola SeismicEvent
-    UI->>UI: muestra ventana topmost + toma foco + sonido
-    UI-->>USR: MAGNITUD, lugar, distancia, profundidad, hora local, fuente
-    Note over EMSC,UI: Si llega {action:"update"} del mismo unid,<br/>se actualiza el evento mostrado SIN nueva alerta (RF-11)
-    USR->>UI: pulsa "RECONOCIDO"
-    UI->>ST: registra reconocimiento (auditoría)
-    UI->>UI: cierra ventana y muestra el siguiente en cola
+    EMSC->>WS: message {action:"create", data: Feature}
+    WS->>PIPE: raw message (raw_queue)
+    PIPE->>PIPE: normalizes (haversine, severity)
+    PIPE->>PIPE: filters (radius, min magnitude)
+    PIPE->>ST: id already alerted? duplicate?
+    ST-->>PIPE: no (new event)
+    PIPE->>ST: registers alerted id
+    PIPE->>UI: enqueues SeismicEvent
+    UI->>UI: shows topmost window + takes focus + sound
+    UI-->>USR: MAGNITUDE, place, distance, depth, local time, source
+    Note over EMSC,UI: If an {action:"update"} arrives for the same unid,<br/>the displayed event is updated WITHOUT a new alert (RF-11)
+    USR->>UI: presses "ACKNOWLEDGED"
+    UI->>ST: registers acknowledgment (audit)
+    UI->>UI: closes window and shows the next one in the queue
 ```
 
-## 5. Diagrama de estados — conexión WebSocket
+## 5. State diagram — WebSocket connection
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Conectando
-    Conectando --> Conectado: handshake OK
-    Conectando --> Backoff: error de conexión
+    [*] --> Connecting
+    Connecting --> Connected: handshake OK
+    Connecting --> Backoff: connection error
 
-    Conectado --> Ping: cada ~15 s
-    Ping --> Conectado: pong recibido
-    Ping --> Caido: ping_timeout (sin pong)
+    Connected --> Ping: every ~15 s
+    Ping --> Connected: pong received
+    Ping --> Down: ping_timeout (no pong)
 
-    Conectado --> Recibiendo: mensaje entrante
-    Recibiendo --> Conectado: procesado
+    Connected --> Receiving: incoming message
+    Receiving --> Connected: processed
 
-    Conectado --> Caido: cierre/EOF del socket
-    Caido --> Backoff: programar reintento
+    Connected --> Down: socket close/EOF
+    Down --> Backoff: schedule retry
 
-    Backoff --> Conectando: espera exponencial + jitter (máx backoff_max_s)
+    Backoff --> Connecting: exponential wait + jitter (max backoff_max_s)
 
-    Conectado --> Cerrando: SIGINT/SIGTERM
-    Cerrando --> [*]
+    Connected --> Closing: SIGINT/SIGTERM
+    Closing --> [*]
 ```
 
-## 6. Qué pasa si… (escenarios de resiliencia)
+## 6. What happens if… (resilience scenarios)
 
-| Escenario | Comportamiento esperado | Mecanismo / RF |
+| Scenario | Expected behavior | Mechanism / RF |
 |---|---|---|
-| **El WS cae** | Se detecta cierre/ping_timeout → estado `Caido` → `Backoff` exponencial con jitter → reconexión perpetua. El proceso **no muere**. | RF-03, RNF-03; §5 |
-| **El WS deja de recibir en silencio** | El **keepalive (ping 15 s)** detecta la pérdida vía `ping_timeout` y fuerza reconexión. | RF-02 |
-| **REST falla (429/5xx/timeout)** | Se respeta `Retry-After` (429); se salta el ciclo y se reintenta a los 60 s; el **cursor se mantiene**; sin abortar. | RF-05; Technical Design §8 |
-| **Llega un `update`** | Mismo `unid` ya visto → se **actualiza** el evento mostrado/encolado (p. ej. magnitud) **sin** disparar alerta nueva. | RF-11, CU-3 |
-| **Dos fuentes reportan el mismo sismo** | La heurística (≤100 km, ≤90 s, ≤0.5 mag) lo reconoce como duplicado → **una sola** alerta. | RF-09, CU-4 |
-| **El agente reinicia con alertas pendientes** | `StateStore` recuerda `ids_alertados` → los ya reconocidos **no se vuelven a alertar**; el `cursor_usgs` evita reprocesar histórico. | RF-06, RF-10, CU-10 |
-| **JSON inválido / esquema inesperado** | Validación pydantic descarta el item y registra; el flujo continúa. | RNF-03 |
-| **Pérdida total de red** | Ambas ingestas reintentan; al volver la red, USGS **reconcilia** lo perdido durante la caída. | RF-05, OBJ-3 |
-| **"No molestar" del SO** | El toast puede silenciarse, pero la **ventana superpuesta topmost con foco** garantiza la alerta. | RF-15, RF-16, RNF-05 |
-| **Falla la UI** | Aislada del pipeline (puente desacoplado); la ingestión sigue; se reintenta mostrar. | ADR-006 |
+| **The WS goes down** | Close/ping_timeout is detected → `Down` state → exponential `Backoff` with jitter → perpetual reconnection. The process **does not die**. | RF-03, RNF-03; §5 |
+| **The WS silently stops receiving** | The **keepalive (15 s ping)** detects the loss via `ping_timeout` and forces reconnection. | RF-02 |
+| **REST fails (429/5xx/timeout)** | `Retry-After` is honored (429); the cycle is skipped and retried after 60 s; the **cursor is kept**; no abort. | RF-05; Technical Design §8 |
+| **An `update` arrives** | Same `unid` already seen → the displayed/queued event is **updated** (e.g. magnitude) **without** triggering a new alert. | RF-11, CU-3 |
+| **Two sources report the same earthquake** | The heuristic (≤100 km, ≤90 s, ≤0.5 mag) recognizes it as a duplicate → **a single** alert. | RF-09, CU-4 |
+| **The agent restarts with pending alerts** | `StateStore` remembers `alerted_ids` → already-acknowledged ones **are not re-alerted**; `usgs_cursor` avoids reprocessing history. | RF-06, RF-10, CU-10 |
+| **Invalid JSON / unexpected schema** | pydantic validation discards the item and logs it; the flow continues. | RNF-03 |
+| **Total network loss** | Both ingestion paths keep retrying; once the network returns, USGS **reconciles** what was missed during the outage. | RF-05, OBJ-3 |
+| **OS "do not disturb"** | The toast may be silenced, but the **topmost, focused overlay window** guarantees the alert. | RF-15, RF-16, RNF-05 |
+| **UI fails** | Isolated from the pipeline (decoupled bridge); ingestion keeps running; showing the alert is retried. | ADR-006 |
 
-## 7. Despliegue
+## 7. Deployment
 
-Cada máquina ejecuta su propio agente (sin SPOF). El autoarranque por SO (systemd `--user`,
-LaunchAgent, tarea programada) mantiene el proceso vivo tras el inicio de sesión.
+Each machine runs its own agent (no SPOF). OS-specific autostart (systemd `--user`, LaunchAgent,
+scheduled task) keeps the process alive after login.
 
 ```mermaid
 flowchart TB
-    subgraph PCs["N máquinas independientes (sin punto único de fallo)"]
-        A["Agente Vigía<br/>(Linux · systemd --user)"]
-        B["Agente Vigía<br/>(Windows · tarea programada)"]
-        C["Agente Vigía<br/>(macOS · LaunchAgent)"]
+    subgraph PCs["N independent machines (no single point of failure)"]
+        A["Vigía Agent<br/>(Linux · systemd --user)"]
+        B["Vigía Agent<br/>(Windows · scheduled task)"]
+        C["Vigía Agent<br/>(macOS · LaunchAgent)"]
     end
     EMSC["EMSC WS"] --> A & B & C
     USGS["USGS FDSN"] --> A & B & C
 ```
 
-## 8. Evolución futura — relay central (no v1)
+## 8. Future evolution — central relay (not v1)
 
-Se documenta (ADR-008) la migración a un **relay FastAPI** que consuma EMSC/USGS una sola vez y haga
-*fan-out* por WebSocket a muchos clientes Vigía, **reutilizando el contrato interno** (`SeismicEvent`)
-como payload para no romper el modelo de datos.
+ADR-008 documents the migration to a **FastAPI relay** that consumes EMSC/USGS once and does
+*fan-out* over WebSocket to many Vigía clients, **reusing the internal contract** (`SeismicEvent`)
+as the payload so as not to break the data model.
 
 ```mermaid
 flowchart LR
-    EMSC["EMSC WS"] --> RELAY["Relay FastAPI<br/>(dedup central)"]
+    EMSC["EMSC WS"] --> RELAY["FastAPI Relay<br/>(central dedup)"]
     USGS["USGS FDSN"] --> RELAY
-    RELAY -->|fan-out WS<br/>SeismicEvent| C1["Vigía cliente 1"]
-    RELAY -->|fan-out WS| C2["Vigía cliente 2"]
-    RELAY -->|fan-out WS| C3["Vigía cliente N"]
+    RELAY -->|fan-out WS<br/>SeismicEvent| C1["Vigía client 1"]
+    RELAY -->|fan-out WS| C2["Vigía client 2"]
+    RELAY -->|fan-out WS| C3["Vigía client N"]
 ```

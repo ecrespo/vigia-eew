@@ -1,28 +1,28 @@
 # Implementation Plan — Vigía-eew
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Documento | Plan de implementación por fases, dependencias y trazabilidad |
-| Versión | 1.0 (borrador para revisión) |
-| Estado | 🟡 Pendiente de aprobación |
-| Relacionado | `PRD.md`, `TECHNICAL-DESIGN.md`, `DATA-MODEL.md`, `API-SPEC.md`, `ARCHITECTURE.md` |
+| Document | Implementation plan by phases, dependencies, and traceability |
+| Version | 1.0 (draft for review) |
+| Status | 🟡 Pending approval |
+| Related | `PRD.md`, `TECHNICAL-DESIGN.md`, `DATA-MODEL.md`, `API-SPEC.md`, `ARCHITECTURE.md` |
 
-> Orden **estricto** por capas (alineado con el plan de trabajo del proyecto): SDD → estructura →
-> ingestión → dedup/filtro → notificación → autoarranque → verificación `--simulate` → empaquetado/CI.
-> **Puerta de fase**: la Fase 0 (este conjunto de artefactos) debe aprobarse **antes** de codificar.
+> **Strict** order by layers (aligned with the project's work plan): SDD → structure →
+> ingestion → dedup/filter → notification → autostart → `--simulate` verification → packaging/CI.
+> **Phase gate**: Phase 0 (this set of artifacts) must be approved **before** coding starts.
 
 ---
 
-## 1. Estructura de proyecto propuesta
+## 1. Proposed project structure
 
 ```
 vigia-eew/
 ├── pyproject.toml              # uv + hatchling, deps, entry point `vigia-eew`
 ├── README.md
-├── CHANGELOG.md                # Keep a Changelog + versionado semántico (RF-27)
+├── CHANGELOG.md                # Keep a Changelog + semantic versioning (RF-27)
 ├── ARCHITECTURE.md
 ├── config.toml.example
-├── docs/                       # artefactos SDD (este conjunto)
+├── docs/                       # SDD artifacts (this set)
 │   ├── PRD.md
 │   ├── API-SPEC.md
 │   ├── TECHNICAL-DESIGN.md
@@ -30,225 +30,227 @@ vigia-eew/
 │   └── IMPLEMENTATION-PLAN.md
 ├── src/vigia_eew/
 │   ├── __init__.py
-│   ├── cli.py                  # entry point, flags, --simulate (despacha a Aplicacion)
-│   ├── app.py                  # Aplicacion: ensamblaje ejecutar()/simular() (ADR-006)
-│   ├── simulacion.py           # evento_simulado (M6.1 La Guaira)
-│   ├── config.py               # Settings (pydantic) + carga config.toml
-│   ├── models.py               # SeismicEvent, AppState, firmas
-│   ├── geo.py                  # haversine_km (compartido por normalize y dedup)
-│   ├── backoff.py              # exponential_backoff (compartido por ws_emsc y supervisor)
-│   ├── supervisor.py           # orquestador asyncio (tasks + reinicio con backoff)
+│   ├── cli.py                  # entry point, flags, --simulate (dispatches to Application)
+│   ├── app.py                  # Application: run()/simulate() wiring (ADR-006)
+│   ├── simulation.py           # simulated_event (M6.1 La Guaira)
+│   ├── config.py               # Settings (pydantic) + config.toml loading
+│   ├── models.py                # SeismicEvent, AppState, signatures
+│   ├── geo.py                  # haversine_km (shared by normalize and dedup)
+│   ├── backoff.py               # exponential_backoff (shared by ws_emsc and supervisor)
+│   ├── supervisor.py            # asyncio orchestrator (tasks + backoff restart)
 │   ├── ingest/
-│   │   ├── __init__.py         # RawMessage (envoltorio crudo fuente→pipeline)
-│   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconexión)
-│   │   └── rest_usgs.py        # RESTReconciler (poll 60 s, cursor)
+│   │   ├── __init__.py         # RawMessage (raw wrapper, source→pipeline)
+│   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconnection)
+│   │   └── rest_usgs.py        # RESTReconciler (60 s poll, cursor)
 │   ├── pipeline/
-│   │   ├── __init__.py         # docstring del pipeline
-│   │   ├── normalize.py        # Normalizer (mapeo por fuente, geo.haversine_km, severidad)
-│   │   ├── filtro.py           # GeoFilter (radio + magnitud, límites inclusivos)
-│   │   ├── dedup.py            # Deduplicator (nuevo/actualizar/duplicado)
-│   │   └── procesador.py       # Procesador (pipeline_task: normalize→filtro→dedup)
+│   │   ├── __init__.py         # pipeline docstring
+│   │   ├── normalize.py        # Normalizer (per-source mapping, geo.haversine_km, severity)
+│   │   ├── filter.py           # GeoFilter (radius + magnitude, inclusive bounds)
+│   │   ├── dedup.py            # Deduplicator (new/update/duplicate)
+│   │   └── processor.py        # Processor (pipeline_task: normalize→filter→dedup)
 │   ├── notify/
-│   │   ├── __init__.py         # docstring de la capa de notificación
-│   │   ├── presentacion.py     # formato legible + color por severidad (puro)
-│   │   ├── toast.py            # desktop-notifier (urgencia por severidad)
-│   │   ├── alert_window.py     # ventana Tkinter no descartable + política
-│   │   ├── queue.py            # AlertQueue + puente asyncio↔Tk
-│   │   ├── controlador.py      # ControladorAlertas (cola + ventana + sonido + toast)
-│   │   └── sound.py            # capa de audio por severidad
-│   ├── autostart/              # autoarranque (dentro del paquete: usado por la CLI)
-│   │   ├── __init__.py         # crear_instalador(plataforma) + comando_agente()
-│   │   ├── linux_systemd.py    # instalar/desinstalar systemd --user
+│   │   ├── __init__.py         # notification layer docstring
+│   │   ├── presentation.py     # human-readable formatting + severity color (pure)
+│   │   ├── toast.py            # desktop-notifier (urgency by severity)
+│   │   ├── alert_window.py     # undismissable Tkinter window + policy
+│   │   ├── queue.py            # AlertQueue + asyncio↔Tk bridge
+│   │   ├── controller.py       # AlertController (queue + window + sound + toast)
+│   │   └── sound.py            # audio layer by severity
+│   ├── autostart/              # autostart (inside the package: used by the CLI)
+│   │   ├── __init__.py         # create_installer(platform) + agent_command()
+│   │   ├── linux_systemd.py    # install/uninstall systemd --user
 │   │   ├── macos_launchagent.py # LaunchAgent plist (launchctl)
-│   │   └── windows_task.py     # tarea programada (schtasks /sc onlogon)
-│   ├── state.py                # StateStore (JSON atómico, platformdirs)
-│   ├── geoloc.py                # detectar_ubicacion_ip (RF-33, fallback por IP)
-│   ├── estado_agente.py         # EstadoAgente (snapshot thread-safe para el tray, RF-34)
-│   ├── tray.py                  # ícono de bandeja (pystray, mejor esfuerzo, RF-34)
-│   ├── logging_conf.py         # logging estructurado + rotativo
-│   └── assets/                 # info.wav / atencion.wav / critico.wav / tray_icon.png (generados)
+│   │   └── windows_task.py     # scheduled task (schtasks /sc onlogon)
+│   ├── state.py                # StateStore (atomic JSON, platformdirs)
+│   ├── geoloc.py                # detect_ip_location (RF-33, IP-based fallback)
+│   ├── agent_state.py           # AgentState (thread-safe snapshot for the tray, RF-34)
+│   ├── tray.py                  # system tray icon (pystray, best-effort, RF-34)
+│   ├── logging_conf.py         # structured + rotating logging
+│   ├── i18n.py                  # i18n: OS-locale detection + en/es translation catalog (RF-35)
+│   └── assets/                 # info.wav / atencion.wav / critico.wav / tray_icon.png (generated)
 ├── packaging/
-│   ├── entrypoint.py            # script de entrada para PyInstaller (no es un entry point de pip)
-│   ├── vigia-eew.spec           # PyInstaller spec (onefile; BUNDLE .app en macOS)
+│   ├── entrypoint.py            # entry script for PyInstaller (not a pip entry point)
+│   ├── vigia-eew.spec           # PyInstaller spec (onefile; .app BUNDLE on macOS)
 │   ├── build_linux.sh           # AppImage + .deb/.rpm (fpm)
 │   ├── build_windows.ps1        # PyInstaller onefile (.exe)
 │   ├── build_macos.sh           # .app → .dmg (codesign/notarize doc)
-│   ├── RELEASING.md             # procedimiento de release (versionado, tag, CI)
-│   └── apt-r2/                  # doc/utilidades repo apt en Cloudflare R2
+│   ├── RELEASING.md             # release procedure (versioning, tag, CI)
+│   └── apt-r2/                  # apt repo doc/utilities on Cloudflare R2
 ├── tests/
-└── .github/workflows/build.yml # matriz windows/macos/ubuntu → release assets
+└── .github/workflows/build.yml # windows/macos/ubuntu matrix → release assets
 ```
 
-## 2. Fases, tareas y dependencias
+## 2. Phases, tasks, and dependencies
 
-### Fase 0 — SDD (este conjunto) · 🟡 puerta de aprobación
-| ID | Tarea | Depende de | Entregable |
+### Phase 0 — SDD (this set) · 🟡 approval gate
+| ID | Task | Depends on | Deliverable |
 |---|---|---|---|
 | F0-1 | PRD, API Spec, Technical Design, Data Model, Implementation Plan | — | `docs/*.md` |
-| F0-2 | `ARCHITECTURE.md` con diagramas Mermaid | F0-1 | `ARCHITECTURE.md` |
-| F0-3 | **Revisión y aprobación** | F0-1, F0-2 | ✅ luz verde para codificar |
+| F0-2 | `ARCHITECTURE.md` with Mermaid diagrams | F0-1 | `ARCHITECTURE.md` |
+| F0-3 | **Review and approval** | F0-1, F0-2 | ✅ green light to start coding |
 
-### Fase 1 — Estructura + modelo de datos
-| ID | Tarea | Depende de | RF |
+### Phase 1 — Structure + data model
+| ID | Task | Depends on | RF |
 |---|---|---|---|
 | F1-1 | `pyproject.toml` (uv/hatchling, deps, entry point) | F0-3 | RF-26, RF-27 |
-| F1-2 | `models.py` (`SeismicEvent`, `AppState`, firmas) | F1-1 | RF-07 |
+| F1-2 | `models.py` (`SeismicEvent`, `AppState`, signatures) | F1-1 | RF-07 |
 | F1-3 | `config.py` + `config.toml.example` | F1-1 | RF-24, RF-12 |
-| F1-4 | `logging_conf.py` (consola + rotativo) | F1-1 | RF-25 |
-| F1-5 | `state.py` (JSON atómico, platformdirs) | F1-2 | RF-06, RF-10 |
-| F1-6 | `geo.py` (`haversine_km`, compartido por normalize y dedup) | F1-1 | RF-08 |
+| F1-4 | `logging_conf.py` (console + rotating) | F1-1 | RF-25 |
+| F1-5 | `state.py` (atomic JSON, platformdirs) | F1-2 | RF-06, RF-10 |
+| F1-6 | `geo.py` (`haversine_km`, shared by normalize and dedup) | F1-1 | RF-08 |
 
-### Fase 2 — Ingestión (push primario + respaldo)
-| ID | Tarea | Depende de | RF |
+### Phase 2 — Ingestion (primary push + backup)
+| ID | Task | Depends on | RF |
 |---|---|---|---|
-| F2-0a | `backoff.py` (`exponential_backoff`, equal jitter, compartido por ws_emsc y supervisor) | F1-1 | RF-03, RNF-03 |
-| F2-0b | `ingest/__init__.py` (`RawMessage`: envoltorio crudo fuente→pipeline) | F1-2 | RF-07 |
-| F2-1 | `ws_emsc.py`: conexión, **keepalive 15 s**, **reconexión backoff** | F2-0a, F2-0b | RF-01, RF-02, RF-03, RF-04 |
-| F2-2 | `rest_usgs.py`: poll 60 s, **cursor persistido**, manejo 429/5xx | F2-0b, F1-5 | RF-05, RF-06 |
-| F2-3 | `supervisor.py`: tasks asyncio + reinicio con backoff + cierre limpio (SIGINT/SIGTERM) | F2-0a, F2-1, F2-2 | RNF-03, RNF-04 |
+| F2-0a | `backoff.py` (`exponential_backoff`, equal jitter, shared by ws_emsc and supervisor) | F1-1 | RF-03, RNF-03 |
+| F2-0b | `ingest/__init__.py` (`RawMessage`: raw wrapper, source→pipeline) | F1-2 | RF-07 |
+| F2-1 | `ws_emsc.py`: connection, **15 s keepalive**, **backoff reconnection** | F2-0a, F2-0b | RF-01, RF-02, RF-03, RF-04 |
+| F2-2 | `rest_usgs.py`: 60 s poll, **persisted cursor**, 429/5xx handling | F2-0b, F1-5 | RF-05, RF-06 |
+| F2-3 | `supervisor.py`: asyncio tasks + backoff restart + clean shutdown (SIGINT/SIGTERM) | F2-0a, F2-1, F2-2 | RNF-03, RNF-04 |
 
-### Fase 3 — Normalización, filtro y dedup
-| ID | Tarea | Depende de | RF |
+### Phase 3 — Normalization, filter, and dedup
+| ID | Task | Depends on | RF |
 |---|---|---|---|
-| F3-1 | `normalize.py`: mapeo por fuente, severidad (usa `geo.haversine_km` de F1-6) | F2-*, F1-6 | RF-07, RF-08, RF-13 |
-| F3-2 | `filtro.py`: radio + magnitud mínima | F3-1 | RF-12 |
-| F3-3 | `dedup.py`: heurística inter-fuente, ids persistidos, `update` | F3-1, F1-5 | RF-09, RF-10, RF-11 |
+| F3-1 | `normalize.py`: per-source mapping, severity (uses `geo.haversine_km` from F1-6) | F2-*, F1-6 | RF-07, RF-08, RF-13 |
+| F3-2 | `filter.py`: radius + minimum magnitude | F3-1 | RF-12 |
+| F3-3 | `dedup.py`: inter-source heuristic, persisted ids, `update` | F3-1, F1-5 | RF-09, RF-10, RF-11 |
 
-### Fase 4 — Notificación (requisito central)
-| ID | Tarea | Depende de | RF |
+### Phase 4 — Notification (core requirement)
+| ID | Task | Depends on | RF |
 |---|---|---|---|
-| F4-5 | `presentacion.py`: magnitud/lugar/distancia/profundidad/hora local/fuente + color (puro) | F3-1 | RF-18, RF-13, RNF-12 |
-| F4-1 | `toast.py` con `desktop-notifier` (urgencia por severidad, fallo aislado) | F4-5 | RF-14 |
-| F4-3 | `sound.py`: audio por severidad (insistencia creciente) + assets WAV | F4-5 | RF-17 |
-| F4-2 | `alert_window.py`: Tkinter topmost, foco, no descartable, RECONOCIDO | F4-5 | RF-15..RF-19 |
-| F4-4 | `queue.py`: cola (una a la vez) + `update` in-place + puente asyncio↔Tk (ADR-006) | F4-2 | RF-20, RF-11 |
+| F4-5 | `presentation.py`: magnitude/place/distance/depth/local time/source + color (pure) | F3-1 | RF-18, RF-13, RNF-12 |
+| F4-1 | `toast.py` with `desktop-notifier` (urgency by severity, isolated failure) | F4-5 | RF-14 |
+| F4-3 | `sound.py`: audio by severity (increasing insistence) + WAV assets | F4-5 | RF-17 |
+| F4-2 | `alert_window.py`: topmost Tkinter, focus, undismissable, ACKNOWLEDGED | F4-5 | RF-15..RF-19 |
+| F4-4 | `queue.py`: queue (one at a time) + in-place `update` + asyncio↔Tk bridge (ADR-006) | F4-2 | RF-20, RF-11 |
 
-### Fase 5 — CLI + modo simulación
-| ID | Tarea | Depende de | RF |
+### Phase 5 — CLI + simulation mode
+| ID | Task | Depends on | RF |
 |---|---|---|---|
-| F5-a | `pipeline/procesador.py`: `pipeline_task` (normalize→filtro→dedup→alertar) | F3-* | RF-07..RF-13 |
-| F5-b | `app.py`: `Aplicacion` (ensamblaje ingestión+pipeline+notificación, hilos asyncio/Tk) + `notify/controlador.py` | F2-3, F4-*, F5-a | RF-26, RNF-04 |
-| F5-1 | `cli.py`: arranque, `--config`, `--check-config`, despacho a `Aplicacion` | F5-b | RF-26 |
-| F5-2 | `simulacion.py` + `--simulate` (M6.1 La Guaira) | F5-b, F5-1 | RF-21 |
+| F5-a | `pipeline/processor.py`: `pipeline_task` (normalize→filter→dedup→alert) | F3-* | RF-07..RF-13 |
+| F5-b | `app.py`: `Application` (ingestion+pipeline+notification wiring, asyncio/Tk threads) + `notify/controller.py` | F2-3, F4-*, F5-a | RF-26, RNF-04 |
+| F5-1 | `cli.py`: startup, `--config`, `--check-config`, dispatch to `Application` | F5-b | RF-26 |
+| F5-2 | `simulation.py` + `--simulate` (M6.1 La Guaira) | F5-b, F5-1 | RF-21 |
 
-### Fase 6 — Autoarranque
-| ID | Tarea | Depende de | RF |
+### Phase 6 — Autostart
+| ID | Task | Depends on | RF |
 |---|---|---|---|
-| F6-1 | Linux systemd `--user` (instalar/desinstalar) | F5-1 | RF-22, RF-23 |
-| F6-2 | macOS LaunchAgent (instalar/desinstalar) | F5-1 | RF-22, RF-23 |
-| F6-3 | Windows tarea programada (instalar/desinstalar) | F5-1 | RF-22, RF-23 |
+| F6-1 | Linux systemd `--user` (install/uninstall) | F5-1 | RF-22, RF-23 |
+| F6-2 | macOS LaunchAgent (install/uninstall) | F5-1 | RF-22, RF-23 |
+| F6-3 | Windows scheduled task (install/uninstall) | F5-1 | RF-22, RF-23 |
 
-### Fase 7 — Verificación `--simulate` en los 3 SO
-| ID | Tarea | Depende de | CA | Estado |
+### Phase 7 — `--simulate` verification on all 3 OSes
+| ID | Task | Depends on | CA | Status |
 |---|---|---|---|---|
-| F7-1 | Validar alerta no descartable + sonido en Linux | F5-2 | CA-01 | ✅ Verificado (GNOME/Wayland real): `--simulate` mostró la ventana topmost/sin decoración, disparó sonido y solo cerró tras RECONOCIDO; el proceso terminó limpio. |
-| F7-2 | Validar en Windows | F5-2 | CA-01 | ⏳ Pendiente — sin máquina Windows disponible en este entorno de desarrollo. |
-| F7-3 | Validar en macOS (foco/topmost) | F5-2 | CA-01, ADR-003 | ⏳ Pendiente — sin máquina macOS disponible en este entorno de desarrollo. |
-| F7-4 | Pruebas de resiliencia (WS caído, 429, JSON inválido, reinicio) | F2-*, F3-* | CA-02..CA-07 | ✅ `tests/test_resiliencia.py`: cierra a nivel de pipeline completo (`Procesador` real) lo que F2/F3 ya cubrían por componente — CA-02 (`WSIngestor` real supervisado), CA-04 (alerta solo-USGS), CA-05 (dedup inter-fuente end-to-end) y CA-07 (reinicio no re-alerta). |
+| F7-1 | Validate undismissable alert + sound on Linux | F5-2 | CA-01 | ✅ Verified (real GNOME/Wayland): `--simulate` showed the topmost/undecorated window, triggered sound, and only closed after ACKNOWLEDGED; the process ended cleanly. |
+| F7-2 | Validate on Windows | F5-2 | CA-01 | ⏳ Pending — no Windows machine available in this development environment. |
+| F7-3 | Validate on macOS (focus/topmost) | F5-2 | CA-01, ADR-003 | ⏳ Pending — no macOS machine available in this development environment. |
+| F7-4 | Resilience tests (WS down, 429, invalid JSON, restart) | F2-*, F3-* | CA-02..CA-07 | ✅ `tests/test_resilience.py`: closes at the full-pipeline level (real `Processor`) what F2/F3 already covered per component — CA-02 (real supervised `WSIngestor`), CA-04 (USGS-only alert), CA-05 (end-to-end inter-source dedup), and CA-07 (restart does not re-alert). |
 
-> F7-2/F7-3 requieren ejecutar `vigia-eew --simulate` manualmente en Windows/macOS y confirmar
-> visualmente CA-01 (ventana al frente, con foco, sonido, solo RECONOCIDO cierra). Sin esas
-> máquinas, la Fase 7 queda parcialmente verificada: el núcleo (pipeline + resiliencia) tiene
-> evidencia automatizada multiplataforma; el frontend Tkinter solo tiene evidencia real en Linux.
+> F7-2/F7-3 require running `vigia-eew --simulate` manually on Windows/macOS and visually
+> confirming CA-01 (window in front, focused, sound, only ACKNOWLEDGED closes it). Without
+> those machines, Phase 7 remains partially verified: the core (pipeline + resilience) has
+> automated cross-platform evidence; the Tkinter frontend only has real evidence on Linux.
 
-### Fase 8 — Empaquetado y distribución
-| ID | Tarea | Depende de | RF | Estado |
+### Phase 8 — Packaging and distribution
+| ID | Task | Depends on | RF | Status |
 |---|---|---|---|---|
-| F8-1 | PyPI (uv/hatchling), versionado semántico | F5-* | RF-27 | ✅ Verificado: `uv build` produce wheel+sdist (con `assets/*.wav` incluidos); instalado en un venv limpio, `vigia-eew --check-config` funciona. `CHANGELOG.md` + `packaging/RELEASING.md` documentan el proceso. |
-| F8-2 | Windows `.exe` (PyInstaller onefile, sin consola) | F5-* | RF-28 | 🟡 `packaging/vigia-eew.spec` + `build_windows.ps1` escritos; el `.spec` se probó de verdad en Linux (produce un binario onefile funcional). El `.exe` en sí requiere ejecutarse en Windows (PyInstaller no cross-compila) — pendiente en CI (F8-5) o manualmente. |
-| F8-3 | macOS `.app`→`.dmg` (+doc codesign/notarización) | F5-* | RF-29 | 🟡 `build_macos.sh` escrito (usa el mismo `.spec`, con bloque `BUNDLE` condicional a `darwin`); doc de codesign/notarización sin certificado (fuera de alcance v1). Requiere macOS para ejecutarse — pendiente en CI o manualmente. |
-| F8-4 | Linux AppImage + `.deb`/`.rpm` (fpm) + snap doc | F5-* | RF-30 | 🟡 `build_linux.sh` escrito y con sintaxis validada; el binario onefile se construyó y corrió de verdad en este entorno. AppImage/`.deb`/`.rpm` necesitan `linuxdeploy`/`appimagetool`/`fpm`, no instalados aquí (sí en CI, F8-5) — el script los detecta y avisa si faltan en vez de fallar. Snap: solo doc (fuera de alcance v1). |
-| F8-5 | GitHub Actions matriz → release assets + scripts locales | F8-1..F8-4 | RF-31 | 🟡 `.github/workflows/build.yml` escrito (matriz ubuntu/windows/macos + job de Release), YAML validado sintácticamente. No ejecutado (requiere push de un tag `v*` en GitHub); instala `fpm`/`linuxdeploy`/`appimagetool` en el runner ubuntu antes de invocar `build_linux.sh`. |
-| F8-6 | Doc repo apt en Cloudflare R2 | F8-4 | RF-32 | ✅ `packaging/apt-r2/README.md`: estructura del repo, publicación con `reprepro`+`aws s3 sync`, uso desde el cliente. Documentado como evolución futura, sin bucket ni pipeline activados todavía. |
+| F8-1 | PyPI (uv/hatchling), semantic versioning | F5-* | RF-27 | ✅ Verified: `uv build` produces a wheel+sdist (including `assets/*.wav`); installed in a clean venv, `vigia-eew --check-config` works. `CHANGELOG.md` + `packaging/RELEASING.md` document the process. |
+| F8-2 | Windows `.exe` (PyInstaller onefile, no console) | F5-* | RF-28 | 🟡 `packaging/vigia-eew.spec` + `build_windows.ps1` written; the `.spec` was actually tested on Linux (produces a working onefile binary). The `.exe` itself requires running on Windows (PyInstaller doesn't cross-compile) — pending in CI (F8-5) or manually. |
+| F8-3 | macOS `.app`→`.dmg` (+codesign/notarization doc) | F5-* | RF-29 | 🟡 `build_macos.sh` written (uses the same `.spec`, with a `BUNDLE` block conditional on `darwin`); codesign/notarization doc without a certificate (out of scope for v1). Requires macOS to run — pending in CI or manually. |
+| F8-4 | Linux AppImage + `.deb`/`.rpm` (fpm) + snap doc | F5-* | RF-30 | 🟡 `build_linux.sh` written and syntax-validated; the onefile binary was actually built and run in this environment. AppImage/`.deb`/`.rpm` need `linuxdeploy`/`appimagetool`/`fpm`, not installed here (they are in CI, F8-5) — the script detects them and warns if missing instead of failing. Snap: doc only (out of scope for v1). |
+| F8-5 | GitHub Actions matrix → release assets + local scripts | F8-1..F8-4 | RF-31 | 🟡 `.github/workflows/build.yml` written (ubuntu/windows/macos matrix + Release job), YAML syntactically validated. Not executed (requires pushing a `v*` tag on GitHub); installs `fpm`/`linuxdeploy`/`appimagetool` on the ubuntu runner before invoking `build_linux.sh`. |
+| F8-6 | Apt repo doc on Cloudflare R2 | F8-4 | RF-32 | ✅ `packaging/apt-r2/README.md`: repo structure, publishing with `reprepro`+`aws s3 sync`, client-side usage. Documented as a future evolution, no bucket or pipeline activated yet. |
 
-> Este entorno de desarrollo es Linux sin Windows/macOS disponibles (misma limitación que
-> la Fase 7): F8-2/F8-3 solo pudieron autorearse y validarse parcialmente (el `.spec`
-> compartido sí se probó end-to-end en Linux). La verificación completa de esos dos
-> binarios queda pendiente de CI (F8-5) o de una máquina real del SO correspondiente.
+> This development environment is Linux with no Windows/macOS available (same limitation as
+> Phase 7): F8-2/F8-3 could only be authored and partially validated (the shared `.spec`
+> was tested end-to-end on Linux). Full verification of those two binaries remains
+> pending on CI (F8-5) or a real machine of the corresponding OS.
 
-> **Actualización 2026-07-04**: el release `v0.1.2` corrió en CI real (GitHub Actions) y
-> terminó en `success`, publicando los 7 assets esperados (wheel, sdist, `.exe`, `.dmg`,
-> AppImage, `.deb`, `.rpm`). F8-2, F8-3 y F8-5 quedan **✅ verificados de verdad**, no solo
-> autoreados — este documento no se había actualizado hasta ahora para reflejarlo.
+> **2026-07-04 update**: release `v0.1.2` ran on real CI (GitHub Actions) and ended in
+> `success`, publishing the 7 expected assets (wheel, sdist, `.exe`, `.dmg`, AppImage,
+> `.deb`, `.rpm`). F8-2, F8-3, and F8-5 are now **✅ actually verified**, not just
+> authored — this document had not been updated until now to reflect that.
 
-### Fase 9 — Detección automática de ubicación por IP (RF-33)
-| ID | Tarea | Depende de | RF | Estado |
+### Phase 9 — Automatic IP-based location detection (RF-33)
+| ID | Task | Depends on | RF | Status |
 |---|---|---|---|---|
-| F9-1 | `geoloc.py`: `detectar_ubicacion_ip` (cliente HTTP inyectable, nunca lanza) | F1-3 | RF-33 | ✅ |
-| F9-2 | `models.py`/`state.py`: `UbicacionDetectada` + caché en `AppState`/`StateStore` | F1-2, F1-5 | RF-33 | ✅ |
-| F9-3 | `config.py`: `tiene_referencia_manual` (expone si `[referencia]` está en el TOML, sin red) | F1-3 | RF-33 | ✅ |
-| F9-4 | `app.py`: `Aplicacion._resolver_referencia_automatica` (caché → geoloc → fallback), solo en `ejecutar()` | F9-1, F9-2, F5-b | RF-33 | ✅ |
-| F9-5 | `cli.py`: pasa `referencia_manual` a `Aplicacion` | F9-3, F5-1 | RF-33 | ✅ |
+| F9-1 | `geoloc.py`: `detect_ip_location` (injectable HTTP client, never raises) | F1-3 | RF-33 | ✅ |
+| F9-2 | `models.py`/`state.py`: `DetectedLocation` + cache in `AppState`/`StateStore` | F1-2, F1-5 | RF-33 | ✅ |
+| F9-3 | `config.py`: `has_manual_reference` (exposes whether `[reference]` is present in the TOML, no network) | F1-3 | RF-33 | ✅ |
+| F9-4 | `app.py`: `Application._resolve_automatic_reference` (cache → geoloc → fallback), only in `run()` | F9-1, F9-2, F5-b | RF-33 | ✅ |
+| F9-5 | `cli.py`: passes `manual_reference` to `Application` | F9-3, F5-1 | RF-33 | ✅ |
 
-### Fase 10 — Ícono de bandeja del sistema (RF-34)
-| ID | Tarea | Depende de | RF | Estado |
+### Phase 10 — System tray icon (RF-34)
+| ID | Task | Depends on | RF | Status |
 |---|---|---|---|---|
-| F10-1 | `estado_agente.py`: `EstadoAgente` (snapshot thread-safe: WS conectado, última alerta) | F1-1 | RF-34 | ✅ |
-| F10-2 | `tray.py`: `construir_icono`/`IconoBandeja` (pystray, menú, mejor esfuerzo) + ícono generado (`assets/tray_icon.png`) | F10-1 | RF-34 | ✅ |
-| F10-3 | `notify/queue.py`: `AlertQueue.pausar`/`reanudar` (no pierde eventos, solo retrasa la presentación) | F4-4 | RF-34 | ✅ |
-| F10-4 | `notify/controlador.py`: expone `pausar`/`reanudar`/`pausado`; actualiza `EstadoAgente` al mostrar | F10-1, F10-3 | RF-34 | ✅ |
-| F10-5 | `ingest/ws_emsc.py`: actualiza `EstadoAgente` al conectar/reconectar | F10-1, F2-1 | RF-34 | ✅ |
-| F10-6 | `config.py`: `[notificacion] icono_bandeja` (default `true`) | F1-3 | RF-34 | ✅ |
-| F10-7 | `app.py`: `_construir_tray`/`_alternar_pausa`/`_salir_desde_tray`/`_editar_config`, solo en `ejecutar()` | F10-2, F10-4, F10-6, F5-b | RF-34 | ✅ |
-| F10-8 | `cli.py`: pasa `ruta_config` a `Aplicacion` (para que "editar configuración" abra el archivo en uso) | F10-7, F5-1 | RF-34 | ✅ |
+| F10-1 | `agent_state.py`: `AgentState` (thread-safe snapshot: WS connected, last alert) | F1-1 | RF-34 | ✅ |
+| F10-2 | `tray.py`: `build_icon`/`TrayIcon` (pystray, menu, best-effort) + generated icon (`assets/tray_icon.png`) | F10-1 | RF-34 | ✅ |
+| F10-3 | `notify/queue.py`: `AlertQueue.pause`/`resume` (doesn't lose events, only delays presentation) | F4-4 | RF-34 | ✅ |
+| F10-4 | `notify/controller.py`: exposes `pause`/`resume`/`paused`; updates `AgentState` on show | F10-1, F10-3 | RF-34 | ✅ |
+| F10-5 | `ingest/ws_emsc.py`: updates `AgentState` on connect/reconnect | F10-1, F2-1 | RF-34 | ✅ |
+| F10-6 | `config.py`: `[notification] tray_icon` (default `true`) | F1-3 | RF-34 | ✅ |
+| F10-7 | `app.py`: `_build_tray`/`_toggle_pause`/`_exit_from_tray`/`_edit_config`, only in `run()` | F10-2, F10-4, F10-6, F5-b | RF-34 | ✅ |
+| F10-8 | `cli.py`: passes `config_path` to `Application` (so "edit configuration" opens the file currently in use) | F10-7, F5-1 | RF-34 | ✅ |
 
-## 3. Matriz de trazabilidad RF → componente
+## 3. Traceability matrix: RF → component
 
-| RF | Componente(s) | Fase |
+| RF | Component(s) | Phase |
 |---|---|---|
 | RF-01..RF-04 | `ingest/ws_emsc.py`, `backoff.py` | F2 |
 | RF-05, RF-06 | `ingest/rest_usgs.py`, `state.py` | F2 |
 | RF-07 | `pipeline/normalize.py`, `models.py`, `ingest/__init__.py` (`RawMessage`) | F3/F2 |
 | RF-08 | `geo.py` (`haversine_km`), `pipeline/normalize.py` | F1/F3 |
 | RF-09, RF-10, RF-11 | `pipeline/dedup.py`, `geo.py`, `state.py` | F3 |
-| RF-12 | `pipeline/filtro.py`, `config.py` | F3 |
-| RF-13 | `pipeline/normalize.py`, `notify/sound.py`, `notify/presentacion.py` (color) | F3/F4 |
-| RF-14 | `notify/toast.py`, `notify/presentacion.py` | F4 |
+| RF-12 | `pipeline/filter.py`, `config.py` | F3 |
+| RF-13 | `pipeline/normalize.py`, `notify/sound.py`, `notify/presentation.py` (color) | F3/F4 |
+| RF-14 | `notify/toast.py`, `notify/presentation.py` | F4 |
 | RF-15..RF-19 | `notify/alert_window.py` | F4 |
-| RF-18 | `notify/presentacion.py`, `notify/alert_window.py` | F4 |
-| RF-20 | `notify/queue.py`, `notify/controlador.py` | F4 |
-| RF-21 | `simulacion.py`, `cli.py` (`--simulate`), `app.py` | F5 |
+| RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
+| RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |
+| RF-21 | `simulation.py`, `cli.py` (`--simulate`), `app.py` | F5 |
 | RF-22, RF-23 | `autostart/*` | F6 |
 | RF-24 | `config.py` | F1 |
 | RF-25 | `logging_conf.py` | F1 |
-| RF-26 | `cli.py`, `app.py`, `pipeline/procesador.py`, `pyproject.toml` | F1/F5 |
+| RF-26 | `cli.py`, `app.py`, `pipeline/processor.py`, `pyproject.toml` | F1/F5 |
 | RF-27..RF-32 | `packaging/*`, `.github/workflows/build.yml` | F8 |
-| RF-33 | `geoloc.py`, `config.py` (`tiene_referencia_manual`), `state.py`/`models.py` (`UbicacionDetectada`), `app.py`, `cli.py` | F9 |
-| RF-34 | `tray.py`, `estado_agente.py`, `notify/queue.py` (pausar/reanudar), `notify/controlador.py`, `ingest/ws_emsc.py`, `config.py`, `app.py`, `cli.py` | F10 |
+| RF-33 | `geoloc.py`, `config.py` (`has_manual_reference`), `state.py`/`models.py` (`DetectedLocation`), `app.py`, `cli.py` | F9 |
+| RF-34 | `tray.py`, `agent_state.py`, `notify/queue.py` (pause/resume), `notify/controller.py`, `ingest/ws_emsc.py`, `config.py`, `app.py`, `cli.py` | F10 |
+| RF-35 | `i18n.py`, `config.py`, `notify/presentation.py`, `notify/alert_window.py`, `notify/toast.py`, `tray.py` | TBD (placeholder, wiring to be finalized) |
 
-## 4. Estrategia de pruebas (resumen)
+## 4. Test strategy (summary)
 
-| Nivel | Foco | Cubre |
+| Level | Focus | Covers |
 |---|---|---|
-| Unitarias | normalización (mapeo EMSC/USGS), haversine, severidad, dedup heurística | RF-07..RF-13 |
-| Integración | ingestión con servidor WS *fake* + respuestas USGS grabadas (fixtures) | RF-01..RF-06 |
-| Resiliencia | inyección de fallos: cierre WS, 429/5xx, JSON inválido, reinicio | RNF-03, CA-02..CA-07 |
-| Manual/E2E | `--simulate` en los 3 SO (alerta no descartable, foco, sonido) | CA-01 |
+| Unit | normalization (EMSC/USGS mapping), haversine, severity, dedup heuristic | RF-07..RF-13 |
+| Integration | ingestion with a fake WS server + recorded USGS responses (fixtures) | RF-01..RF-06 |
+| Resilience | fault injection: WS shutdown, 429/5xx, invalid JSON, restart | RNF-03, CA-02..CA-07 |
+| Manual/E2E | `--simulate` on all 3 OSes (undismissable alert, focus, sound) | CA-01 |
 
-> Fixtures: usar los eventos reales verificados (M4.3 Morón, M4.5 Boca de Aroa) y el simulado M6.1.
+> Fixtures: use the real verified events (M4.3 Morón, M4.5 Boca de Aroa) and the simulated M6.1.
 
-## 5. Dependencias (stack)
+## 5. Dependencies (stack)
 
-| Dependencia | Uso | RF/ADR |
+| Dependency | Use | RF/ADR |
 |---|---|---|
-| `websockets` | WS EMSC (keepalive nativo) | RF-01/ADR-009 |
-| `httpx` | REST USGS async | RF-05/ADR-009 |
-| `pydantic` (v2) | validación modelos/config | RF-07/RF-24 |
-| `desktop-notifier` | toast multiplataforma | RF-14 |
-| Tkinter (stdlib) | ventana de alerta | RF-15/ADR-003 |
-| `platformdirs` | rutas de estado/config | RF-06/RF-10 |
-| `tomllib` (stdlib) | leer `config.toml` | RF-24/ADR-007 |
-| `tzdata`/zoneinfo | hora America/Caracas | RF-18/RNF-12 |
-| PyInstaller, fpm, linuxdeploy | empaquetado | RF-28..RF-30 |
-| `pystray` | ícono de bandeja (mejor esfuerzo) | RF-34/ADR-012 |
-| `Pillow` | imagen del ícono de bandeja (requisito de `pystray`) | RF-34/ADR-012 |
+| `websockets` | EMSC WS (native keepalive) | RF-01/ADR-009 |
+| `httpx` | async USGS REST | RF-05/ADR-009 |
+| `pydantic` (v2) | model/config validation | RF-07/RF-24 |
+| `desktop-notifier` | cross-platform toast | RF-14 |
+| Tkinter (stdlib) | alert window | RF-15/ADR-003 |
+| `platformdirs` | state/config paths | RF-06/RF-10 |
+| `tomllib` (stdlib) | reads `config.toml` | RF-24/ADR-007 |
+| `tzdata`/zoneinfo | America/Caracas time | RF-18/RNF-12 |
+| PyInstaller, fpm, linuxdeploy | packaging | RF-28..RF-30 |
+| `pystray` | tray icon (best-effort) | RF-34/ADR-012 |
+| `Pillow` | tray icon image (`pystray` requirement) | RF-34/ADR-012 |
 
-## 6. Hitos y orden de entrega
+## 6. Milestones and delivery order
 
-1. **M0**: Fase 0 aprobada (puerta SDD). ← *estado actual*
-2. **M1**: Fases 1–3 (núcleo: ingestión + pipeline) con pruebas unitarias/integración verdes.
-3. **M2**: Fase 4–5 (notificación + `--simulate`) demostrable en Linux.
-4. **M3**: Fase 6–7 (autoarranque + verificación en los 3 SO).
-5. **M4**: Fase 8 (empaquetado + CI con release assets).
-6. **M5**: Fase 9 (detección automática de ubicación por IP, RF-33).
-7. **M6**: Fase 10 (ícono de bandeja del sistema, RF-34).
+1. **M0**: Phase 0 approved (SDD gate). ← *current status*
+2. **M1**: Phases 1–3 (core: ingestion + pipeline) with unit/integration tests green.
+3. **M2**: Phases 4–5 (notification + `--simulate`) demonstrable on Linux.
+4. **M3**: Phases 6–7 (autostart + verification on all 3 OSes).
+5. **M4**: Phase 8 (packaging + CI with release assets).
+6. **M5**: Phase 9 (automatic IP-based location detection, RF-33).
+7. **M6**: Phase 10 (system tray icon, RF-34).

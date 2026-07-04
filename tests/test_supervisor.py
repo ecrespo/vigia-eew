@@ -1,4 +1,4 @@
-"""Pruebas del orquestador asyncio (RNF-03, RNF-04)."""
+"""Tests for the asyncio orchestrator (RNF-03, RNF-04)."""
 
 from __future__ import annotations
 
@@ -7,97 +7,97 @@ import asyncio
 from vigia_eew.supervisor import Supervisor
 
 
-async def test_arranca_cada_tarea_registrada():
-    corrieron: set[str] = set()
-    esperas: list[float] = []
+async def test_starts_every_registered_task():
+    ran: set[str] = set()
+    waits: list[float] = []
 
     async def sleep(s):
-        esperas.append(s)
+        waits.append(s)
 
-    sup = Supervisor(sleep=sleep, jitter=False, manejar_senales=False)
+    sup = Supervisor(sleep=sleep, jitter=False, handle_signals=False)
 
-    async def hacer(nombre):
-        corrieron.add(nombre)
-        sup.solicitar_parada()  # una tarea pide parar; el resto se cancela limpio
+    async def do(name):
+        ran.add(name)
+        sup.request_stop()  # one task requests a stop; the rest are cancelled cleanly
 
-    sup.add("a", lambda: hacer("a"))
-    sup.add("b", lambda: hacer("b"))
+    sup.add("a", lambda: do("a"))
+    sup.add("b", lambda: do("b"))
 
     await asyncio.wait_for(sup.run(), timeout=1.0)
-    assert "a" in corrieron  # al menos la primera corrió y disparó la parada
+    assert "a" in ran  # at least the first one ran and triggered the stop
 
 
-async def test_reinicia_tarea_que_falla_con_backoff():
-    esperas: list[float] = []
+async def test_restarts_a_failing_task_with_backoff():
+    waits: list[float] = []
 
     async def sleep(s):
-        esperas.append(s)
+        waits.append(s)
 
-    sup = Supervisor(sleep=sleep, jitter=False, manejar_senales=False)
-    llamadas: list[int] = []
+    sup = Supervisor(sleep=sleep, jitter=False, handle_signals=False)
+    calls: list[int] = []
 
-    async def falla():
-        llamadas.append(1)
-        if len(llamadas) >= 3:
-            sup.solicitar_parada()
+    async def fail():
+        calls.append(1)
+        if len(calls) >= 3:
+            sup.request_stop()
             return
         raise RuntimeError("boom")
 
-    sup.add("falla", falla)
+    sup.add("fail", fail)
     await asyncio.wait_for(sup.run(), timeout=1.0)
 
-    assert len(llamadas) == 3  # reinició tras cada fallo
-    assert esperas == [1.0, 2.0]  # backoff exponencial entre reintentos
+    assert len(calls) == 3  # restarted after each failure
+    assert waits == [1.0, 2.0]  # exponential backoff between retries
 
 
-async def test_aisla_fallos_entre_tareas():
+async def test_isolates_failures_between_tasks():
     async def sleep(s):
         return None
 
-    sup = Supervisor(sleep=sleep, jitter=False, manejar_senales=False)
-    buena_corrio = asyncio.Event()
-    intentos_mala = 0
+    sup = Supervisor(sleep=sleep, jitter=False, handle_signals=False)
+    good_ran = asyncio.Event()
+    bad_attempts = 0
 
-    async def buena():
-        buena_corrio.set()
-        await asyncio.sleep(3600)  # vive hasta que la cancelen
+    async def good():
+        good_ran.set()
+        await asyncio.sleep(3600)  # lives until cancelled
 
-    async def mala():
-        nonlocal intentos_mala
-        intentos_mala += 1
-        if intentos_mala >= 3:
-            sup.solicitar_parada()
+    async def bad():
+        nonlocal bad_attempts
+        bad_attempts += 1
+        if bad_attempts >= 3:
+            sup.request_stop()
             return
         raise RuntimeError("boom")
 
-    sup.add("buena", buena)
-    sup.add("mala", mala)
+    sup.add("good", good)
+    sup.add("bad", bad)
     await asyncio.wait_for(sup.run(), timeout=1.0)
 
-    assert buena_corrio.is_set()  # el fallo de "mala" no impidió "buena"
-    assert intentos_mala == 3
+    assert good_ran.is_set()  # "bad" failing didn't prevent "good" from running
+    assert bad_attempts == 3
 
 
-async def test_parada_limpia_cancela_tareas_vivas():
+async def test_clean_stop_cancels_live_tasks():
     async def sleep(s):
         return None
 
-    sup = Supervisor(sleep=sleep, manejar_senales=False)
-    arranco = asyncio.Event()
-    cancelada = asyncio.Event()
+    sup = Supervisor(sleep=sleep, handle_signals=False)
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
 
-    async def larga():
-        arranco.set()
+    async def long_task():
+        started.set()
         try:
             await asyncio.sleep(3600)
         except asyncio.CancelledError:
-            cancelada.set()
+            cancelled.set()
             raise
 
-    sup.add("larga", larga)
+    sup.add("long", long_task)
     run_task = asyncio.create_task(sup.run())
-    await asyncio.wait_for(arranco.wait(), timeout=1.0)
-    sup.solicitar_parada()
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    sup.request_stop()
     await asyncio.wait_for(run_task, timeout=1.0)
 
-    assert cancelada.is_set()  # cierre limpio: la tarea viva fue cancelada (RNF-04)
+    assert cancelled.is_set()  # clean shutdown: the live task was cancelled (RNF-04)

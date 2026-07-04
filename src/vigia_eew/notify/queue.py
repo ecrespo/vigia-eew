@@ -1,12 +1,13 @@
-"""Cola de alertas y puente asyncio↔Tk (RF-20, RF-11, ADR-006).
+"""Alert queue and asyncio<->Tk bridge (RF-20, RF-11, ADR-006).
 
-`AlertQueue` muestra **una alerta a la vez** y en orden de llegada (RF-20): al reconocer
-la actual, aparece la siguiente. Un `update` del evento en pantalla lo **refresca en sitio**
-sin generar una alerta nueva (RF-11). La cola es lógica pura (callbacks inyectados): no
-conoce Tkinter, así se prueba sin pantalla.
+`AlertQueue` shows **one alert at a time** and in arrival order (RF-20): acknowledging
+the current one shows the next. An `update` of the event on screen **refreshes it in
+place** without generating a new alert (RF-11). The queue is pure logic (injected
+callbacks): it knows nothing about Tkinter, so it can be tested without a screen.
 
-`PuenteAsyncioTk` cruza el límite de hilos del ADR-006: el bucle asyncio publica eventos
-en una `queue.Queue` thread-safe y el hilo de Tk los drena periódicamente con `widget.after`.
+`AsyncioTkBridge` crosses the thread boundary from ADR-006: the asyncio loop publishes
+events to a thread-safe `queue.Queue` and the Tk thread drains them periodically with
+`widget.after`.
 """
 
 from __future__ import annotations
@@ -22,108 +23,108 @@ _Sink = Callable[[SeismicEvent], None]
 
 
 class AlertQueue:
-    """Serializa la presentación de alertas: una a la vez, en orden (RF-20)."""
+    """Serializes alert presentation: one at a time, in order (RF-20)."""
 
     def __init__(
         self,
         *,
-        mostrar: _Sink,
-        actualizar: _Sink | None = None,
-        al_reconocer: _Sink | None = None,
+        show: _Sink,
+        update: _Sink | None = None,
+        on_acknowledge: _Sink | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._mostrar = mostrar
-        self._actualizar = actualizar
-        self._al_reconocer = al_reconocer
-        self._pendientes: deque[SeismicEvent] = deque()
-        self._actual: SeismicEvent | None = None
-        self._pausado = False
+        self._show = show
+        self._update = update
+        self._on_acknowledge = on_acknowledge
+        self._pending: deque[SeismicEvent] = deque()
+        self._current: SeismicEvent | None = None
+        self._paused = False
         self._log = logger or logging.getLogger("vigia_eew.notify.queue")
 
     @property
-    def actual(self) -> SeismicEvent | None:
-        """Evento que se está mostrando, o None si no hay ninguno."""
-        return self._actual
+    def current(self) -> SeismicEvent | None:
+        """Event currently being shown, or None if there isn't one."""
+        return self._current
 
     @property
-    def pendientes(self) -> int:
-        """Cantidad de eventos en espera (sin contar el que se muestra)."""
-        return len(self._pendientes)
+    def pending(self) -> int:
+        """Number of events waiting (not counting the one being shown)."""
+        return len(self._pending)
 
     @property
-    def pausado(self) -> bool:
-        """True si la presentación de nuevas alertas está pausada (RF-34)."""
-        return self._pausado
+    def paused(self) -> bool:
+        """True if presentation of new alerts is paused (RF-34)."""
+        return self._paused
 
-    def pausar(self) -> None:
-        """Deja de mostrar alertas nuevas; siguen encolándose sin perderse (RF-34)."""
-        self._pausado = True
+    def pause(self) -> None:
+        """Stops showing new alerts; they keep queuing up without being lost (RF-34)."""
+        self._paused = True
 
-    def reanudar(self) -> None:
-        """Reanuda la presentación y muestra lo acumulado mientras estaba pausada."""
-        self._pausado = False
-        self._mostrar_siguiente_si_libre()
+    def resume(self) -> None:
+        """Resumes presentation and shows what accumulated while paused."""
+        self._paused = False
+        self._show_next_if_free()
 
-    def encolar(self, ev: SeismicEvent) -> None:
-        """Encola un evento; si es un `update` del que está en pantalla, lo refresca."""
+    def enqueue(self, ev: SeismicEvent) -> None:
+        """Enqueues an event; if it's an `update` of the one on screen, refreshes it."""
         if (
-            ev.accion == "update"
-            and self._actual is not None
-            and ev.id == self._actual.id
+            ev.action == "update"
+            and self._current is not None
+            and ev.id == self._current.id
         ):
-            self._actual = ev
-            if self._actualizar is not None:
-                self._actualizar(ev)
-            self._log.info("alerta_actualizada id=%s", ev.id)
+            self._current = ev
+            if self._update is not None:
+                self._update(ev)
+            self._log.info("alert_updated id=%s", ev.id)
             return
-        self._pendientes.append(ev)
-        self._mostrar_siguiente_si_libre()
+        self._pending.append(ev)
+        self._show_next_if_free()
 
-    def reconocer(self) -> None:
-        """Reconoce la alerta actual y muestra la siguiente (CU-5)."""
-        if self._actual is None:
+    def acknowledge(self) -> None:
+        """Acknowledges the current alert and shows the next one (CU-5)."""
+        if self._current is None:
             return
-        reconocido = self._actual
-        self._actual = None
-        if self._al_reconocer is not None:
-            self._al_reconocer(reconocido)
-        self._log.info("alerta_reconocida id=%s", reconocido.id)
-        self._mostrar_siguiente_si_libre()
+        acknowledged = self._current
+        self._current = None
+        if self._on_acknowledge is not None:
+            self._on_acknowledge(acknowledged)
+        self._log.info("alert_acknowledged id=%s", acknowledged.id)
+        self._show_next_if_free()
 
-    def _mostrar_siguiente_si_libre(self) -> None:
-        if self._pausado or self._actual is not None or not self._pendientes:
+    def _show_next_if_free(self) -> None:
+        if self._paused or self._current is not None or not self._pending:
             return
-        self._actual = self._pendientes.popleft()
-        self._mostrar(self._actual)
-        self._log.info("alerta_mostrada id=%s", self._actual.id)
+        self._current = self._pending.popleft()
+        self._show(self._current)
+        self._log.info("alert_shown id=%s", self._current.id)
 
 
-class PuenteAsyncioTk:
-    """Puente thread-safe del bucle asyncio al hilo de Tkinter (ADR-006)."""
+class AsyncioTkBridge:
+    """Thread-safe bridge from the asyncio loop to the Tkinter thread (ADR-006)."""
 
     def __init__(self, *, sink: _Sink, logger: logging.Logger | None = None) -> None:
-        self._cola: _stdqueue.Queue[SeismicEvent] = _stdqueue.Queue()
+        self._queue: _stdqueue.Queue[SeismicEvent] = _stdqueue.Queue()
         self._sink = sink
-        self._log = logger or logging.getLogger("vigia_eew.notify.puente")
+        self._log = logger or logging.getLogger("vigia_eew.notify.bridge")
 
-    def publicar(self, ev: SeismicEvent) -> None:
-        """Publica un evento desde el hilo asyncio (thread-safe)."""
-        self._cola.put_nowait(ev)
+    def publish(self, ev: SeismicEvent) -> None:
+        """Publishes an event from the asyncio thread (thread-safe)."""
+        self._queue.put_nowait(ev)
 
-    def drenar(self) -> None:
-        """Vacía la cola entregando cada evento al sink (en el hilo de Tk)."""
+    def drain(self) -> None:
+        """Empties the queue delivering each event to the sink (on the Tk thread)."""
         while True:
             try:
-                ev = self._cola.get_nowait()
+                ev = self._queue.get_nowait()
             except _stdqueue.Empty:
                 return
             self._sink(ev)
 
-    def iniciar_sondeo(self, widget: object, intervalo_ms: int = 100) -> None:
-        """Programa el drenado periódico de la cola en el bucle de Tkinter."""
+    def start_polling(self, widget: object, interval_ms: int = 100) -> None:
+        """Schedules periodic draining of the queue on the Tkinter loop."""
 
         def tick() -> None:
-            self.drenar()
-            widget.after(intervalo_ms, tick)  # type: ignore[attr-defined]
+            self.drain()
+            widget.after(interval_ms, tick)  # type: ignore[attr-defined]
 
-        widget.after(intervalo_ms, tick)  # type: ignore[attr-defined]
+        widget.after(interval_ms, tick)  # type: ignore[attr-defined]

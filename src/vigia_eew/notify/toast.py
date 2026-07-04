@@ -1,11 +1,12 @@
-"""Toast nativo del SO (RF-14, ADR-009 para asincronía).
+"""Native OS toast (RF-14, ADR-009 for asynchrony).
 
-`Toaster` envía una notificación nativa con `desktop-notifier` (Linux/Win/macOS) como
-canal **informativo y complementario** a la ventana superpuesta (la ventana es la que
-garantiza el "no descartable"; el toast puede silenciarse por "No molestar").
+`Toaster` sends a native notification with `desktop-notifier` (Linux/Win/macOS) as an
+**informative, complementary** channel to the overlay window (the window is what
+guarantees "undismissable"; the toast can be silenced by "Do Not Disturb").
 
-La urgencia escala con la severidad. El `notifier` se inyecta para pruebas; un fallo del
-toast (p. ej. DBus caído) **nunca** interrumpe la alerta: se registra y se continúa (RNF-03).
+Urgency scales with severity. The `notifier` is injected for testing; a toast failure
+(e.g. DBus down) **never** interrupts the alert: it is logged and execution continues
+(RNF-03).
 """
 
 from __future__ import annotations
@@ -15,62 +16,65 @@ from typing import Any, Protocol, cast
 
 from desktop_notifier import Urgency
 
-from ..models import SeismicEvent, Severidad
-from .presentacion import ZONA_VENEZUELA, texto_toast
+from ..i18n import DEFAULT_LOCALE
+from ..models import SeismicEvent, SeverityLevel
+from .presentation import VENEZUELA_ZONE, toast_text
 
-_URGENCIA_POR_SEVERIDAD: dict[Severidad, Urgency] = {
+_URGENCY_BY_SEVERITY: dict[SeverityLevel, Urgency] = {
     "info": Urgency.Low,
-    "atencion": Urgency.Normal,
-    "critico": Urgency.Critical,
+    "warning": Urgency.Normal,
+    "critical": Urgency.Critical,
 }
 
 
 class _Notifier(Protocol):
-    """Interfaz mínima de `desktop_notifier.DesktopNotifier` que usamos."""
+    """Minimal interface of `desktop_notifier.DesktopNotifier` that we use."""
 
     async def send(self, *, title: str, message: str, urgency: Urgency, **kwargs: Any) -> Any: ...
 
 
-def _urgencia(severidad: Severidad) -> Urgency:
-    return _URGENCIA_POR_SEVERIDAD[severidad]
+def _urgency(severity: SeverityLevel) -> Urgency:
+    return _URGENCY_BY_SEVERITY[severity]
 
 
 class Toaster:
-    """Emite toasts nativos a partir de eventos sísmicos (RF-14)."""
+    """Emits native toasts from seismic events (RF-14)."""
 
     def __init__(
         self,
         *,
         notifier: _Notifier | None = None,
         app_name: str = "Vigía-eew",
-        zona: str = ZONA_VENEZUELA,
-        nombre_referencia: str = "referencia",
+        zone: str = VENEZUELA_ZONE,
+        reference_name: str = "reference",
+        locale_code: str = DEFAULT_LOCALE,
         logger: logging.Logger | None = None,
     ) -> None:
         self._notifier = notifier
         self._app_name = app_name
-        self._zona = zona
-        self._nombre_referencia = nombre_referencia
+        self._zone = zone
+        self._reference_name = reference_name
+        self._locale = locale_code
         self._log = logger or logging.getLogger("vigia_eew.notify.toast")
 
-    def _obtener_notifier(self) -> _Notifier:
+    def _get_notifier(self) -> _Notifier:
         notifier = self._notifier
         if notifier is None:
             from desktop_notifier import DesktopNotifier
 
-            # `cast`: la clase real usa args posicionales; estructuralmente equivalente.
+            # `cast`: the real class uses positional args; structurally equivalent.
             notifier = cast(_Notifier, DesktopNotifier(app_name=self._app_name))
             self._notifier = notifier
         return notifier
 
-    async def notificar(self, ev: SeismicEvent) -> None:
-        """Envía el toast del evento; aísla cualquier fallo del backend (RNF-03)."""
+    async def notify(self, ev: SeismicEvent) -> None:
+        """Sends the event's toast; isolates any backend failure (RNF-03)."""
         try:
-            titulo, mensaje = texto_toast(
-                ev, zona=self._zona, nombre_referencia=self._nombre_referencia
+            title, message = toast_text(
+                ev, zone=self._zone, reference_name=self._reference_name, locale_code=self._locale
             )
-            await self._obtener_notifier().send(
-                title=titulo, message=mensaje, urgency=_urgencia(ev.severidad)
+            await self._get_notifier().send(
+                title=title, message=message, urgency=_urgency(ev.severity)
             )
-        except Exception as exc:  # noqa: BLE001 - el toast nunca rompe la alerta
-            self._log.warning("toast_fallo detalle=%s", exc)
+        except Exception as exc:  # noqa: BLE001 - the toast never breaks the alert
+            self._log.warning("toast_failed detail=%s", exc)

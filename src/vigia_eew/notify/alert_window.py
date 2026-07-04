@@ -1,17 +1,19 @@
-"""Ventana de alerta superpuesta no descartable en Tkinter (RF-15..RF-19, ADR-003).
+"""Undismissable overlay alert window in Tkinter (RF-15..RF-19, ADR-003).
 
-La ventana es el corazón del "imposible de ignorar":
+The window is the heart of "impossible to ignore":
 
-  - **Siempre al frente y sin decoración** (RF-15): `-topmost` + `overrideredirect`,
-    overlay grande centrado (o pantalla completa según config).
-  - **Toma el foco y se re-eleva** si lo pierde (RF-16): `focus_force` + `lift`,
-    re-elevación al evento `<FocusOut>`.
-  - **No se cierra por accidente** (RF-19): la X (`WM_DELETE_WINDOW`), `Escape` y el
-    clic fuera no la cierran; solo el botón **RECONOCIDO** (cierre explícito).
+  - **Always on top and undecorated** (RF-15): `-topmost` + `overrideredirect`, a
+    large centered overlay (or fullscreen depending on config).
+  - **Takes focus and re-raises itself** if it loses it (RF-16): `focus_force` +
+    `lift`, re-raising on the `<FocusOut>` event.
+  - **Does not close by accident** (RF-19): the X (`WM_DELETE_WINDOW`), `Escape`, and
+    clicking outside do not close it; only the **ACKNOWLEDGED** button does (an
+    explicit close).
 
-La *política* no descartable (`configurar_no_descartable`) y `tomar_foco` se aíslan como
-funciones para poder probarlas con una raíz falsa, sin pantalla. La construcción del árbol
-de widgets usa Tkinter real y se valida con un smoke opt-in (`VIGIA_GUI_TESTS=1`).
+The undismissable *policy* (`configure_undismissable`) and `take_focus` are isolated
+as functions so they can be tested with a fake root, without a screen. Building the
+widget tree uses real Tkinter and is validated with an opt-in smoke test
+(`VIGIA_GUI_TESTS=1`).
 """
 
 from __future__ import annotations
@@ -21,143 +23,150 @@ import tkinter as tk
 from collections.abc import Callable
 from typing import Any
 
-from .presentacion import DatosAlerta, color_severidad
+from ..i18n import DEFAULT_LOCALE, t
+from .presentation import AlertData, severity_color
 
-_ALTO_MINIMO = 620  # piso visual (ADR-003); el alto real crece si el contenido lo exige
-
-
-def tomar_foco(raiz: Any) -> None:
-    """Eleva la ventana y le fuerza el foco (RF-16)."""
-    raiz.lift()
-    raiz.focus_force()
+_MIN_HEIGHT = 620  # visual floor (ADR-003); the real height grows if content requires it
 
 
-def configurar_no_descartable(raiz: Any, *, al_cerrar_intento: Callable[[], None]) -> None:
-    """Aplica la política de ventana no descartable (RF-15, RF-16, RF-19)."""
-    raiz.overrideredirect(True)  # sin barra de título ni botones de ventana
-    raiz.attributes("-topmost", True)  # siempre por encima del resto
-    raiz.protocol("WM_DELETE_WINDOW", al_cerrar_intento)  # la X no cierra
-    raiz.bind("<Escape>", lambda _e: "break")  # Escape no cierra
-    raiz.bind("<FocusOut>", lambda _e: tomar_foco(raiz))  # re-elevar si pierde foco
+def take_focus(root: Any) -> None:
+    """Raises the window and forces focus onto it (RF-16)."""
+    root.lift()
+    root.focus_force()
+
+
+def configure_undismissable(root: Any, *, on_close_attempt: Callable[[], None]) -> None:
+    """Applies the undismissable window policy (RF-15, RF-16, RF-19)."""
+    root.overrideredirect(True)  # no title bar or window buttons
+    root.attributes("-topmost", True)  # always above everything else
+    root.protocol("WM_DELETE_WINDOW", on_close_attempt)  # the X does not close it
+    root.bind("<Escape>", lambda _e: "break")  # Escape does not close it
+    root.bind("<FocusOut>", lambda _e: take_focus(root))  # re-raise if it loses focus
 
 
 class AlertWindow:
-    """Ventana de alerta para un evento; solo se cierra con RECONOCIDO (RF-19)."""
+    """Alert window for an event; only closes via ACKNOWLEDGED (RF-19)."""
 
     def __init__(
         self,
-        datos: DatosAlerta,
+        data: AlertData,
         *,
-        al_reconocer: Callable[[], None],
-        raiz: Any = None,
-        pantalla_completa: bool = False,
-        construir: bool = True,
+        on_acknowledge: Callable[[], None],
+        root: Any = None,
+        fullscreen: bool = False,
+        locale: str = DEFAULT_LOCALE,
+        build: bool = True,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._datos = datos
-        self._al_reconocer = al_reconocer
-        self._raiz: Any = raiz if raiz is not None else tk.Tk()
-        self._pantalla_completa = pantalla_completa
-        self._reconocido = False
+        self._data = data
+        self._on_acknowledge = on_acknowledge
+        self._root: Any = root if root is not None else tk.Tk()
+        self._fullscreen = fullscreen
+        self._locale = locale
+        self._acknowledged = False
         self._log = logger or logging.getLogger("vigia_eew.notify.alert_window")
-        if construir:
-            self._construir()
+        if build:
+            self._build()
 
     @property
-    def raiz(self) -> Any:
-        return self._raiz
+    def root(self) -> Any:
+        return self._root
 
-    def _intento_cierre(self) -> None:
-        """Intento de cierre por la X/Escape: se ignora deliberadamente (RF-19)."""
-        self._log.info("alerta_cierre_ignorado")
+    def _close_attempt(self) -> None:
+        """Attempt to close via X/Escape: deliberately ignored (RF-19)."""
+        self._log.info("alert_close_ignored")
 
-    def reconocer(self) -> None:
-        """Reconoce la alerta (único cierre válido) y destruye la ventana (CU-5)."""
-        if self._reconocido:
+    def acknowledge(self) -> None:
+        """Acknowledges the alert (the only valid close) and destroys the window (CU-5)."""
+        if self._acknowledged:
             return
-        self._reconocido = True
-        self._al_reconocer()
-        self._raiz.destroy()
+        self._acknowledged = True
+        self._on_acknowledge()
+        self._root.destroy()
 
-    def actualizar(self, datos: DatosAlerta) -> None:
-        """Refresca los datos mostrados sin recrear la ventana (RF-11)."""
-        self._datos = datos
-        if not self._reconocido:
-            self._construir()
+    def refresh(self, data: AlertData) -> None:
+        """Refreshes the displayed data without recreating the window (RF-11)."""
+        self._data = data
+        if not self._acknowledged:
+            self._build()
 
-    # --- Construcción de la UI (Tkinter real) ---
+    # --- UI construction (real Tkinter) ---
 
-    def _construir(self) -> None:
-        raiz = self._raiz
-        color = color_severidad(self._datos.severidad)
-        raiz.title("Vigía-eew · ALERTA SÍSMICA")
-        configurar_no_descartable(raiz, al_cerrar_intento=self._intento_cierre)
-        if self._pantalla_completa:
-            raiz.attributes("-fullscreen", True)
-            ancho_ventana = raiz.winfo_screenwidth()
+    def _build(self) -> None:
+        root = self._root
+        color = severity_color(self._data.severity)
+        root.title(f"Vigía-eew · {t('seismic_alert_title', self._locale)}")
+        configure_undismissable(root, on_close_attempt=self._close_attempt)
+        if self._fullscreen:
+            root.attributes("-fullscreen", True)
+            window_width = root.winfo_screenwidth()
         else:
-            ancho_ventana = 900
-        raiz.configure(bg=color)
+            window_width = 900
+        root.configure(bg=color)
 
-        for hijo in list(raiz.winfo_children()):
-            hijo.destroy()
+        for child in list(root.winfo_children()):
+            child.destroy()
 
         tk.Label(
-            raiz, text="⚠ ALERTA SÍSMICA", font=("Helvetica", 28, "bold"), fg="white", bg=color
+            root,
+            text=t("seismic_alert_title", self._locale),
+            font=("Helvetica", 28, "bold"),
+            fg="white",
+            bg=color,
         ).pack(pady=(28, 6))
         tk.Label(
-            raiz, text=self._datos.magnitud, font=("Helvetica", 110, "bold"), fg="white", bg=color
+            root, text=self._data.magnitude, font=("Helvetica", 110, "bold"), fg="white", bg=color
         ).pack(pady=4)
 
-        detalle = (
-            f"{self._datos.lugar}\n"
-            f"{self._datos.distancia}\n"
-            f"Profundidad: {self._datos.profundidad}\n"
-            f"Hora local (Venezuela): {self._datos.hora_local}\n"
-            f"Fuente: {self._datos.fuente}"
+        details = (
+            f"{self._data.place}\n"
+            f"{self._data.distance}\n"
+            f"{t('depth_label', self._locale)}: {self._data.depth}\n"
+            f"{t('local_time_label', self._locale)}: {self._data.local_time}\n"
+            f"{t('source_label', self._locale)}: {self._data.source}"
         )
-        # `wraplength` es obligatorio aquí: sin él, una línea más ancha que la ventana
-        # (p. ej. "Hora local (Venezuela): ...") se recorta contra el borde en vez de
-        # bajar de línea, porque la ventana tiene tamaño fijo y no es redimensionable
+        # `wraplength` is mandatory here: without it, a line wider than the window
+        # (e.g. "Local time (Venezuela): ...") gets clipped against the edge instead
+        # of wrapping, because the window has a fixed size and is not resizable
         # (overrideredirect, RF-15).
         tk.Label(
-            raiz,
-            text=detalle,
+            root,
+            text=details,
             font=("Helvetica", 22),
             fg="white",
             bg=color,
             justify="center",
-            wraplength=ancho_ventana - 80,
+            wraplength=window_width - 80,
         ).pack(pady=18)
 
         tk.Button(
-            raiz,
-            text="RECONOCIDO",
+            root,
+            text=t("acknowledged_button", self._locale),
             font=("Helvetica", 24, "bold"),
             fg=color,
             bg="white",
             activeforeground=color,
             padx=40,
             pady=16,
-            command=self.reconocer,
+            command=self.acknowledge,
         ).pack(pady=(20, 30))
 
-        if not self._pantalla_completa:
-            # Alto dinámico: calcularlo del contenido ya empaquetado evita que una
-            # línea de más (p. ej. `lugar` largo que envuelve por `wraplength`) quede
-            # recortada contra un alto fijo — la ventana no es redimensionable ni
-            # scrolleable (overrideredirect, RF-15), así que el alto debe alcanzar
-            # siempre para todo el contenido real.
-            raiz.update_idletasks()
-            alto_ventana = max(_ALTO_MINIMO, raiz.winfo_reqheight())
-            self._centrar(ancho_ventana, alto_ventana)
+        if not self._fullscreen:
+            # Dynamic height: computing it from the already-packed content avoids an
+            # extra line (e.g. a long `place` that wraps due to `wraplength`) getting
+            # clipped against a fixed height — the window is neither resizable nor
+            # scrollable (overrideredirect, RF-15), so the height must always
+            # accommodate all the actual content.
+            root.update_idletasks()
+            window_height = max(_MIN_HEIGHT, root.winfo_reqheight())
+            self._center(window_width, window_height)
 
-        tomar_foco(raiz)
+        take_focus(root)
 
-    def _centrar(self, ancho: int, alto: int) -> None:
-        raiz = self._raiz
-        pantalla_w = raiz.winfo_screenwidth()
-        pantalla_h = raiz.winfo_screenheight()
-        x = (pantalla_w - ancho) // 2
-        y = (pantalla_h - alto) // 2
-        raiz.geometry(f"{ancho}x{alto}+{x}+{y}")
+    def _center(self, width: int, height: int) -> None:
+        root = self._root
+        screen_w = root.winfo_screenwidth()
+        screen_h = root.winfo_screenheight()
+        x = (screen_w - width) // 2
+        y = (screen_h - height) // 2
+        root.geometry(f"{width}x{height}+{x}+{y}")

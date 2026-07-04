@@ -1,4 +1,4 @@
-"""Pruebas del ingestor WebSocket EMSC (RF-01, RF-02, RF-03, RF-04)."""
+"""Tests for the EMSC WebSocket ingestor (RF-01, RF-02, RF-03, RF-04)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ import json
 
 import pytest
 
-from vigia_eew.config import FuenteEMSC
-from vigia_eew.estado_agente import EstadoAgente
+from vigia_eew.agent_state import AgentState
+from vigia_eew.config import EMSCSource
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.ws_emsc import WSIngestor
 
-# Mensaje EMSC de ejemplo (API-SPEC §1.3).
-_MENSAJE_EMSC = {
+# Sample EMSC message (API-SPEC §1.3).
+_EMSC_MESSAGE = {
     "action": "create",
     "data": {
         "type": "Feature",
@@ -34,14 +34,14 @@ _MENSAJE_EMSC = {
 }
 
 
-# --- Dobles de prueba para el transporte WebSocket ---
+# --- Test doubles for the WebSocket transport ---
 
 
 class _FakeWS:
-    """Conexión WS falsa: context manager + iterador asíncrono de mensajes."""
+    """Fake WS connection: context manager + async iterator of messages."""
 
-    def __init__(self, mensajes, *, error=None):
-        self._mensajes = list(mensajes)
+    def __init__(self, messages, *, error=None):
+        self._messages = list(messages)
         self._error = error
 
     async def __aenter__(self):
@@ -54,166 +54,166 @@ class _FakeWS:
         return self
 
     async def __anext__(self):
-        if self._mensajes:
-            return self._mensajes.pop(0)
+        if self._messages:
+            return self._messages.pop(0)
         if self._error is not None:
             raise self._error
         raise StopAsyncIteration
 
 
 class _FakeConnect:
-    """Factoría de conexión inyectable que registra los kwargs (keepalive)."""
+    """Injectable connection factory that records the kwargs (keepalive)."""
 
-    def __init__(self, conexiones):
-        self._conexiones = list(conexiones)
-        self.llamadas = []
+    def __init__(self, connections):
+        self._connections = list(connections)
+        self.calls = []
 
     def __call__(self, url, **kw):
-        self.llamadas.append((url, kw))
-        return self._conexiones.pop(0)
+        self.calls.append((url, kw))
+        return self._connections.pop(0)
 
 
-class _SleepControlado:
-    """Sleep falso que registra esperas y corta el bucle tras N llamadas."""
+class _ControlledSleep:
+    """Fake sleep that records waits and breaks the loop after N calls."""
 
-    def __init__(self, romper_en):
-        self.esperas = []
-        self._romper_en = romper_en
+    def __init__(self, break_at):
+        self.waits = []
+        self._break_at = break_at
 
-    async def __call__(self, segundos):
-        self.esperas.append(segundos)
-        if len(self.esperas) >= self._romper_en:
+    async def __call__(self, seconds):
+        self.waits.append(seconds)
+        if len(self.waits) >= self._break_at:
             raise asyncio.CancelledError
 
 
-# --- Parseo de mensajes ---
+# --- Message parsing ---
 
 
-def _ingestor(salida=None, **kw):
-    return WSIngestor(FuenteEMSC(), salida or asyncio.Queue(), **kw)
+def _ingestor(output=None, **kw):
+    return WSIngestor(EMSCSource(), output or asyncio.Queue(), **kw)
 
 
-def test_parsear_mensaje_valido():
+def test_parse_valid_message():
     ing = _ingestor()
-    msg = ing._parsear(json.dumps(_MENSAJE_EMSC))
+    msg = ing._parse(json.dumps(_EMSC_MESSAGE))
     assert isinstance(msg, RawMessage)
-    assert msg.fuente == "EMSC"
+    assert msg.source == "EMSC"
     assert msg.action == "create"
     assert msg.feature["properties"]["unid"] == "20260628_0000123"
 
 
-def test_parsear_action_update():
+def test_parse_action_update():
     ing = _ingestor()
-    crudo = dict(_MENSAJE_EMSC, action="update")
-    msg = ing._parsear(json.dumps(crudo))
+    raw = dict(_EMSC_MESSAGE, action="update")
+    msg = ing._parse(json.dumps(raw))
     assert msg is not None
     assert msg.action == "update"
 
 
-def test_parsear_acepta_bytes():
+def test_parse_accepts_bytes():
     ing = _ingestor()
-    msg = ing._parsear(json.dumps(_MENSAJE_EMSC).encode("utf-8"))
-    assert msg is not None and msg.fuente == "EMSC"
+    msg = ing._parse(json.dumps(_EMSC_MESSAGE).encode("utf-8"))
+    assert msg is not None and msg.source == "EMSC"
 
 
-def test_parsear_json_invalido_devuelve_none():
+def test_parse_invalid_json_returns_none():
     ing = _ingestor()
-    assert ing._parsear("{ no es json ") is None
+    assert ing._parse("{ not json ") is None
 
 
-def test_parsear_sin_data_devuelve_none():
+def test_parse_without_data_returns_none():
     ing = _ingestor()
-    assert ing._parsear(json.dumps({"action": "create"})) is None
+    assert ing._parse(json.dumps({"action": "create"})) is None
 
 
-# --- Bucle de conexión / reconexión ---
+# --- Connect / reconnect loop ---
 
 
-async def test_recibe_y_encola_evento():
-    salida: asyncio.Queue[RawMessage] = asyncio.Queue()
-    connect = _FakeConnect([_FakeWS([json.dumps(_MENSAJE_EMSC)])])
-    sleep = _SleepControlado(romper_en=1)  # corta al primer backoff (tras agotar mensajes)
-    ing = _ingestor(salida, connect=connect, sleep=sleep)
+async def test_receives_and_enqueues_event():
+    output: asyncio.Queue[RawMessage] = asyncio.Queue()
+    connect = _FakeConnect([_FakeWS([json.dumps(_EMSC_MESSAGE)])])
+    sleep = _ControlledSleep(break_at=1)  # breaks on the first backoff (once messages run out)
+    ing = _ingestor(output, connect=connect, sleep=sleep)
 
     with pytest.raises(asyncio.CancelledError):
         await ing.run()
 
-    msg = salida.get_nowait()
-    assert msg.fuente == "EMSC" and msg.action == "create"
+    msg = output.get_nowait()
+    assert msg.source == "EMSC" and msg.action == "create"
 
 
-async def test_pasa_keepalive_a_connect():
-    cfg = FuenteEMSC(ping_interval_s=15, ping_timeout_s=20)
+async def test_passes_keepalive_to_connect():
+    cfg = EMSCSource(ping_interval_s=15, ping_timeout_s=20)
     connect = _FakeConnect([_FakeWS([])])
-    sleep = _SleepControlado(romper_en=1)
+    sleep = _ControlledSleep(break_at=1)
     ing = WSIngestor(cfg, asyncio.Queue(), connect=connect, sleep=sleep)
 
     with pytest.raises(asyncio.CancelledError):
         await ing.run()
 
-    _, kwargs = connect.llamadas[0]
+    _, kwargs = connect.calls[0]
     assert kwargs["ping_interval"] == 15
     assert kwargs["ping_timeout"] == 20
 
 
-async def test_reconecta_tras_caida():
-    # 1ª conexión cae con error; debe reconectar (2º connect) tras un backoff.
+async def test_reconnects_after_drop():
+    # 1st connection drops with an error; it must reconnect (2nd connect) after a backoff.
     connect = _FakeConnect(
         [
-            _FakeWS([], error=ConnectionResetError("caída")),
-            _FakeWS([json.dumps(_MENSAJE_EMSC)]),
+            _FakeWS([], error=ConnectionResetError("dropped")),
+            _FakeWS([json.dumps(_EMSC_MESSAGE)]),
         ]
     )
-    sleep = _SleepControlado(romper_en=2)  # permite una reconexión, corta en el 2º backoff
-    salida: asyncio.Queue[RawMessage] = asyncio.Queue()
-    ing = _ingestor(salida, connect=connect, sleep=sleep)
+    sleep = _ControlledSleep(break_at=2)  # allows one reconnect, breaks on the 2nd backoff
+    output: asyncio.Queue[RawMessage] = asyncio.Queue()
+    ing = _ingestor(output, connect=connect, sleep=sleep)
 
     with pytest.raises(asyncio.CancelledError):
         await ing.run()
 
-    assert len(connect.llamadas) == 2  # reconectó
-    assert salida.get_nowait().action == "create"  # 2ª conexión sí entregó
+    assert len(connect.calls) == 2  # reconnected
+    assert output.get_nowait().action == "create"  # 2nd connection did deliver
 
 
-async def test_backoff_crece_entre_reintentos():
-    # Sin jitter, las esperas deben crecer: 1 s, luego 2 s.
+async def test_backoff_grows_between_retries():
+    # Without jitter, the waits must grow: 1 s, then 2 s.
     connect = _FakeConnect([_FakeWS([]), _FakeWS([]), _FakeWS([])])
-    sleep = _SleepControlado(romper_en=2)
+    sleep = _ControlledSleep(break_at=2)
     ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, jitter=False)
 
     with pytest.raises(asyncio.CancelledError):
         await ing.run()
 
-    assert sleep.esperas == [1.0, 2.0]
+    assert sleep.waits == [1.0, 2.0]
 
 
-# --- EstadoAgente: conectado/reconectando (RF-34) ---
+# --- AgentState: connected/reconnecting (RF-34) ---
 
 
-async def test_conectar_marca_estado_conectado():
-    estado = EstadoAgente()
-    # Cancelado mientras sigue conectado (no cae): el estado no debe pasar a
-    # "reconectando" (ese camino solo se toca si la conexión realmente se cierra).
+async def test_connecting_marks_state_connected():
+    state = AgentState()
+    # Cancelled while still connected (no drop): the state must not switch to
+    # "reconnecting" (that path is only hit if the connection actually closes).
     connect = _FakeConnect(
-        [_FakeWS([json.dumps(_MENSAJE_EMSC)], error=asyncio.CancelledError())]
+        [_FakeWS([json.dumps(_EMSC_MESSAGE)], error=asyncio.CancelledError())]
     )
-    sleep = _SleepControlado(romper_en=1)
-    ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, estado=estado)
+    sleep = _ControlledSleep(break_at=1)
+    ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, state=state)
 
     with pytest.raises(asyncio.CancelledError):
         await ing.run()
 
-    assert estado.ws_conectado is True
+    assert state.ws_connected is True
 
 
-async def test_caida_marca_estado_reconectando():
-    estado = EstadoAgente()
-    estado.marcar_conectado()
-    connect = _FakeConnect([_FakeWS([], error=ConnectionResetError("caída")), _FakeWS([])])
-    sleep = _SleepControlado(romper_en=1)
-    ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, estado=estado)
+async def test_drop_marks_state_reconnecting():
+    state = AgentState()
+    state.mark_connected()
+    connect = _FakeConnect([_FakeWS([], error=ConnectionResetError("dropped")), _FakeWS([])])
+    sleep = _ControlledSleep(break_at=1)
+    ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, state=state)
 
     with pytest.raises(asyncio.CancelledError):
         await ing.run()
 
-    assert estado.ws_conectado is False
+    assert state.ws_connected is False

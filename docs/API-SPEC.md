@@ -1,42 +1,43 @@
-# API Spec — Contratos de fuentes y evento normalizado
+# API Spec — Source Contracts and Normalized Event
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Documento | Contrato de las fuentes que consume Vigía + esquema interno normalizado |
-| Versión | 1.0 (borrador para revisión) |
-| Estado | 🟡 Pendiente de aprobación |
-| Relacionado | `PRD.md` (RF-01..RF-11), `DATA-MODEL.md`, `ARCHITECTURE.md` |
+| Document | Contract of the sources consumed by Vigía + internal normalized schema |
+| Version | 1.0 (draft for review) |
+| Status | 🟡 Pending approval |
+| Related | `PRD.md` (RF-01..RF-11), `DATA-MODEL.md`, `ARCHITECTURE.md` |
 
-> Vigía **consume** dos contratos externos (entrada) y define **un** contrato interno (el evento
-> normalizado) que el resto del sistema produce y consume. No expone ninguna API de red propia en
-> v1. Los contratos externos se verificaron contra los endpoints en vivo el 2026-06-28.
+> Vigía **consumes** two external contracts (input) and defines **one** internal contract (the
+> normalized event) that the rest of the system produces and consumes. It does not expose any
+> network API of its own in v1. The external contracts were verified against the live endpoints
+> on 2026-06-28.
 
 ---
 
-## 1. Fuente PRIMARIA — WebSocket EMSC (push real)
+## 1. PRIMARY source — EMSC WebSocket (real push)
 
-### 1.1 Endpoint y transporte
+### 1.1 Endpoint and transport
 - **URL**: `wss://www.seismicportal.eu/standing_order/websocket`
-- **Transporte**: WebSocket (RFC 6455). Servido también vía SockJS (`/standing_order`), pero el cliente Python usa el endpoint **`/websocket`** directo con la librería `websockets`.
-- **Autenticación**: ninguna (público, gratuito).
-- **Dirección**: solo servidor→cliente. El cliente no envía mensajes de datos; solo frames de control (ping/pong).
+- **Transport**: WebSocket (RFC 6455). Also served via SockJS (`/standing_order`), but the Python client uses the direct **`/websocket`** endpoint with the `websockets` library.
+- **Authentication**: none (public, free).
+- **Direction**: server→client only. The client does not send data messages; only control frames (ping/pong).
 
-### 1.2 Keepalive (OBLIGATORIO) — RF-02
-El socket muere **en silencio** sin keepalive. Debe enviarse un **ping cada ~15 s**
-(`PING_INTERVAL = 15`, confirmado en el ejemplo oficial de EMSC). Con la librería `websockets`:
+### 1.2 Keepalive (MANDATORY) — RF-02
+The socket dies **silently** without keepalive. A **ping every ~15 s** must be sent
+(`PING_INTERVAL = 15`, confirmed in the official EMSC example). With the `websockets` library:
 
 ```python
 async with websockets.connect(
     "wss://www.seismicportal.eu/standing_order/websocket",
-    ping_interval=15,   # envía ping cada 15 s
-    ping_timeout=20,    # cierra si no hay pong → dispara reconexión
+    ping_interval=15,   # sends a ping every 15 s
+    ping_timeout=20,    # closes if no pong → triggers reconnection
 ) as ws:
     async for raw in ws:
         ...
 ```
 
-### 1.3 Formato del mensaje
-Cada mensaje es un **texto JSON**. Estructura confirmada:
+### 1.3 Message format
+Each message is **JSON text**. Confirmed structure:
 
 ```json
 {
@@ -62,66 +63,66 @@ Cada mensaje es un **texto JSON**. Estructura confirmada:
 }
 ```
 
-| Campo del mensaje | Tipo | Significado | Uso en Vigía |
+| Message field | Type | Meaning | Use in Vigía |
 |---|---|---|---|
-| `action` | enum `create` \| `update` | Evento insertado o corregido | `create`→posible alerta nueva; `update`→actualizar sin re-alertar (RF-11) |
-| `data` | Feature GeoJSON | El evento | Fuente de la normalización |
-| `data.properties.unid` | string | **Identificador único** del evento | `id` interno; clave de dedup intra-EMSC |
-| `data.properties.mag` | number | Magnitud | `magnitud` |
-| `data.properties.magtype` | string (**minúscula**) | Tipo de magnitud (`mw`, `mb`, `ml`…) | `magType` (⚠️ se normaliza el nombre) |
-| `data.properties.lat` / `lon` | number | Coordenadas | `lat` / `lon` |
-| `data.properties.depth` | number | Profundidad (km) | `profundidad_km` |
-| `data.properties.time` | ISO-8601 UTC | Tiempo de origen | `hora_utc` |
-| `data.properties.lastupdate` | ISO-8601 UTC | Última actualización | control de versión del evento |
-| `data.properties.auth` | string | Agencia autora (INGV, GFZ…) | metadato/auditoría |
-| `data.properties.flynn_region` | string | Región Flynn-Engdahl | `region`/`lugar` |
+| `action` | enum `create` \| `update` | Event inserted or corrected | `create`→possible new alert; `update`→update without re-alerting (RF-11) |
+| `data` | GeoJSON Feature | The event | Source for normalization |
+| `data.properties.unid` | string | **Unique identifier** of the event | internal `id`; intra-EMSC dedup key |
+| `data.properties.mag` | number | Magnitude | `magnitude` |
+| `data.properties.magtype` | string (**lowercase**) | Magnitude type (`mw`, `mb`, `ml`…) | `magType` (⚠️ name is normalized) |
+| `data.properties.lat` / `lon` | number | Coordinates | `lat` / `lon` |
+| `data.properties.depth` | number | Depth (km) | `depth_km` |
+| `data.properties.time` | ISO-8601 UTC | Origin time | `time_utc` |
+| `data.properties.lastupdate` | ISO-8601 UTC | Last update | event version control |
+| `data.properties.auth` | string | Authoring agency (INGV, GFZ…) | metadata/audit |
+| `data.properties.flynn_region` | string | Flynn-Engdahl region | `region`/`place` |
 
-> ⚠️ **Particularidades**: EMSC usa `magtype` (minúscula); las coordenadas en `geometry.coordinates`
-> siguen el orden GeoJSON **[lon, lat, depth]**. Se prefieren los campos de `properties` (`lat`,
-> `lon`, `depth`) por claridad, usando `geometry` como verificación.
+> ⚠️ **Quirks**: EMSC uses `magtype` (lowercase); the coordinates in `geometry.coordinates`
+> follow the GeoJSON order **[lon, lat, depth]**. The `properties` fields (`lat`,
+> `lon`, `depth`) are preferred for clarity, using `geometry` as verification.
 
-### 1.4 Comportamiento y límites conocidos
-- El WS arrastra eventos de **muchas agencias** (incluye sismos pequeños globales) → el filtrado geográfico/magnitud es del lado del cliente (RF-12).
-- **PUEDE PERDER MENSAJES** (timeouts y ráfagas documentadas). Por eso existe el respaldo USGS (RF-05).
-- Puede emitir varios `update` para un mismo `unid` (refinamiento de magnitud/localización).
-- No hay *replay* de historial al reconectar: lo perdido durante una caída se recupera por USGS.
+### 1.4 Behavior and known limitations
+- The WS carries events from **many agencies** (including small global earthquakes) → geographic/magnitude filtering happens client-side (RF-12).
+- **CAN LOSE MESSAGES** (documented timeouts and bursts). This is why the USGS fallback exists (RF-05).
+- May emit several `update`s for the same `unid` (magnitude/location refinement).
+- There is no history *replay* on reconnect: anything lost during an outage is recovered via USGS.
 
 ---
 
-## 2. Fuente de RESPALDO — USGS FDSN (polling de baja frecuencia)
+## 2. FALLBACK source — USGS FDSN (low-frequency polling)
 
 ### 2.1 Endpoint
 ```
 GET https://earthquake.usgs.gov/fdsnws/event/1/query
 ```
-**Único fin**: (a) recuperar eventos regionales que el WS dejó pasar y (b) cubrir sismos
-locales pequeños. **No** es un segundo bucle del mismo peso que el WS. Frecuencia: **cada 60 s** (RF-05).
+**Sole purpose**: (a) recover regional events the WS missed and (b) cover small
+local earthquakes. It is **not** a second loop of the same weight as the WS. Frequency: **every 60 s** (RF-05).
 
-### 2.2 Parámetros de consulta
-| Parámetro | Valor por defecto | Notas |
+### 2.2 Query parameters
+| Parameter | Default value | Notes |
 |---|---|---|
-| `format` | `geojson` | Formato de salida |
-| `latitude` | `10.4806` | Punto de referencia (Caracas) — de config |
-| `longitude` | `-66.9036` | de config |
-| `maxradiuskm` | `300` | Radio de interés — de config |
-| `minmagnitude` | `2.5` | Magnitud mínima — de config (RF-12) |
-| `orderby` | `time` | Más recientes primero |
-| `eventtype` | `earthquake` | Solo sismos |
-| `starttime` / `updatedafter` | **cursor persistido** | "desde el último evento visto" (RF-06) |
-| `limit` | (opcional) | Acotar respuesta |
+| `format` | `geojson` | Output format |
+| `latitude` | `10.4806` | Reference point (Caracas) — from config |
+| `longitude` | `-66.9036` | from config |
+| `maxradiuskm` | `300` | Radius of interest — from config |
+| `minmagnitude` | `2.5` | Minimum magnitude — from config (RF-12) |
+| `orderby` | `time` | Most recent first |
+| `eventtype` | `earthquake` | Earthquakes only |
+| `starttime` / `updatedafter` | **persisted cursor** | "since the last event seen" (RF-06) |
+| `limit` | (optional) | Limit response size |
 
-Ejemplo (verificado en vivo):
+Example (verified live):
 ```
 https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=10.4806&longitude=-66.9036&maxradiuskm=300&minmagnitude=2.5&orderby=time&eventtype=earthquake
 ```
 
-### 2.3 Estrategia de cursor (RF-06)
-- Se persiste el `time` (epoch ms) del evento **más reciente ya procesado**.
-- En cada poll se consulta con `starttime` = cursor (o `updatedafter` para capturar revisiones).
-- Tras procesar, se avanza el cursor al `time` máximo visto. El cursor sobrevive a reinicios (ver `DATA-MODEL.md`).
+### 2.3 Cursor strategy (RF-06)
+- The `time` (epoch ms) of the **most recently processed event** is persisted.
+- Each poll queries with `starttime` = cursor (or `updatedafter` to capture revisions).
+- After processing, the cursor advances to the maximum `time` seen. The cursor survives restarts (see `DATA-MODEL.md`).
 
-### 2.4 Formato de respuesta (GeoJSON `FeatureCollection`)
-Confirmado en vivo (recortado a campos relevantes):
+### 2.4 Response format (GeoJSON `FeatureCollection`)
+Confirmed live (trimmed to relevant fields):
 
 ```json
 {
@@ -151,135 +152,135 @@ Confirmado en vivo (recortado a campos relevantes):
 }
 ```
 
-| Campo | Tipo | Significado | Uso en Vigía |
+| Field | Type | Meaning | Use in Vigía |
 |---|---|---|---|
-| `id` (Feature) | string | Identificador USGS (`us6000t8sx`) | `id` interno; clave de dedup intra-USGS |
-| `properties.mag` | number | Magnitud | `magnitud` |
-| `properties.magType` | string (**camelCase**) | Tipo de magnitud | `magType` (⚠️ nombre distinto a EMSC) |
-| `properties.place` | string | Descripción del lugar | `lugar` |
-| `properties.time` | epoch **ms** | Tiempo de origen | `hora_utc` (convertir desde ms) |
-| `properties.updated` | epoch **ms** | Última revisión | cursor `updatedafter` |
-| `properties.status` | string | `reviewed`/`automatic` | metadato/calidad |
-| `geometry.coordinates` | [lon, lat, depth_km] | Posición | `lon`, `lat`, `profundidad_km` |
+| `id` (Feature) | string | USGS identifier (`us6000t8sx`) | internal `id`; intra-USGS dedup key |
+| `properties.mag` | number | Magnitude | `magnitude` |
+| `properties.magType` | string (**camelCase**) | Magnitude type | `magType` (⚠️ name differs from EMSC) |
+| `properties.place` | string | Place description | `place` |
+| `properties.time` | epoch **ms** | Origin time | `time_utc` (convert from ms) |
+| `properties.updated` | epoch **ms** | Last revision | `updatedafter` cursor |
+| `properties.status` | string | `reviewed`/`automatic` | metadata/quality |
+| `geometry.coordinates` | [lon, lat, depth_km] | Position | `lon`, `lat`, `depth_km` |
 
-> ⚠️ **Particularidades**: USGS usa `magType` (camelCase) y `time`/`updated` en **epoch milisegundos**;
-> EMSC usa `magtype` (minúscula) y `time` ISO-8601. El normalizador resuelve ambas (ver §3 y `DATA-MODEL.md`).
+> ⚠️ **Quirks**: USGS uses `magType` (camelCase) and `time`/`updated` in **epoch milliseconds**;
+> EMSC uses `magtype` (lowercase) and ISO-8601 `time`. The normalizer resolves both (see §3 and `DATA-MODEL.md`).
 
-### 2.5 Errores y resiliencia (RNF-03)
-| Situación | Manejo |
+### 2.5 Errors and resilience (RNF-03)
+| Situation | Handling |
 |---|---|
-| HTTP 429 (rate limit) | Respetar `Retry-After` si existe; backoff; el ciclo continúa. |
-| HTTP 5xx | Reintento en el siguiente ciclo; log de advertencia; no abortar. |
-| Timeout de red | `httpx` con timeout; saltar el ciclo; mantener cursor. |
-| JSON inválido / esquema inesperado | Validar con pydantic; descartar Feature inválida; log; no terminar. |
+| HTTP 429 (rate limit) | Respect `Retry-After` if present; back off; the cycle continues. |
+| HTTP 5xx | Retry on the next cycle; warning log; do not abort. |
+| Network timeout | `httpx` with timeout; skip the cycle; keep the cursor. |
+| Invalid JSON / unexpected schema | Validate with pydantic; discard invalid Feature; log; do not terminate. |
 
 ---
 
-## 3. Contrato INTERNO — Evento normalizado
+## 3. INTERNAL contract — Normalized event
 
-Ambas fuentes se normalizan a **un esquema común** (RF-07). Es el contrato que circula entre las
-capas (ingestión → dedup/filtro → notificación). Esquema canónico (detalle de tipos en `DATA-MODEL.md`):
+Both sources are normalized to **one common schema** (RF-07). This is the contract that flows between
+layers (ingestion → dedup/filter → notification). Canonical schema (type details in `DATA-MODEL.md`):
 
 ```json
 {
   "id": "us6000t8sx",
-  "fuente": "USGS",
-  "magnitud": 4.3,
+  "source": "USGS",
+  "magnitude": 4.3,
   "magType": "mb",
-  "lugar": "19 km WSW of Morón, Venezuela",
+  "place": "19 km WSW of Morón, Venezuela",
   "region": "NEAR COAST OF VENEZUELA",
   "lat": 10.4497,
   "lon": -68.3766,
-  "profundidad_km": 10.0,
-  "hora_utc": "2026-06-28T13:33:58.852Z",
-  "distancia_km": 162.4,
-  "severidad": "atencion",
+  "depth_km": 10.0,
+  "time_utc": "2026-06-28T13:33:58.852Z",
+  "distance_km": 162.4,
+  "severity": "warning",
   "lastupdate_utc": "2026-06-28T13:46:05.862Z"
 }
 ```
 
-### 3.1 Mapeo de campos por fuente
+### 3.1 Field mapping by source
 
-| Campo normalizado | EMSC (WS) | USGS (FDSN) |
+| Normalized field | EMSC (WS) | USGS (FDSN) |
 |---|---|---|
 | `id` | `properties.unid` | `id` (Feature) |
-| `fuente` | `"EMSC"` | `"USGS"` |
-| `magnitud` | `properties.mag` | `properties.mag` |
-| `magType` | `properties.magtype` (↑a minúscula consistente) | `properties.magType` |
-| `lugar` | — (usar `flynn_region`) | `properties.place` |
-| `region` | `properties.flynn_region` | derivar de `place` |
+| `source` | `"EMSC"` | `"USGS"` |
+| `magnitude` | `properties.mag` | `properties.mag` |
+| `magType` | `properties.magtype` (↑normalized to consistent lowercase) | `properties.magType` |
+| `place` | — (use `flynn_region`) | `properties.place` |
+| `region` | `properties.flynn_region` | derived from `place` |
 | `lat` | `properties.lat` | `geometry.coordinates[1]` |
 | `lon` | `properties.lon` | `geometry.coordinates[0]` |
-| `profundidad_km` | `properties.depth` | `geometry.coordinates[2]` |
-| `hora_utc` | `properties.time` (ISO-8601) | `properties.time` (epoch ms → ISO) |
+| `depth_km` | `properties.depth` | `geometry.coordinates[2]` |
+| `time_utc` | `properties.time` (ISO-8601) | `properties.time` (epoch ms → ISO) |
 | `lastupdate_utc` | `properties.lastupdate` | `properties.updated` (epoch ms → ISO) |
-| `distancia_km` | calculada (haversine vs punto ref.) | calculada |
-| `severidad` | calculada (por magnitud, config RF-13) | calculada |
+| `distance_km` | calculated (haversine vs. reference point) | calculated |
+| `severity` | calculated (by magnitude, config RF-13) | calculated |
 
-### 3.2 Invariantes del contrato interno
-- `id` es estable por fuente; la dedup **inter-fuente** usa la heurística (≤100 km, ≤90 s, ≤0.5 mag), no el `id` (RF-09).
-- `hora_utc` siempre en UTC; la conversión a hora local (America/Caracas) ocurre **solo en la capa de presentación** (RF-18, RNF-12).
-- `distancia_km` y `severidad` son **derivados**: se calculan en la normalización/filtro, nunca vienen de la fuente.
+### 3.2 Internal contract invariants
+- `id` is stable per source; **cross-source** dedup uses the heuristic (≤100 km, ≤90 s, ≤0.5 mag), not the `id` (RF-09).
+- `time_utc` is always in UTC; conversion to local time (America/Caracas) happens **only in the presentation layer** (RF-18, RNF-12).
+- `distance_km` and `severity` are **derived**: they are calculated during normalization/filtering, never coming from the source.
 
 ---
 
-## 4. Fuente auxiliar — Geolocalización por IP (RF-33)
+## 4. Auxiliary source — IP geolocation (RF-33)
 
-Usada **solo** cuando el usuario no define `[referencia]` en `config.toml`, para estimar un punto
-de referencia geográfico razonable sin intervención manual. Es de "mejor esfuerzo": cualquier fallo
-hace *fallback* al default (Caracas) sin bloquear el arranque (ver `geoloc.py`, `TECHNICAL-DESIGN.md`).
+Used **only** when the user does not define `[reference]` in `config.toml`, to estimate a reasonable
+geographic reference point without manual intervention. It is "best effort": any failure
+falls back to the default (Caracas) without blocking startup (see `geoloc.py`, `TECHNICAL-DESIGN.md`).
 
-| Elemento | Valor |
+| Element | Value |
 |---|---|
-| Endpoint | `https://ipapi.co/json/` (HTTPS, sin API key) |
-| Método | `GET`, sin parámetros (la IP de origen la infiere el servicio) |
+| Endpoint | `https://ipapi.co/json/` (HTTPS, no API key) |
+| Method | `GET`, no parameters (the source IP is inferred by the service) |
 | Timeout | 5 s |
-| Frecuencia | **Una vez** por instalación — el resultado se cachea en `state.json` (`ubicacion_detectada`) y no se repite en arranques siguientes salvo que se borre el estado o se defina `[referencia]` manual. |
+| Frequency | **Once** per installation — the result is cached in `state.json` (`detected_location`) and is not repeated on subsequent startups unless the state is deleted or a manual `[reference]` is defined. |
 
-### 4.1 Campos usados de la respuesta
+### 4.1 Fields used from the response
 
-| Campo JSON | Uso |
+| JSON field | Use |
 |---|---|
-| `latitude`, `longitude` | `Referencia.lat` / `Referencia.lon` (obligatorios; si faltan o no son numéricos, se descarta la respuesta) |
-| `city` | `Referencia.nombre`; si falta, se usa `country_name`; si tampoco, un nombre genérico |
+| `latitude`, `longitude` | `ReferencePoint.lat` / `ReferencePoint.lon` (required; if missing or non-numeric, the response is discarded) |
+| `city` | `ReferencePoint.name`; if missing, `country_name` is used; if that's also missing, a generic name |
 
-### 4.2 Errores y resiliencia
-| Situación | Manejo |
+### 4.2 Errors and resilience
+| Situation | Handling |
 |---|---|
-| Sin red / timeout / error HTTP | Se captura, se logea un *warning*, se devuelve `None` (fallback al default). |
-| Status ≠ 200 | Igual que arriba. |
-| JSON inválido o campos faltantes/fuera de rango | Igual que arriba; nunca lanza una excepción hacia el llamador. |
+| No network / timeout / HTTP error | Caught, a *warning* is logged, `None` is returned (fallback to default). |
+| Status ≠ 200 | Same as above. |
+| Invalid JSON or missing/out-of-range fields | Same as above; never raises an exception to the caller. |
 
 ---
 
-## 5. Evolución futura (no v1) — Relay central
+## 5. Future evolution (not v1) — Central relay
 
-Documentado en `TECHNICAL-DESIGN.md` (ADR-008): un relay FastAPI podría exponer un WebSocket propio
-de *fan-out* hacia muchos clientes Vigía, reusando **el mismo contrato interno** de §3 como payload,
-de modo que la migración no rompa el modelo de datos.
+Documented in `TECHNICAL-DESIGN.md` (ADR-008): a FastAPI relay could expose its own *fan-out*
+WebSocket to many Vigía clients, reusing **the same internal contract** from §3 as the payload,
+so that the migration doesn't break the data model.
 
-## 6. Evolución futura (no v1) — Contrato D-Bus (frontend GNOME opcional)
+## 6. Future evolution (not v1) — D-Bus contract (optional GNOME frontend)
 
-Documentado en `TECHNICAL-DESIGN.md` (ADR-010, elaboración detallada): el agente podría exponer un
-servicio en el **bus de sesión** para que una extensión de GNOME Shell (u otro frontend local) se
-suscriba a las alertas y confirme el reconocimiento, sin duplicar el esquema de §3.
+Documented in `TECHNICAL-DESIGN.md` (ADR-010, detailed elaboration): the agent could expose a
+service on the **session bus** so that a GNOME Shell extension (or other local frontend) can
+subscribe to alerts and confirm acknowledgment, without duplicating the schema from §3.
 
-| Elemento | Valor |
+| Element | Value |
 |---|---|
-| Bus | Sesión (`DBUS_SESSION_BUS_ADDRESS`), no *system bus* |
-| Nombre de servicio | `org.vigia_eew.Agente` |
-| Ruta de objeto | `/org/vigia_eew/Agente` |
-| Interfaz | `org.vigia_eew.Agente.Alertas1` (versionada) |
+| Bus | Session (`DBUS_SESSION_BUS_ADDRESS`), not the *system bus* |
+| Service name | `org.vigia_eew.Agent` |
+| Object path | `/org/vigia_eew/Agent` |
+| Interface | `org.vigia_eew.Agent.Alerts1` (versioned) |
 
-| Miembro | Firma | Payload |
+| Member | Signature | Payload |
 |---|---|---|
-| señal `AlertaNueva` | `(s)` | `SeismicEvent` JSON — mismo esquema de §3 |
-| señal `AlertaActualizada` | `(s)` | `SeismicEvent` JSON, `accion="update"` (RF-11) |
-| método `Reconocer` | `(s) -> (b)` | `id` del evento a reconocer |
-| método `ObtenerActiva` | `() -> (s)` | `SeismicEvent` JSON en curso, o `""` si no hay ninguna |
-| método `Ping` | `() -> (s)` | versión del agente, p. ej. `"1.0"` |
+| signal `NewAlert` | `(s)` | `SeismicEvent` JSON — same schema as §3 |
+| signal `AlertUpdated` | `(s)` | `SeismicEvent` JSON, `action="update"` (RF-11) |
+| method `Acknowledge` | `(s) -> (b)` | `id` of the event to acknowledge |
+| method `GetActive` | `() -> (s)` | current `SeismicEvent` JSON, or `""` if there isn't one |
+| method `Ping` | `() -> (s)` | agent version, e.g. `"1.0"` |
 
-El payload de las señales es **el mismo JSON del contrato interno** (§3), serializado tal cual
-(`model_dump_json()`); no se define una *struct* D-Bus paralela. Este contrato es aditivo a la
-ventana Tk (ADR-003): no la reemplaza salvo que la extensión GNOME esté detectada y activa (ver
-selección `frontend = "auto"` en `TECHNICAL-DESIGN.md`). **No implementado en v1.**
+The signal payload is **the same JSON as the internal contract** (§3), serialized as-is
+(`model_dump_json()`); no parallel D-Bus *struct* is defined. This contract is additive to the
+Tk window (ADR-003): it does not replace it unless the GNOME extension is detected and active (see
+`frontend = "auto"` selection in `TECHNICAL-DESIGN.md`). **Not implemented in v1.**

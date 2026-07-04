@@ -1,40 +1,40 @@
 # Data Model — Vigía-eew
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Documento | Modelo de datos: evento normalizado, estado persistido y configuración |
-| Versión | 1.0 (borrador para revisión) |
-| Estado | 🟡 Pendiente de aprobación |
-| Relacionado | `API-SPEC.md` (mapeo de fuentes), `PRD.md` (RF-07, RF-06, RF-10, RF-24), `TECHNICAL-DESIGN.md` |
+| Document | Data model: normalized event, persisted state, and configuration |
+| Version | 1.0 (draft for review) |
+| Status | 🟡 Pending approval |
+| Related | `API-SPEC.md` (source mapping), `PRD.md` (RF-07, RF-06, RF-10, RF-24), `TECHNICAL-DESIGN.md` |
 
-> Todas las estructuras se validan con **pydantic** (v2). Los tipos aquí son el contrato vinculante
-> para el código. Persistencia en **JSON**; configuración en **`config.toml`**.
+> All structures are validated with **pydantic** (v2). The types here are the binding contract
+> for the code. Persistence in **JSON**; configuration in **`config.toml`**.
 
 ---
 
-## 1. Entidad: Evento sísmico normalizado (`SeismicEvent`)
+## 1. Entity: Normalized seismic event (`SeismicEvent`)
 
-Contrato interno que circula entre capas (RF-07). Producido por `Normalizer`, consumido por
-`GeoFilter`, `Deduplicator` y la capa de notificación.
+Internal contract that flows between layers (RF-07). Produced by `Normalizer`, consumed by
+`GeoFilter`, `Deduplicator`, and the notification layer.
 
-| Campo | Tipo | Obligatorio | Descripción | Origen |
+| Field | Type | Required | Description | Origin |
 |---|---|---|---|---|
-| `id` | `str` | sí | Identificador estable por fuente (`unid` EMSC / `id` USGS) | fuente |
-| `fuente` | `Literal["EMSC","USGS","SIMULADO"]` | sí | Origen del evento | sistema |
-| `magnitud` | `float` | sí | Magnitud | fuente |
-| `mag_type` | `str` | sí | Tipo de magnitud (`mw`,`mb`,`ml`…), normalizado a minúscula | fuente |
-| `lugar` | `str \| None` | no | Descripción textual (USGS `place`) | fuente |
-| `region` | `str \| None` | no | Región Flynn (EMSC `flynn_region`) o derivada | fuente |
-| `lat` | `float` (−90..90) | sí | Latitud del epicentro | fuente |
-| `lon` | `float` (−180..180) | sí | Longitud del epicentro | fuente |
-| `profundidad_km` | `float` (≥0) | sí | Profundidad | fuente |
-| `hora_utc` | `datetime` (tz-aware UTC) | sí | Tiempo de origen | fuente |
-| `lastupdate_utc` | `datetime \| None` | no | Última actualización/revisión | fuente |
-| `distancia_km` | `float` (≥0) | sí | Distancia al punto de referencia (haversine) | derivado |
-| `severidad` | `Literal["info","atencion","critico"]` | sí | Nivel por magnitud (config) | derivado |
-| `accion` | `Literal["create","update"]` | sí | Tipo de mensaje (default `create`) | fuente/sistema |
+| `id` | `str` | yes | Stable per-source identifier (`unid` EMSC / `id` USGS) | source |
+| `source` | `Literal["EMSC","USGS","SIMULATED"]` | yes | Event origin | system |
+| `magnitude` | `float` | yes | Magnitude | source |
+| `mag_type` | `str` | yes | Magnitude type (`mw`,`mb`,`ml`…), normalized to lowercase | source |
+| `place` | `str \| None` | no | Textual description (USGS `place`) | source |
+| `region` | `str \| None` | no | Flynn region (EMSC `flynn_region`) or derived | source |
+| `lat` | `float` (−90..90) | yes | Epicenter latitude | source |
+| `lon` | `float` (−180..180) | yes | Epicenter longitude | source |
+| `depth_km` | `float` (≥0) | yes | Depth | source |
+| `time_utc` | `datetime` (tz-aware UTC) | yes | Origin time | source |
+| `lastupdate_utc` | `datetime \| None` | no | Last update/revision | source |
+| `distance_km` | `float` (≥0) | yes | Distance to the reference point (haversine) | derived |
+| `severity` | `Literal["info","warning","critical"]` | yes | Level based on magnitude (config) | derived |
+| `action` | `Literal["create","update"]` | yes | Message type (default `create`) | source/system |
 
-### 1.1 Definición pydantic (referencia)
+### 1.1 Pydantic definition (reference)
 ```python
 from datetime import datetime
 from typing import Literal
@@ -42,240 +42,241 @@ from pydantic import BaseModel, Field
 
 class SeismicEvent(BaseModel):
     id: str
-    fuente: Literal["EMSC", "USGS", "SIMULADO"]
-    magnitud: float
+    source: Literal["EMSC", "USGS", "SIMULATED"]
+    magnitude: float
     mag_type: str
-    lugar: str | None = None
+    place: str | None = None
     region: str | None = None
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
-    profundidad_km: float = Field(ge=0)
-    hora_utc: datetime                       # siempre tz-aware UTC
+    depth_km: float = Field(ge=0)
+    time_utc: datetime                       # always tz-aware UTC
     lastupdate_utc: datetime | None = None
-    distancia_km: float = Field(ge=0)
-    severidad: Literal["info", "atencion", "critico"]
-    accion: Literal["create", "update"] = "create"
+    distance_km: float = Field(ge=0)
+    severity: Literal["info", "warning", "critical"]
+    action: Literal["create", "update"] = "create"
 ```
 
-### 1.2 Reglas e invariantes
-- `hora_utc`/`lastupdate_utc` **siempre UTC tz-aware**. La conversión a `America/Caracas` ocurre solo
-  en la presentación (RF-18, RNF-12), nunca en el modelo.
-- `distancia_km` y `severidad` son **derivados** (no provienen de la fuente).
-- `mag_type` se normaliza siempre a minúscula (resuelve EMSC `magtype` vs USGS `magType`).
-- USGS entrega `time`/`updated` en **epoch ms** → convertir; EMSC en **ISO-8601** → parsear.
+### 1.2 Rules and invariants
+- `time_utc`/`lastupdate_utc` are **always UTC tz-aware**. Conversion to `America/Caracas` happens
+  only in presentation (RF-18, RNF-12), never in the model.
+- `distance_km` and `severity` are **derived** (they do not come from the source).
+- `mag_type` is always normalized to lowercase (reconciles EMSC `magtype` vs USGS `magType`).
+- USGS delivers `time`/`updated` in **epoch ms** → convert; EMSC in **ISO-8601** → parse.
 
-### 1.3 Severidad (derivación) — RF-13
-Umbrales configurables; por defecto:
+### 1.3 Severity (derivation) — RF-13
+Configurable thresholds; by default:
 
-| Severidad | Rango de magnitud | Color | Sonido |
+| Severity | Magnitude range | Color | Sound |
 |---|---|---|---|
-| `info` | `< 4.0` | azul/gris | suave, 1 toque |
-| `atencion` | `4.0 – 5.5` | ámbar | medio, repetido |
-| `critico` | `≥ 5.5` | rojo | fuerte, insistente |
+| `info` | `< 4.0` | blue/gray | soft, single chime |
+| `warning` | `4.0 – 5.5` | amber | medium, repeated |
+| `critical` | `≥ 5.5` | red | loud, insistent |
 
 ---
 
-## 2. Estado persistido (`AppState`) — RF-06, RF-10
+## 2. Persisted state (`AppState`) — RF-06, RF-10
 
-Sobrevive reinicios; evita re-alertar y permite reconciliar (RF-10, RF-06). Guardado como **JSON**
-con escritura atómica.
+Survives restarts; avoids re-alerting and enables reconciliation (RF-10, RF-06). Saved as **JSON**
+with atomic writes.
 
-| Campo | Tipo | Descripción |
+| Field | Type | Description |
 |---|---|---|
-| `version` | `int` | Versión del esquema de estado (migraciones futuras) |
-| `cursor_usgs_ms` | `int \| None` | Epoch ms del evento USGS más reciente procesado (cursor RF-06) |
-| `ids_alertados` | `list[AlertedId]` | Ids ya alertados (con poda por antigüedad) |
-| `firmas_recientes` | `list[EventSignature]` | Firmas para dedup inter-fuente (ventana temporal) |
-| `ubicacion_detectada` | `UbicacionDetectada \| None` | Ubicación por IP cacheada tras la primera detección exitosa (RF-33); `None` si nunca se detectó o si el usuario configura `[referencia]` manual |
+| `version` | `int` | State schema version (future migrations) |
+| `cursor_usgs_ms` | `int \| None` | Epoch ms of the most recent processed USGS event (cursor RF-06) |
+| `alerted_ids` | `list[AlertedId]` | Already-alerted ids (with age-based pruning) |
+| `recent_signatures` | `list[EventSignature]` | Signatures for cross-source dedup (time window) |
+| `detected_location` | `DetectedLocation \| None` | Location detected via IP, cached after the first successful detection (RF-33); `None` if never detected or if the user configures a manual `[reference]` |
 
 ```python
 class AlertedId(BaseModel):
     id: str
-    fuente: str
-    hora_utc: datetime
-    reconocido_utc: datetime | None = None    # auditoría del acknowledge
+    source: str
+    time_utc: datetime
+    acknowledged_utc: datetime | None = None    # acknowledge audit trail
 
 class EventSignature(BaseModel):
     lat: float
     lon: float
-    hora_utc: datetime
-    magnitud: float
+    time_utc: datetime
+    magnitude: float
 
-class UbicacionDetectada(BaseModel):
-    nombre: str
+class DetectedLocation(BaseModel):
+    name: str
     lat: float
     lon: float
-    detectado_utc: datetime
+    detected_utc: datetime
 
 class AppState(BaseModel):
     version: int = 1
     cursor_usgs_ms: int | None = None
-    ids_alertados: list[AlertedId] = []
-    firmas_recientes: list[EventSignature] = []
-    ubicacion_detectada: UbicacionDetectada | None = None
+    alerted_ids: list[AlertedId] = []
+    recent_signatures: list[EventSignature] = []
+    detected_location: DetectedLocation | None = None
 ```
 
-### 2.1 Ubicación (multiplataforma, vía `platformdirs`)
-| SO | Ruta |
+### 2.1 Location (cross-platform, via `platformdirs`)
+| OS | Path |
 |---|---|
 | Linux | `~/.local/share/vigia-eew/state.json` |
 | Windows | `%LOCALAPPDATA%\vigia-eew\state.json` |
 | macOS | `~/Library/Application Support/vigia-eew/state.json` |
 
-### 2.2 Política de poda
-- `ids_alertados` y `firmas_recientes` se podan por antigüedad (p. ej. > 24 h) para acotar tamaño.
-- Escritura **atómica**: archivo temporal + `os.replace` (evita corrupción ante caída).
+### 2.2 Pruning policy
+- `alerted_ids` and `recent_signatures` are pruned by age (e.g. > 24 h) to bound size.
+- **Atomic** write: temporary file + `os.replace` (avoids corruption on crash).
 
 ---
 
-## 3. Configuración (`config.toml` → `Settings`) — RF-24
+## 3. Configuration (`config.toml` → `Settings`) — RF-24
 
-Leída con `tomllib` (stdlib 3.11+) y validada con **pydantic**. *Defaults* sensatos centrados en Caracas.
+Read with `tomllib` (stdlib 3.11+) and validated with **pydantic**. Sensible *defaults* centered on
+Caracas.
 
-### 3.1 `config.toml` de ejemplo
+### 3.1 Example `config.toml`
 ```toml
-[referencia]
-nombre = "Caracas"
+[reference]
+name = "Caracas"
 lat = 10.4806
 lon = -66.9036
 
-[filtro]
-radio_km = 300.0
-magnitud_minima = 2.5
+[filter]
+radius_km = 300.0
+min_magnitude = 2.5
 
-[fuentes.emsc]
-habilitado = true
+[sources.emsc]
+enabled = true
 url = "wss://www.seismicportal.eu/standing_order/websocket"
 ping_interval_s = 15
 ping_timeout_s = 20
 backoff_max_s = 60
 
-[fuentes.usgs]
-habilitado = true
+[sources.usgs]
+enabled = true
 url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
-intervalo_poll_s = 60
+poll_interval_s = 60
 timeout_s = 15
 
 [dedup]
-distancia_km = 100.0
-ventana_s = 90
-delta_magnitud = 0.5
+distance_km = 100.0
+window_s = 90
+magnitude_delta = 0.5
 
-[severidad]
-# límite superior de cada nivel; el resto es "critico"
+[severity]
+# upper bound of each level; anything above is "critical"
 info_max = 4.0
-atencion_max = 5.5
+warning_max = 5.5
 
-[notificacion]
-pantalla_completa = false
-zona_horaria = "America/Caracas"
-sonido = true
+[notification]
+fullscreen = false
+timezone = "America/Caracas"
+sound = true
 
 [logging]
-nivel = "INFO"
-archivo = "vigia-eew.log"
+level = "INFO"
+file = "vigia-eew.log"
 max_bytes = 1048576
 backups = 3
 ```
 
-### 3.2 Definición pydantic (referencia)
+### 3.2 Pydantic definition (reference)
 ```python
 from pydantic import BaseModel, Field
 
-class Referencia(BaseModel):
-    nombre: str = "Caracas"
+class ReferencePoint(BaseModel):
+    name: str = "Caracas"
     lat: float = Field(10.4806, ge=-90, le=90)
     lon: float = Field(-66.9036, ge=-180, le=180)
 
-class Filtro(BaseModel):
-    radio_km: float = Field(300.0, gt=0)
-    magnitud_minima: float = Field(2.5, ge=0)
+class Filter(BaseModel):
+    radius_km: float = Field(300.0, gt=0)
+    min_magnitude: float = Field(2.5, ge=0)
 
-class FuenteEMSC(BaseModel):
-    habilitado: bool = True
+class EMSCSource(BaseModel):
+    enabled: bool = True
     url: str = "wss://www.seismicportal.eu/standing_order/websocket"
     ping_interval_s: int = 15
     ping_timeout_s: int = 20
     backoff_max_s: int = 60
 
-class FuenteUSGS(BaseModel):
-    habilitado: bool = True
+class USGSSource(BaseModel):
+    enabled: bool = True
     url: str = "https://earthquake.usgs.gov/fdsnws/event/1/query"
-    intervalo_poll_s: int = 60
+    poll_interval_s: int = 60
     timeout_s: int = 15
 
 class Dedup(BaseModel):
-    distancia_km: float = 100.0
-    ventana_s: int = 90
-    delta_magnitud: float = 0.5
+    distance_km: float = 100.0
+    window_s: int = 90
+    magnitude_delta: float = 0.5
 
-class Severidad(BaseModel):
+class Severity(BaseModel):
     info_max: float = 4.0
-    atencion_max: float = 5.5
+    warning_max: float = 5.5
 
-class Notificacion(BaseModel):
-    pantalla_completa: bool = False
-    zona_horaria: str = "America/Caracas"
-    sonido: bool = True
+class Notification(BaseModel):
+    fullscreen: bool = False
+    timezone: str = "America/Caracas"
+    sound: bool = True
 
 class LoggingCfg(BaseModel):
-    nivel: str = "INFO"
-    archivo: str = "vigia-eew.log"
+    level: str = "INFO"
+    file: str = "vigia-eew.log"
     max_bytes: int = 1_048_576
     backups: int = 3
 
 class Settings(BaseModel):
-    referencia: Referencia = Referencia()
-    filtro: Filtro = Filtro()
-    fuentes_emsc: FuenteEMSC = FuenteEMSC()
-    fuentes_usgs: FuenteUSGS = FuenteUSGS()
+    reference: ReferencePoint = ReferencePoint()
+    filter: Filter = Filter()
+    sources_emsc: EMSCSource = EMSCSource()
+    sources_usgs: USGSSource = USGSSource()
     dedup: Dedup = Dedup()
-    severidad: Severidad = Severidad()
-    notificacion: Notificacion = Notificacion()
+    severity: Severity = Severity()
+    notification: Notification = Notification()
     logging: LoggingCfg = LoggingCfg()
 ```
 
-### 3.3 Resolución de la ruta de config
-1. Flag CLI `--config <ruta>` (máxima prioridad).
-2. `config.toml` en el directorio de config del usuario (`platformdirs`).
-3. *Defaults* embebidos si no existe archivo (el agente arranca sin configuración previa).
+### 3.3 Config path resolution
+1. CLI flag `--config <path>` (highest priority).
+2. `config.toml` in the user's config directory (`platformdirs`).
+3. Embedded *defaults* if no file exists (the agent starts up with no prior configuration).
 
 ---
 
-## 4. Evento simulado (`--simulate`) — RF-21
+## 4. Simulated event (`--simulate`) — RF-21
 
-Inyecta un `SeismicEvent` con `fuente="SIMULADO"` para validar la notificación sin sismo real.
-Valores por defecto (configurables por flags):
+Injects a `SeismicEvent` with `source="SIMULATED"` to validate notification without a real
+earthquake. Default values (configurable via flags):
 
 ```python
 SeismicEvent(
     id="SIM-0001",
-    fuente="SIMULADO",
-    magnitud=6.1,
+    source="SIMULATED",
+    magnitude=6.1,
     mag_type="mw",
-    lugar="cerca de La Guaira, Venezuela",
+    place="near La Guaira, Venezuela",
     region="NEAR COAST OF VENEZUELA",
     lat=10.60, lon=-66.93,
-    profundidad_km=10.0,
-    hora_utc="<ahora UTC>",
-    distancia_km="<calculada>",
-    severidad="critico",
-    accion="create",
+    depth_km=10.0,
+    time_utc="<now UTC>",
+    distance_km="<calculated>",
+    severity="critical",
+    action="create",
 )
 ```
 
-## 5. Diccionario de tipos y unidades
+## 5. Type and unit dictionary
 
-| Concepto | Unidad | Notas |
+| Concept | Unit | Notes |
 |---|---|---|
-| Magnitud | escala del `mag_type` | comparaciones de dedup usan Δ absoluta |
-| Distancia | km | haversine; radio terrestre 6371 km |
-| Profundidad | km | ≥ 0 |
-| Tiempo interno | UTC tz-aware | conversión a local solo en UI |
-| Cursor USGS | epoch ms | igual unidad que `properties.time/updated` |
+| Magnitude | `mag_type` scale | dedup comparisons use absolute Δ |
+| Distance | km | haversine; Earth radius 6371 km |
+| Depth | km | ≥ 0 |
+| Internal time | UTC tz-aware | conversion to local time only in UI |
+| USGS cursor | epoch ms | same unit as `properties.time/updated` |
 
-## 6. Trazabilidad
+## 6. Traceability
 
 `SeismicEvent` ⇄ RF-07/RF-08/RF-13 · `AppState` ⇄ RF-06/RF-10 · `Settings` ⇄ RF-24/RF-12 ·
-`UbicacionDetectada` ⇄ RF-33.
-Mapeo de campos por fuente en `API-SPEC.md §3.1`.
+`DetectedLocation` ⇄ RF-33.
+Per-source field mapping in `API-SPEC.md §3.1`.

@@ -1,4 +1,4 @@
-"""Pruebas de la CLI (RF-26, RF-21)."""
+"""Tests for the CLI (RF-26, RF-21)."""
 
 from __future__ import annotations
 
@@ -8,107 +8,107 @@ from vigia_eew.cli import main
 
 
 class _FakeApp:
-    creadas: list[_FakeApp] = []
+    created: list[_FakeApp] = []
 
-    def __init__(self, cfg, *, referencia_manual=True, ruta_config=None):
+    def __init__(self, cfg, *, manual_reference=True, config_path=None):
         self.cfg = cfg
-        self.referencia_manual = referencia_manual
-        self.ruta_config = ruta_config
-        self.simulado = False
-        self.ejecutado = False
-        _FakeApp.creadas.append(self)
+        self.manual_reference = manual_reference
+        self.config_path = config_path
+        self.simulated = False
+        self.executed = False
+        _FakeApp.created.append(self)
 
-    def simular(self):
-        self.simulado = True
+    def simulate(self):
+        self.simulated = True
 
-    def ejecutar(self):
-        self.ejecutado = True
+    def execute(self):
+        self.executed = True
 
 
-def _crear(cfg, **kwargs):
+def _create(cfg, **kwargs):
     return _FakeApp(cfg, **kwargs)
 
 
 def setup_function():
-    _FakeApp.creadas.clear()
+    _FakeApp.created.clear()
 
 
-def test_simulate_invoca_simular():
-    rc = main(["--simulate"], crear_app=_crear)
+def test_simulate_invokes_simulate():
+    rc = main(["--simulate"], create_app=_create)
     assert rc == 0
-    assert _FakeApp.creadas[-1].simulado is True
+    assert _FakeApp.created[-1].simulated is True
 
 
-def test_run_por_defecto_invoca_ejecutar():
-    rc = main([], crear_app=_crear)
+def test_run_by_default_invokes_execute():
+    rc = main([], create_app=_create)
     assert rc == 0
-    assert _FakeApp.creadas[-1].ejecutado is True
+    assert _FakeApp.created[-1].executed is True
 
 
-def test_check_config_no_crea_app(capsys):
-    rc = main(["--check-config"], crear_app=_crear)
+def test_check_config_does_not_create_app(capsys):
+    rc = main(["--check-config"], create_app=_create)
     assert rc == 0
-    assert _FakeApp.creadas == []  # check-config no arranca el agente
+    assert _FakeApp.created == []  # check-config does not start the agent
     assert "Config OK" in capsys.readouterr().out
 
 
-def test_config_inexistente_falla():
+def test_nonexistent_config_fails():
     with pytest.raises(FileNotFoundError):
-        main(["--config", "/ruta/que/no/existe.toml"], crear_app=_crear)
+        main(["--config", "/path/that/does/not/exist.toml"], create_app=_create)
 
 
-def test_sin_config_referencia_no_manual():
-    # Sin --config y sin config.toml de usuario en este entorno de test -> no manual.
-    rc = main([], crear_app=_crear)
+def test_without_config_reference_is_not_manual():
+    # No --config and no user config.toml in this test environment -> not manual.
+    rc = main([], create_app=_create)
     assert rc == 0
-    assert _FakeApp.creadas[-1].referencia_manual is False
+    assert _FakeApp.created[-1].manual_reference is False
 
 
-def test_config_con_referencia_es_manual(tmp_path):
-    ruta = tmp_path / "config.toml"
-    ruta.write_text('[referencia]\nnombre = "Test"\nlat = 1.0\nlon = 2.0\n', encoding="utf-8")
-    rc = main(["--config", str(ruta)], crear_app=_crear)
+def test_config_with_reference_is_manual(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[reference]\nname = "Test"\nlat = 1.0\nlon = 2.0\n', encoding="utf-8")
+    rc = main(["--config", str(path)], create_app=_create)
     assert rc == 0
-    assert _FakeApp.creadas[-1].referencia_manual is True
+    assert _FakeApp.created[-1].manual_reference is True
 
 
-def test_ruta_config_se_propaga_a_la_app(tmp_path):
-    ruta = tmp_path / "config.toml"
-    ruta.write_text('[referencia]\nnombre = "Test"\nlat = 1.0\nlon = 2.0\n', encoding="utf-8")
-    rc = main(["--config", str(ruta)], crear_app=_crear)
+def test_config_path_propagates_to_app(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('[reference]\nname = "Test"\nlat = 1.0\nlon = 2.0\n', encoding="utf-8")
+    rc = main(["--config", str(path)], create_app=_create)
     assert rc == 0
-    assert _FakeApp.creadas[-1].ruta_config == str(ruta)
+    assert _FakeApp.created[-1].config_path == str(path)
 
 
-def test_version_sale_limpio():
+def test_version_exits_cleanly():
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
 
 
-class _FakeInstalador:
+class _FakeInstaller:
     def __init__(self):
-        self.instalado = False
-        self.desinstalado = False
+        self.installed = False
+        self.uninstalled = False
 
-    def instalar(self):
-        self.instalado = True
+    def install(self):
+        self.installed = True
 
-    def desinstalar(self):
-        self.desinstalado = True
+    def uninstall(self):
+        self.uninstalled = True
 
 
-def test_install_autostart_invoca_instalar(capsys):
-    inst = _FakeInstalador()
-    rc = main(["--install-autostart"], crear_app=_crear, crear_instalador=lambda: inst)
+def test_install_autostart_invokes_install(capsys):
+    inst = _FakeInstaller()
+    rc = main(["--install-autostart"], create_app=_create, create_installer=lambda: inst)
     assert rc == 0
-    assert inst.instalado is True
-    assert _FakeApp.creadas == []  # no arranca el agente
+    assert inst.installed is True
+    assert _FakeApp.created == []  # does not start the agent
 
 
-def test_uninstall_autostart_invoca_desinstalar():
-    inst = _FakeInstalador()
-    rc = main(["--uninstall-autostart"], crear_app=_crear, crear_instalador=lambda: inst)
+def test_uninstall_autostart_invokes_uninstall():
+    inst = _FakeInstaller()
+    rc = main(["--uninstall-autostart"], create_app=_create, create_installer=lambda: inst)
     assert rc == 0
-    assert inst.desinstalado is True
-    assert _FakeApp.creadas == []
+    assert inst.uninstalled is True
+    assert _FakeApp.created == []

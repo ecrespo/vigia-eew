@@ -1,10 +1,10 @@
-"""Pruebas de persistencia de estado (RF-06, RF-10)."""
+"""Tests for state persistence (RF-06, RF-10)."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from vigia_eew.config import Referencia
+from vigia_eew.config import ReferencePoint
 from vigia_eew.models import AlertedId, EventSignature
 from vigia_eew.state import StateStore
 
@@ -13,109 +13,109 @@ def _store(tmp_path) -> StateStore:
     return StateStore(tmp_path / "state.json")
 
 
-def test_carga_inicial_vacia(tmp_path):
+def test_initial_load_is_empty(tmp_path):
     s = _store(tmp_path)
-    estado = s.cargar()
-    assert estado.ids_alertados == []
-    assert estado.cursor_usgs_ms is None
+    state = s.load()
+    assert state.alerted_ids == []
+    assert state.cursor_usgs_ms is None
 
 
-def test_persistencia_ida_y_vuelta(tmp_path):
+def test_round_trip_persistence(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    s.registrar_alertado(
-        AlertedId(id="us6000t8sx", fuente="USGS", hora_utc=datetime.now(UTC))
+    s.load()
+    s.register_alerted(
+        AlertedId(id="us6000t8sx", source="USGS", time_utc=datetime.now(UTC))
     )
-    s.actualizar_cursor_usgs(1782639238852)
-    s.guardar()
+    s.update_usgs_cursor(1782639238852)
+    s.save()
 
-    # Nueva instancia que relee desde disco (simula reinicio, RF-10).
+    # New instance that reloads from disk (simulates restart, RF-10).
     s2 = _store(tmp_path)
-    s2.cargar()
-    assert s2.ya_alertado("us6000t8sx")
-    assert s2.estado.cursor_usgs_ms == 1782639238852
+    s2.load()
+    assert s2.already_alerted("us6000t8sx")
+    assert s2.state.cursor_usgs_ms == 1782639238852
 
 
-def test_no_realertar_tras_reinicio(tmp_path):
+def test_no_realert_after_restart(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    s.registrar_alertado(
-        AlertedId(id="abc", fuente="EMSC", hora_utc=datetime.now(UTC))
+    s.load()
+    s.register_alerted(
+        AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC))
     )
-    s.guardar()
+    s.save()
     s2 = _store(tmp_path)
-    s2.cargar()
-    assert s2.ya_alertado("abc") is True
-    assert s2.ya_alertado("otro") is False
+    s2.load()
+    assert s2.already_alerted("abc") is True
+    assert s2.already_alerted("other") is False
 
 
-def test_cursor_solo_avanza(tmp_path):
+def test_cursor_only_advances(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    s.actualizar_cursor_usgs(100)
-    s.actualizar_cursor_usgs(50)  # menor: no debe retroceder
-    assert s.estado.cursor_usgs_ms == 100
-    s.actualizar_cursor_usgs(200)
-    assert s.estado.cursor_usgs_ms == 200
+    s.load()
+    s.update_usgs_cursor(100)
+    s.update_usgs_cursor(50)  # lower: must not move backwards
+    assert s.state.cursor_usgs_ms == 100
+    s.update_usgs_cursor(200)
+    assert s.state.cursor_usgs_ms == 200
 
 
-def test_marcar_reconocido(tmp_path):
+def test_mark_acknowledged(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    s.registrar_alertado(
-        AlertedId(id="abc", fuente="EMSC", hora_utc=datetime.now(UTC))
+    s.load()
+    s.register_alerted(
+        AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC))
     )
-    s.marcar_reconocido("abc")
-    assert s.estado.ids_alertados[0].reconocido_utc is not None
+    s.mark_acknowledged("abc")
+    assert s.state.alerted_ids[0].acknowledged_utc is not None
 
 
-def test_poda_por_antiguedad(tmp_path):
+def test_prune_by_age(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    ahora = datetime.now(UTC)
-    viejo = ahora - timedelta(hours=48)
-    s.registrar_alertado(AlertedId(id="viejo", fuente="USGS", hora_utc=viejo))
-    s.registrar_alertado(AlertedId(id="nuevo", fuente="USGS", hora_utc=ahora))
-    s.agregar_firma(EventSignature(lat=10, lon=-66, hora_utc=viejo, magnitud=4.0))
-    s.podar(ahora=ahora)
-    ids = {a.id for a in s.estado.ids_alertados}
-    assert ids == {"nuevo"}
-    assert s.estado.firmas_recientes == []
+    s.load()
+    now = datetime.now(UTC)
+    old = now - timedelta(hours=48)
+    s.register_alerted(AlertedId(id="old", source="USGS", time_utc=old))
+    s.register_alerted(AlertedId(id="new", source="USGS", time_utc=now))
+    s.add_signature(EventSignature(lat=10, lon=-66, time_utc=old, magnitude=4.0))
+    s.prune(now=now)
+    ids = {a.id for a in s.state.alerted_ids}
+    assert ids == {"new"}
+    assert s.state.recent_signatures == []
 
 
-def test_estado_corrupto_no_rompe(tmp_path):
-    ruta = tmp_path / "state.json"
-    ruta.write_text("{ esto no es json valido ", encoding="utf-8")
-    s = StateStore(ruta)
-    estado = s.cargar()  # no debe lanzar; parte de cero
-    assert estado.ids_alertados == []
+def test_corrupt_state_does_not_break(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text("{ this is not valid json ", encoding="utf-8")
+    s = StateStore(path)
+    state = s.load()  # must not raise; starts fresh
+    assert state.alerted_ids == []
 
 
-def test_escritura_atomica_deja_archivo_unico(tmp_path):
+def test_atomic_write_leaves_a_single_file(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    s.guardar()
-    archivos = list(tmp_path.iterdir())
-    # Solo debe quedar state.json, sin temporales .tmp colgando.
-    assert [p.name for p in archivos] == ["state.json"]
+    s.load()
+    s.save()
+    files = list(tmp_path.iterdir())
+    # Only state.json should remain, no dangling .tmp files.
+    assert [p.name for p in files] == ["state.json"]
 
 
-def test_ubicacion_cacheada_vacia_por_defecto(tmp_path):
+def test_cached_location_empty_by_default(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    assert s.ubicacion_cacheada() is None
+    s.load()
+    assert s.cached_location() is None
 
 
-def test_cachear_y_recuperar_ubicacion(tmp_path):
+def test_cache_and_retrieve_location(tmp_path):
     s = _store(tmp_path)
-    s.cargar()
-    s.cachear_ubicacion(Referencia(nombre="Maracaibo", lat=10.63, lon=-71.64))
-    s.guardar()
+    s.load()
+    s.cache_location(ReferencePoint(name="Maracaibo", lat=10.63, lon=-71.64))
+    s.save()
 
     s2 = _store(tmp_path)
-    s2.cargar()
-    cacheada = s2.ubicacion_cacheada()
-    assert cacheada is not None
-    assert cacheada.nombre == "Maracaibo"
-    assert cacheada.lat == 10.63
-    assert cacheada.lon == -71.64
+    s2.load()
+    cached = s2.cached_location()
+    assert cached is not None
+    assert cached.name == "Maracaibo"
+    assert cached.lat == 10.63
+    assert cached.lon == -71.64

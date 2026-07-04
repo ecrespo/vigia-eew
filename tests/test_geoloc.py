@@ -1,83 +1,83 @@
-"""Pruebas de detección de ubicación por IP (RF-33)."""
+"""Tests for IP-based location detection (RF-33)."""
 
 from __future__ import annotations
 
 import httpx
 
-from vigia_eew.geoloc import detectar_ubicacion_ip
+from vigia_eew.geoloc import detect_ip_location
 
 
-class _RespuestaFalsa:
-    def __init__(self, status_code=200, payload=None, *, json_invalido=False):
+class _FakeResponse:
+    def __init__(self, status_code=200, payload=None, *, invalid_json=False):
         self.status_code = status_code
         self._payload = payload or {}
-        self._json_invalido = json_invalido
+        self._invalid_json = invalid_json
 
     def json(self):
-        if self._json_invalido:
-            raise ValueError("no es json")
+        if self._invalid_json:
+            raise ValueError("not json")
         return self._payload
 
 
-class _ClienteFalso:
-    def __init__(self, respuesta=None, *, excepcion=None):
-        self._respuesta = respuesta
-        self._excepcion = excepcion
-        self.cerrado = False
+class _FakeClient:
+    def __init__(self, response=None, *, exception=None):
+        self._response = response
+        self._exception = exception
+        self.closed = False
 
     def get(self, url, *, timeout=None):
-        if self._excepcion is not None:
-            raise self._excepcion
-        return self._respuesta
+        if self._exception is not None:
+            raise self._exception
+        return self._response
 
     def close(self):
-        self.cerrado = True
+        self.closed = True
 
 
-def test_deteccion_exitosa():
-    cliente = _ClienteFalso(
-        _RespuestaFalsa(200, {"city": "Caracas", "latitude": 10.5, "longitude": -66.9})
+def test_successful_detection():
+    client = _FakeClient(
+        _FakeResponse(200, {"city": "Caracas", "latitude": 10.5, "longitude": -66.9})
     )
-    ref = detectar_ubicacion_ip(client=cliente)
+    ref = detect_ip_location(client=client)
     assert ref is not None
-    assert ref.nombre == "Caracas"
+    assert ref.name == "Caracas"
     assert ref.lat == 10.5
     assert ref.lon == -66.9
 
 
-def test_error_de_red_devuelve_none():
-    cliente = _ClienteFalso(excepcion=httpx.ConnectError("sin red"))
-    assert detectar_ubicacion_ip(client=cliente) is None
+def test_network_error_returns_none():
+    client = _FakeClient(exception=httpx.ConnectError("no network"))
+    assert detect_ip_location(client=client) is None
 
 
-def test_status_no_200_devuelve_none():
-    cliente = _ClienteFalso(_RespuestaFalsa(503))
-    assert detectar_ubicacion_ip(client=cliente) is None
+def test_non_200_status_returns_none():
+    client = _FakeClient(_FakeResponse(503))
+    assert detect_ip_location(client=client) is None
 
 
-def test_json_invalido_devuelve_none():
-    cliente = _ClienteFalso(_RespuestaFalsa(200, json_invalido=True))
-    assert detectar_ubicacion_ip(client=cliente) is None
+def test_invalid_json_returns_none():
+    client = _FakeClient(_FakeResponse(200, invalid_json=True))
+    assert detect_ip_location(client=client) is None
 
 
-def test_campos_faltantes_devuelve_none():
-    cliente = _ClienteFalso(_RespuestaFalsa(200, {"city": "Caracas"}))  # sin lat/lon
-    assert detectar_ubicacion_ip(client=cliente) is None
+def test_missing_fields_returns_none():
+    client = _FakeClient(_FakeResponse(200, {"city": "Caracas"}))  # no lat/lon
+    assert detect_ip_location(client=client) is None
 
 
-def test_lat_lon_fuera_de_rango_devuelve_none():
-    cliente = _ClienteFalso(_RespuestaFalsa(200, {"latitude": 999.0, "longitude": -66.9}))
-    assert detectar_ubicacion_ip(client=cliente) is None
+def test_lat_lon_out_of_range_returns_none():
+    client = _FakeClient(_FakeResponse(200, {"latitude": 999.0, "longitude": -66.9}))
+    assert detect_ip_location(client=client) is None
 
 
-def test_sin_ciudad_usa_nombre_generico():
-    cliente = _ClienteFalso(_RespuestaFalsa(200, {"latitude": 1.0, "longitude": 2.0}))
-    ref = detectar_ubicacion_ip(client=cliente)
+def test_without_city_uses_generic_name():
+    client = _FakeClient(_FakeResponse(200, {"latitude": 1.0, "longitude": 2.0}))
+    ref = detect_ip_location(client=client)
     assert ref is not None
-    assert ref.nombre
+    assert ref.name
 
 
-def test_cliente_inyectado_no_se_cierra():
-    cliente = _ClienteFalso(_RespuestaFalsa(200, {"latitude": 1.0, "longitude": 2.0}))
-    detectar_ubicacion_ip(client=cliente)
-    assert cliente.cerrado is False
+def test_injected_client_is_not_closed():
+    client = _FakeClient(_FakeResponse(200, {"latitude": 1.0, "longitude": 2.0}))
+    detect_ip_location(client=client)
+    assert client.closed is False

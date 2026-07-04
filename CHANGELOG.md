@@ -4,6 +4,22 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [Unreleased]
+
+### Changed
+- **Breaking**: the entire codebase (source, tests, docs) and `config.toml` are now in
+  English (RNF-10 updated). Every Python identifier, module filename, and TOML
+  key/section was renamed (e.g. `[referencia]` → `[reference]`, `magnitud_minima` →
+  `min_magnitude`, `[fuentes.emsc]` → `[sources.emsc]`, `[notificacion]` →
+  `[notification]`, etc. — see `config.toml.example` for the full new schema).
+  Existing `config.toml` files must be rewritten with the new keys.
+
+### Added
+- Internationalization (i18n, RF-35): user-facing text (alert window, toast, tray menu)
+  is now translated based on `[notification] language` (`"auto"` detects the OS locale,
+  or set `"en"`/`"es"` explicitly). Falls back to English for unsupported locales.
+  New module `i18n.py`.
+
 ## [Sin publicar]
 
 ### Agregado

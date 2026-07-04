@@ -1,9 +1,9 @@
-"""Autoarranque en Windows mediante tarea programada (`schtasks`) (RF-22, RF-23).
+"""Autostart on Windows via scheduled task (`schtasks`) (RF-22, RF-23).
 
-Crea una tarea con disparador **onlogon** (arranca al iniciar sesión) con privilegios
-limitados, y la borra al desinstalar. No escribe ficheros: el estado vive en el
-Programador de tareas, consultado con `schtasks /query`. El `runner` (`schtasks`) es
-inyectable para probar sin tocar el sistema real.
+Creates a task with an **onlogon** trigger (starts on login) with limited
+privileges, and deletes it on uninstall. It writes no files: the state lives in
+Task Scheduler, queried with `schtasks /query`. The `runner` (`schtasks`) is
+injectable so tests don't touch the real system.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ _Runner = Callable[[list[str]], int]
 TASK_NAME = "VigiaEEW"
 
 
-def comando_crear(task_name: str, exec_cmd: str) -> list[str]:
-    """Comando `schtasks` para crear la tarea de inicio de sesión (puro)."""
+def create_command(task_name: str, exec_cmd: str) -> list[str]:
+    """`schtasks` command to create the login task (pure)."""
     return [
         "schtasks",
         "/create",
@@ -34,22 +34,22 @@ def comando_crear(task_name: str, exec_cmd: str) -> list[str]:
     ]
 
 
-def comando_borrar(task_name: str) -> list[str]:
-    """Comando `schtasks` para borrar la tarea (puro)."""
+def delete_command(task_name: str) -> list[str]:
+    """`schtasks` command to delete the task (pure)."""
     return ["schtasks", "/delete", "/tn", task_name, "/f"]
 
 
-def comando_consulta(task_name: str) -> list[str]:
-    """Comando `schtasks` para consultar si la tarea existe (puro)."""
+def query_command(task_name: str) -> list[str]:
+    """`schtasks` command to check whether the task exists (pure)."""
     return ["schtasks", "/query", "/tn", task_name]
 
 
-def _runner_subprocess(cmd: list[str]) -> int:
+def _subprocess_runner(cmd: list[str]) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-class InstaladorSchtasks:
-    """Instala/desinstala el autoarranque del agente vía tarea programada."""
+class SchtasksInstaller:
+    """Installs/uninstalls the agent's autostart via scheduled task."""
 
     def __init__(
         self,
@@ -60,19 +60,19 @@ class InstaladorSchtasks:
         logger: logging.Logger | None = None,
     ) -> None:
         self._exec = exec_cmd
-        self._runner = runner or _runner_subprocess
+        self._runner = runner or _subprocess_runner
         self._task = task_name
         self._log = logger or logging.getLogger("vigia_eew.autostart.schtasks")
 
-    def esta_instalado(self) -> bool:
-        return self._runner(comando_consulta(self._task)) == 0
+    def is_installed(self) -> bool:
+        return self._runner(query_command(self._task)) == 0
 
-    def instalar(self) -> None:
-        """Crea la tarea programada de inicio de sesión (RF-22)."""
-        self._runner(comando_crear(self._task, self._exec))
-        self._log.info("autostart_instalado tarea=%s", self._task)
+    def install(self) -> None:
+        """Create the scheduled login task (RF-22)."""
+        self._runner(create_command(self._task, self._exec))
+        self._log.info("autostart_installed task=%s", self._task)
 
-    def desinstalar(self) -> None:
-        """Borra la tarea programada (RF-23)."""
-        self._runner(comando_borrar(self._task))
-        self._log.info("autostart_desinstalado tarea=%s", self._task)
+    def uninstall(self) -> None:
+        """Delete the scheduled task (RF-23)."""
+        self._runner(delete_command(self._task))
+        self._log.info("autostart_uninstalled task=%s", self._task)

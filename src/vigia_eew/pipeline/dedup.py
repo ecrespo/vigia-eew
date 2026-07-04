@@ -1,16 +1,17 @@
-"""Deduplicación y manejo de `update` (RF-09, RF-10, RF-11; TECHNICAL-DESIGN §5).
+"""Deduplication and `update` handling (RF-09, RF-10, RF-11; TECHNICAL-DESIGN §5).
 
-`Deduplicator` clasifica cada `SeismicEvent` ya filtrado en uno de tres resultados:
+`Deduplicator` classifies each already-filtered `SeismicEvent` into one of three
+outcomes:
 
-  - `"nuevo"`: nunca alertado y sin coincidencia con eventos recientes → generar alerta.
-  - `"actualizar"`: mismo `id` ya alertado con `accion="update"` → refrescar la alerta
-    en pantalla sin volver a alertar (RF-11).
-  - `"duplicado"`: mismo `id` ya alertado, o coincidencia inter-fuente por heurística
-    (≤ distancia, ≤ ventana temporal, ≤ Δmagnitud, RF-09) → descartar.
+  - `"new"`: never alerted and no match against recent events -> raise an alert.
+  - `"update"`: same `id` already alerted with `action="update"` -> refresh the
+    on-screen alert without alerting again (RF-11).
+  - `"duplicate"`: same `id` already alerted, or a cross-source match by heuristic
+    (<= distance, <= time window, <= magnitude delta, RF-09) -> discard.
 
-El estado (`ids_alertados` + `firmas_recientes`) se persiste para no repetir alertas tras
-reinicios (RF-10). Las decisiones de id usan igualdad exacta; las inter-fuente, la
-heurística configurable (`Dedup`).
+The state (`alerted_ids` + `recent_signatures`) is persisted so alerts are not
+repeated across restarts (RF-10). Id decisions use exact equality; cross-source
+matches use the configurable heuristic (`Dedup`).
 """
 
 from __future__ import annotations
@@ -23,49 +24,49 @@ from ..geo import haversine_km
 from ..models import AlertedId, EventSignature, SeismicEvent
 from ..state import StateStore
 
-ResultadoDedup = Literal["nuevo", "actualizar", "duplicado"]
+DedupResult = Literal["new", "update", "duplicate"]
 
 
 class Deduplicator:
-    """Clasifica eventos como nuevo/actualizar/duplicado y persiste lo alertado."""
+    """Classifies events as new/update/duplicate and persists what was alerted."""
 
     def __init__(
         self,
         cfg: Dedup,
-        estado: StateStore,
+        state: StateStore,
         *,
         logger: logging.Logger | None = None,
     ) -> None:
         self._cfg = cfg
-        self._estado = estado
+        self._state = state
         self._log = logger or logging.getLogger("vigia_eew.pipeline.dedup")
 
-    def clasificar(self, ev: SeismicEvent) -> ResultadoDedup:
-        """Determina el resultado de dedup para un evento ya filtrado."""
-        if self._estado.ya_alertado(ev.id):
-            # Mismo id: o es una revisión (update) de una alerta vigente, o un duplicado.
-            return "actualizar" if ev.accion == "update" else "duplicado"
-        for firma in self._estado.estado.firmas_recientes:
-            if self._coincide(ev, firma):
-                self._log.info("dedup_inter_fuente id=%s fuente=%s", ev.id, ev.fuente)
-                return "duplicado"
-        return "nuevo"
+    def classify(self, ev: SeismicEvent) -> DedupResult:
+        """Determines the dedup outcome for an already-filtered event."""
+        if self._state.already_alerted(ev.id):
+            # Same id: either a revision (update) of an active alert, or a duplicate.
+            return "update" if ev.action == "update" else "duplicate"
+        for signature in self._state.state.recent_signatures:
+            if self._matches(ev, signature):
+                self._log.info("dedup_cross_source id=%s source=%s", ev.id, ev.source)
+                return "duplicate"
+        return "new"
 
-    def registrar(self, ev: SeismicEvent) -> None:
-        """Marca un evento como alertado (id + firma) y persiste el estado (RF-10)."""
-        self._estado.registrar_alertado(
-            AlertedId(id=ev.id, fuente=ev.fuente, hora_utc=ev.hora_utc)
+    def register(self, ev: SeismicEvent) -> None:
+        """Marks an event as alerted (id + signature) and persists the state (RF-10)."""
+        self._state.register_alerted(
+            AlertedId(id=ev.id, source=ev.source, time_utc=ev.time_utc)
         )
-        self._estado.agregar_firma(ev.firma())
-        self._estado.guardar()
+        self._state.add_signature(ev.signature())
+        self._state.save()
 
-    def _coincide(self, ev: SeismicEvent, firma: EventSignature) -> bool:
-        """True si `ev` y `firma` son el mismo sismo según la heurística (RF-09)."""
-        distancia = haversine_km(ev.lat, ev.lon, firma.lat, firma.lon)
-        delta_t = abs((ev.hora_utc - firma.hora_utc).total_seconds())
-        delta_mag = abs(ev.magnitud - firma.magnitud)
+    def _matches(self, ev: SeismicEvent, signature: EventSignature) -> bool:
+        """True if `ev` and `signature` are the same earthquake per the heuristic (RF-09)."""
+        distance = haversine_km(ev.lat, ev.lon, signature.lat, signature.lon)
+        delta_t = abs((ev.time_utc - signature.time_utc).total_seconds())
+        delta_mag = abs(ev.magnitude - signature.magnitude)
         return (
-            distancia <= self._cfg.distancia_km
-            and delta_t <= self._cfg.ventana_s
-            and delta_mag <= self._cfg.delta_magnitud
+            distance <= self._cfg.distance_km
+            and delta_t <= self._cfg.window_s
+            and delta_mag <= self._cfg.magnitude_delta
         )

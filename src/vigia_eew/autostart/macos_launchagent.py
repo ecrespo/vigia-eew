@@ -1,9 +1,9 @@
-"""Autoarranque en macOS mediante LaunchAgent (RF-22, RF-23).
+"""Autostart on macOS via LaunchAgent (RF-22, RF-23).
 
-Escribe un `.plist` en `~/Library/LaunchAgents` con `RunAtLoad` (arranca al iniciar
-sesión) y `KeepAlive` (lo relanza si muere), y lo carga con `launchctl load -w`. La
-desinstalación lo descarga y borra. El `runner` (`launchctl`) y el directorio son
-inyectables para probar sin tocar el `launchd` real.
+Writes a `.plist` to `~/Library/LaunchAgents` with `RunAtLoad` (starts on login)
+and `KeepAlive` (relaunches it if it dies), and loads it with `launchctl load -w`.
+Uninstalling unloads it and removes the file. The `runner` (`launchctl`) and the
+directory are injectable so tests don't touch the real `launchd`.
 """
 
 from __future__ import annotations
@@ -19,62 +19,62 @@ _Runner = Callable[[list[str]], int]
 LABEL = "com.vigia-eew.agent"
 
 
-def plist_launchagent(program_args: list[str], *, label: str = LABEL) -> str:
-    """Genera el contenido del `.plist` del LaunchAgent (puro)."""
-    datos = {
+def launchagent_plist(program_args: list[str], *, label: str = LABEL) -> str:
+    """Generate the LaunchAgent `.plist` content (pure)."""
+    data = {
         "Label": label,
         "ProgramArguments": list(program_args),
         "RunAtLoad": True,
         "KeepAlive": True,
     }
-    return plistlib.dumps(datos).decode("utf-8")
+    return plistlib.dumps(data).decode("utf-8")
 
 
-def _dir_launchagents() -> Path:
+def _launchagents_dir() -> Path:
     return Path.home() / "Library" / "LaunchAgents"
 
 
-def _runner_subprocess(cmd: list[str]) -> int:
+def _subprocess_runner(cmd: list[str]) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-class InstaladorLaunchAgent:
-    """Instala/desinstala el autoarranque del agente vía LaunchAgent."""
+class LaunchAgentInstaller:
+    """Installs/uninstalls the agent's autostart via LaunchAgent."""
 
     def __init__(
         self,
         *,
         program_args: list[str],
-        dir_agents: Path | None = None,
+        agents_dir: Path | None = None,
         runner: _Runner | None = None,
         label: str = LABEL,
         logger: logging.Logger | None = None,
     ) -> None:
         self._args = program_args
-        self._dir = dir_agents or _dir_launchagents()
-        self._runner = runner or _runner_subprocess
+        self._dir = agents_dir or _launchagents_dir()
+        self._runner = runner or _subprocess_runner
         self._label = label
         self._log = logger or logging.getLogger("vigia_eew.autostart.launchagent")
 
     @property
-    def ruta(self) -> Path:
+    def path(self) -> Path:
         return self._dir / f"{self._label}.plist"
 
-    def esta_instalado(self) -> bool:
-        return self.ruta.exists()
+    def is_installed(self) -> bool:
+        return self.path.exists()
 
-    def instalar(self) -> None:
-        """Escribe el plist y lo carga para arrancar al iniciar sesión (RF-22)."""
+    def install(self) -> None:
+        """Write the plist and load it to start on login (RF-22)."""
         self._dir.mkdir(parents=True, exist_ok=True)
-        self.ruta.write_text(
-            plist_launchagent(self._args, label=self._label), encoding="utf-8"
+        self.path.write_text(
+            launchagent_plist(self._args, label=self._label), encoding="utf-8"
         )
-        self._runner(["launchctl", "load", "-w", str(self.ruta)])
-        self._log.info("autostart_instalado ruta=%s", self.ruta)
+        self._runner(["launchctl", "load", "-w", str(self.path)])
+        self._log.info("autostart_installed path=%s", self.path)
 
-    def desinstalar(self) -> None:
-        """Descarga el agente y borra el plist (RF-23)."""
-        self._runner(["launchctl", "unload", "-w", str(self.ruta)])
-        if self.ruta.exists():
-            self.ruta.unlink()
-        self._log.info("autostart_desinstalado")
+    def uninstall(self) -> None:
+        """Unload the agent and remove the plist (RF-23)."""
+        self._runner(["launchctl", "unload", "-w", str(self.path)])
+        if self.path.exists():
+            self.path.unlink()
+        self._log.info("autostart_uninstalled")

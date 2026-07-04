@@ -1,12 +1,12 @@
-"""Modelos de datos (pydantic v2).
+"""Data models (pydantic v2).
 
-Implementa el contrato interno definido en `docs/DATA-MODEL.md`:
-  - `SeismicEvent`: evento sísmico normalizado (RF-07).
-  - `AlertedId`, `EventSignature`, `AppState`: estado persistido (RF-06, RF-10).
-  - `clasificar_severidad`: derivación de severidad por magnitud (RF-13).
+Implements the internal contract defined in `docs/DATA-MODEL.md`:
+  - `SeismicEvent`: normalized seismic event (RF-07).
+  - `AlertedId`, `EventSignature`, `AppState`: persisted state (RF-06, RF-10).
+  - `classify_severity`: severity derivation by magnitude (RF-13).
 
-Invariante clave: todos los `datetime` son *tz-aware* en UTC. La conversión a hora
-local (America/Caracas) ocurre solo en la capa de presentación (RF-18, RNF-12).
+Key invariant: every `datetime` is *tz-aware* in UTC. Conversion to local time
+(America/Caracas) happens only in the presentation layer (RF-18, RNF-12).
 """
 
 from __future__ import annotations
@@ -16,125 +16,125 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-# --- Alias de tipos del dominio ---
-Fuente = Literal["EMSC", "USGS", "SIMULADO"]
-Severidad = Literal["info", "atencion", "critico"]
-Accion = Literal["create", "update"]
+# --- Domain type aliases ---
+Source = Literal["EMSC", "USGS", "SIMULATED"]
+SeverityLevel = Literal["info", "warning", "critical"]
+Action = Literal["create", "update"]
 
 
-def _exigir_utc(valor: datetime | None) -> datetime | None:
-    """Valida que un datetime sea tz-aware y lo normaliza a UTC.
+def _require_utc(value: datetime | None) -> datetime | None:
+    """Validates that a datetime is tz-aware and normalizes it to UTC.
 
-    Se rechaza un datetime *naive* (sin zona) para evitar ambigüedades de tiempo,
-    que en una alerta sísmica serían peligrosas.
+    A *naive* datetime (without a timezone) is rejected to avoid time ambiguities,
+    which would be dangerous in a seismic alert.
     """
-    if valor is None:
+    if value is None:
         return None
-    if valor.tzinfo is None:
-        raise ValueError("El datetime debe ser tz-aware (incluir zona horaria).")
-    return valor.astimezone(UTC)
+    if value.tzinfo is None:
+        raise ValueError("The datetime must be tz-aware (include a timezone).")
+    return value.astimezone(UTC)
 
 
-def clasificar_severidad(magnitud: float, info_max: float, atencion_max: float) -> Severidad:
-    """Clasifica la severidad de un sismo según su magnitud (RF-13).
+def classify_severity(magnitude: float, info_max: float, warning_max: float) -> SeverityLevel:
+    """Classifies the severity of an earthquake by its magnitude (RF-13).
 
-    Por defecto (config): `< info_max` -> info, `< atencion_max` -> atencion,
-    en otro caso -> critico. Los umbrales son configurables (ver `Settings`).
+    By default (config): `< info_max` -> info, `< warning_max` -> warning,
+    otherwise -> critical. The thresholds are configurable (see `Settings`).
     """
-    if magnitud < info_max:
+    if magnitude < info_max:
         return "info"
-    if magnitud < atencion_max:
-        return "atencion"
-    return "critico"
+    if magnitude < warning_max:
+        return "warning"
+    return "critical"
 
 
 class SeismicEvent(BaseModel):
-    """Evento sísmico normalizado que circula entre las capas del agente (RF-07)."""
+    """Normalized seismic event that flows between the agent's layers (RF-07)."""
 
     id: str
-    fuente: Fuente
-    magnitud: float
+    source: Source
+    magnitude: float
     mag_type: str
-    lugar: str | None = None
+    place: str | None = None
     region: str | None = None
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
-    profundidad_km: float = Field(ge=0)
-    hora_utc: datetime
+    depth_km: float = Field(ge=0)
+    time_utc: datetime
     lastupdate_utc: datetime | None = None
-    distancia_km: float = Field(ge=0)
-    severidad: Severidad
-    accion: Accion = "create"
+    distance_km: float = Field(ge=0)
+    severity: SeverityLevel
+    action: Action = "create"
 
-    @field_validator("hora_utc", "lastupdate_utc")
+    @field_validator("time_utc", "lastupdate_utc")
     @classmethod
-    def _validar_utc(cls, v: datetime | None) -> datetime | None:
-        return _exigir_utc(v)
+    def _validate_utc(cls, v: datetime | None) -> datetime | None:
+        return _require_utc(v)
 
     @field_validator("mag_type")
     @classmethod
-    def _normalizar_magtype(cls, v: str) -> str:
-        # EMSC usa `magtype` (minúscula) y USGS `magType` (camelCase); unificamos.
+    def _normalize_magtype(cls, v: str) -> str:
+        # EMSC uses `magtype` (lowercase) and USGS `magType` (camelCase); we unify them.
         return v.strip().lower()
 
-    def firma(self) -> EventSignature:
-        """Produce la firma usada en la deduplicación inter-fuente (RF-09)."""
+    def signature(self) -> EventSignature:
+        """Produces the signature used for inter-source deduplication (RF-09)."""
         return EventSignature(
-            lat=self.lat, lon=self.lon, hora_utc=self.hora_utc, magnitud=self.magnitud
+            lat=self.lat, lon=self.lon, time_utc=self.time_utc, magnitude=self.magnitude
         )
 
 
 class EventSignature(BaseModel):
-    """Huella mínima de un evento para detectar duplicados entre fuentes (RF-09)."""
+    """Minimal fingerprint of an event used to detect duplicates across sources (RF-09)."""
 
     lat: float
     lon: float
-    hora_utc: datetime
-    magnitud: float
+    time_utc: datetime
+    magnitude: float
 
-    @field_validator("hora_utc")
+    @field_validator("time_utc")
     @classmethod
-    def _validar_utc(cls, v: datetime) -> datetime:
-        validado = _exigir_utc(v)
-        assert validado is not None  # hora_utc es obligatorio aquí
-        return validado
+    def _validate_utc(cls, v: datetime) -> datetime:
+        validated = _require_utc(v)
+        assert validated is not None  # time_utc is required here
+        return validated
 
 
 class AlertedId(BaseModel):
-    """Registro de un evento ya alertado, para no repetir tras reinicios (RF-10)."""
+    """Record of an already-alerted event, to avoid repeating it after restarts (RF-10)."""
 
     id: str
-    fuente: str
-    hora_utc: datetime
-    reconocido_utc: datetime | None = None  # auditoría del acknowledge (OBJ-1)
+    source: str
+    time_utc: datetime
+    acknowledged_utc: datetime | None = None  # acknowledge audit trail (OBJ-1)
 
-    @field_validator("hora_utc", "reconocido_utc")
+    @field_validator("time_utc", "acknowledged_utc")
     @classmethod
-    def _validar_utc(cls, v: datetime | None) -> datetime | None:
-        return _exigir_utc(v)
+    def _validate_utc(cls, v: datetime | None) -> datetime | None:
+        return _require_utc(v)
 
 
-class UbicacionDetectada(BaseModel):
-    """Ubicación por IP cacheada tras la primera detección exitosa (RF-33)."""
+class DetectedLocation(BaseModel):
+    """IP-based location cached after the first successful detection (RF-33)."""
 
-    nombre: str
+    name: str
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
-    detectado_utc: datetime
+    detected_utc: datetime
 
-    @field_validator("detectado_utc")
+    @field_validator("detected_utc")
     @classmethod
-    def _validar_utc(cls, v: datetime) -> datetime:
-        validado = _exigir_utc(v)
-        assert validado is not None  # detectado_utc es obligatorio aquí
-        return validado
+    def _validate_utc(cls, v: datetime) -> datetime:
+        validated = _require_utc(v)
+        assert validated is not None  # detected_utc is required here
+        return validated
 
 
 class AppState(BaseModel):
-    """Estado persistido del agente (RF-06, RF-10). Ver `state.py`."""
+    """Persisted agent state (RF-06, RF-10). See `state.py`."""
 
     version: int = 1
     cursor_usgs_ms: int | None = None
-    ids_alertados: list[AlertedId] = Field(default_factory=list)
-    firmas_recientes: list[EventSignature] = Field(default_factory=list)
-    ubicacion_detectada: UbicacionDetectada | None = None
+    alerted_ids: list[AlertedId] = Field(default_factory=list)
+    recent_signatures: list[EventSignature] = Field(default_factory=list)
+    detected_location: DetectedLocation | None = None

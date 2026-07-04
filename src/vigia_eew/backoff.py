@@ -1,9 +1,9 @@
-"""Backoff exponencial con jitter (RF-03, RNF-03).
+"""Exponential backoff with jitter (RF-03, RNF-03).
 
-Helper puro reutilizado por la reconexión del WebSocket (`ingest/ws_emsc.py`) y por
-el reinicio de tareas del `Supervisor`. La estrategia es *equal jitter*: la espera
-nominal duplica (base·2^(intento-1)) saturada en `tope`, y el jitter reparte el
-resultado en `[nominal/2, nominal]` para evitar reconexiones sincronizadas.
+Pure helper reused by the WebSocket reconnection (`ingest/ws_emsc.py`) and by the
+`Supervisor`'s task restarts. The strategy is *equal jitter*: the nominal wait
+doubles (base·2^(attempt-1)) saturated at `cap`, and the jitter spreads the
+result over `[nominal/2, nominal]` to avoid synchronized reconnections.
 """
 
 from __future__ import annotations
@@ -11,39 +11,39 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 
-# Generador por defecto: número en [0, 1). Inyectable para pruebas deterministas.
-_rng_por_defecto: Callable[[], float] = random.random
+# Default generator: a number in [0, 1). Injectable for deterministic tests.
+_default_rng: Callable[[], float] = random.random
 
 
 def exponential_backoff(
-    intento: int,
+    attempt: int,
     *,
     base: float = 1.0,
-    tope: float = 60.0,
+    cap: float = 60.0,
     jitter: bool = True,
-    rng: Callable[[], float] = _rng_por_defecto,
+    rng: Callable[[], float] = _default_rng,
 ) -> float:
-    """Calcula la espera (segundos) antes del siguiente reintento.
+    """Computes the wait (in seconds) before the next retry.
 
     Args:
-        intento: número de intento, empezando en 1.
-        base: espera del primer intento (intento=1) sin jitter.
-        tope: espera máxima; satura el crecimiento exponencial.
-        jitter: si False, devuelve la espera nominal determinista.
-        rng: fuente de aleatoriedad en [0, 1); inyectable en pruebas.
+        attempt: attempt number, starting at 1.
+        base: wait for the first attempt (attempt=1) without jitter.
+        cap: maximum wait; saturates the exponential growth.
+        jitter: if False, returns the deterministic nominal wait.
+        rng: source of randomness in [0, 1); injectable in tests.
 
     Returns:
-        Segundos a esperar (siempre <= `tope`).
+        Seconds to wait (always <= `cap`).
 
     Raises:
-        ValueError: si `intento` < 1.
+        ValueError: if `attempt` < 1.
     """
-    if intento < 1:
-        raise ValueError("intento debe ser >= 1")
-    # 2.0 (no 2) para que mypy infiera float: `int ** int` puede ser float (exp. negativos).
-    nominal = min(tope, base * 2.0 ** (intento - 1))
+    if attempt < 1:
+        raise ValueError("attempt must be >= 1")
+    # 2.0 (not 2) so mypy infers float: `int ** int` can be float (negative exponents).
+    nominal = min(cap, base * 2.0 ** (attempt - 1))
     if not jitter:
         return nominal
-    # Equal jitter: mitad fija + mitad aleatoria, acotado por `nominal` (<= tope).
-    mitad = nominal / 2
-    return mitad + rng() * mitad
+    # Equal jitter: fixed half + random half, bounded by `nominal` (<= cap).
+    half = nominal / 2
+    return half + rng() * half
