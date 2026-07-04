@@ -6,6 +6,8 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+## [0.1.3] - 2026-07-04
+
 ### Agregado
 - Detección automática del punto de referencia geográfico por geolocalización de IP
   (`geoloc.py`, RF-33) cuando el usuario no define `[referencia]` en `config.toml`. Se
@@ -57,7 +59,8 @@ de publicación en `packaging/RELEASING.md`.
 - Empaquetado: build de PyPI (wheel/sdist), especificación PyInstaller y scripts de build
   por SO, workflow de CI/CD con matriz de release (Fase 8).
 
-[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.2...HEAD
+[Sin publicar]: https://github.com/ecrespo/vigia-eew/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/ecrespo/vigia-eew/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/ecrespo/vigia-eew/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/ecrespo/vigia-eew/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ecrespo/vigia-eew/releases/tag/v0.1.0
