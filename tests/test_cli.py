@@ -37,6 +37,19 @@ def setup_function():
     _FakeApp.created.clear()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_seed(monkeypatch):
+    """Record seeding calls and keep them off the real user config dir."""
+    calls: list = []
+
+    def fake_seed(path=None, **kwargs):
+        calls.append(path)
+        return None
+
+    monkeypatch.setattr("vigia_eew.config.seed_config_if_missing", fake_seed)
+    return calls
+
+
 def test_simulate_invokes_simulate():
     rc = main(["--simulate"], create_app=_create)
     assert rc == 0
@@ -98,6 +111,26 @@ def test_config_path_propagates_to_app(tmp_path):
     rc = main(["--config", str(path)], create_app=_create)
     assert rc == 0
     assert _FakeApp.created[-1].config_path == str(path)
+
+
+def test_seeds_default_config_when_no_config_flag(_no_real_seed):
+    rc = main([], create_app=_create)
+    assert rc == 0
+    assert _no_real_seed == [None]  # seeded once, at the default path
+
+
+def test_does_not_seed_with_explicit_config(tmp_path, _no_real_seed):
+    path = tmp_path / "config.toml"
+    path.write_text("[filter]\nmin_magnitude = 4.0\n", encoding="utf-8")
+    rc = main(["--config", str(path)], create_app=_create)
+    assert rc == 0
+    assert _no_real_seed == []  # explicit --config is never auto-created
+
+
+def test_check_config_does_not_seed(_no_real_seed):
+    rc = main(["--check-config"], create_app=_create)
+    assert rc == 0
+    assert _no_real_seed == []  # read-only validation seeds nothing
 
 
 def test_version_exits_cleanly():

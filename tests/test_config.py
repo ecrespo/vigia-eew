@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from vigia_eew.config import Settings, has_manual_reference, load_config
+from vigia_eew import config as config_module
+from vigia_eew.config import (
+    Settings,
+    bundled_example,
+    has_manual_reference,
+    load_config,
+    seed_config_if_missing,
+)
 
 CONFIG_EXAMPLE = """
 [reference]
@@ -73,15 +80,52 @@ def test_invalid_severity():
         Settings(severity={"info_max": 6.0, "warning_max": 5.0})
 
 
-def test_example_file_is_valid():
-    # The repo's config.toml.example must load without errors.
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[1]
-    example = root / "config.toml.example"
-    cfg = load_config(example)
-    assert cfg.reference.name == "Caracas"
+def test_bundled_example_is_valid_toml(tmp_path):
+    # The packaged template must load without errors.
+    path = tmp_path / "config.toml"
+    path.write_text(bundled_example(), encoding="utf-8")
+    cfg = load_config(path)
     assert cfg.notification.timezone == "America/Caracas"
+
+
+def test_bundled_example_has_reference_commented(tmp_path):
+    # [reference] is commented in the template -> IP auto-detection stays on (RF-33).
+    path = tmp_path / "config.toml"
+    path.write_text(bundled_example(), encoding="utf-8")
+    assert has_manual_reference(path) is False
+
+
+def test_seed_creates_file_and_parent_dir(tmp_path):
+    target = tmp_path / "nested" / "config.toml"
+    result = seed_config_if_missing(target)
+    assert result == target
+    assert target.exists()
+    # The seeded file is the loadable template with a commented [reference] (RF-33).
+    assert has_manual_reference(target) is False
+
+
+def test_seed_does_not_overwrite_existing(tmp_path):
+    target = tmp_path / "config.toml"
+    target.write_text("[filter]\nmin_magnitude = 9.0\n", encoding="utf-8")
+    result = seed_config_if_missing(target)
+    assert result is None
+    assert "9.0" in target.read_text(encoding="utf-8")  # user file untouched
+
+
+def test_seed_uses_default_path_when_none(tmp_path, monkeypatch):
+    target = tmp_path / "config.toml"
+    monkeypatch.setattr(config_module, "default_config_path", lambda: target)
+    result = seed_config_if_missing()
+    assert result == target
+    assert target.exists()
+
+
+def test_seed_is_best_effort_on_oserror(tmp_path):
+    # Parent is a regular file -> mkdir raises OSError; seeding must not propagate it.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    result = seed_config_if_missing(blocker / "config.toml")
+    assert result is None
 
 
 def test_has_manual_reference_nonexistent_explicit_path(tmp_path):

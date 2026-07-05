@@ -19,7 +19,8 @@ import vigia_eew
 
 block_cipher = None
 
-_ASSETS_DIR = os.path.join(os.path.dirname(vigia_eew.__file__), "assets")
+_PKG_DIR = os.path.dirname(vigia_eew.__file__)
+_ASSETS_DIR = os.path.join(_PKG_DIR, "assets")
 
 # `desktop_notifier.common` carga su ícono default con
 # `importlib.resources.files("desktop_notifier.resources")` — una referencia dinámica
@@ -33,7 +34,14 @@ a = Analysis(
     [os.path.join(SPECPATH, "entrypoint.py")],
     pathex=[],
     binaries=[],
-    datas=[(_ASSETS_DIR, "vigia_eew/assets"), *collect_data_files("desktop_notifier")],
+    # `config.toml.example` ships as a package resource so `config.seed_config_if_missing`
+    # can seed the user's config on first run (RF-24), the same in the frozen binary as
+    # in a wheel/pipx install.
+    datas=[
+        (_ASSETS_DIR, "vigia_eew/assets"),
+        (os.path.join(_PKG_DIR, "config.toml.example"), "vigia_eew"),
+        *collect_data_files("desktop_notifier"),
+    ],
     # `desktop-notifier` resuelve su backend (dbus-fast en Linux, UserNotifications en
     # macOS, WinRT en Windows) con imports condicionales que PyInstaller a veces no
     # detecta solo con el análisis estático; si el binario falla en runtime con

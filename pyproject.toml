@@ -68,7 +68,7 @@ packaging = [
 packages = ["src/vigia_eew"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/vigia_eew", "docs", "ARCHITECTURE.md", "config.toml.example"]
+include = ["src/vigia_eew", "docs", "ARCHITECTURE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

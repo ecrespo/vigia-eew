@@ -3,14 +3,15 @@
 # (or pass it with `vigia-eew --config <path>`). All values have sensible
 # defaults centered on Caracas; adjust to your area.
 
-# Geographic point used to calculate distance and radius (RF-12). If you **delete or
-# comment out** this whole section, the agent automatically detects your location by
-# IP on first startup and caches it so the lookup isn't repeated (RF-33, see
-# docs/API-SPEC.md §4). Leave it as-is (or adjust it) to set your location manually.
-[reference]
-name = "Caracas"
-lat = 10.4806
-lon = -66.9036
+# Geographic point used to calculate distance and radius (RF-12). This section is
+# **commented out by default**: with no manual reference, the agent automatically
+# detects your location by IP on first startup and caches it so the lookup isn't
+# repeated (RF-33, see docs/API-SPEC.md §4). **Uncomment and adjust** these lines to
+# set your location manually instead (that disables the IP auto-detection).
+# [reference]
+# name = "Caracas"
+# lat = 10.4806
+# lon = -66.9036
 
 [filter]
 radius_km = 300.0
