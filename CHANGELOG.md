@@ -4,6 +4,20 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [0.4.0] - 2026-07-05
+
+### Added
+- **FUNVISIS as a third ingestion source** (`[sources.funvisis]`, RF-05) — **Venezuela-only**
+  local coverage. EMSC/USGS don't catalog the small local Venezuelan earthquakes (M2-3);
+  the national network FUNVISIS does. The agent now polls FUNVISIS's `maravilla.json` (its
+  web map's GeoJSON; there is no real-time push) so those local events trigger alerts.
+  Enabled by default and harmless elsewhere (FUNVISIS reports only Venezuelan events, which
+  fall outside a non-VE user's radius). To avoid a startup burst, only earthquakes appearing
+  *after* the agent starts are alerted — the batch already published at startup is recorded
+  as seen, not alerted. Polled over plain HTTP (FUNVISIS offers no valid HTTPS; the data is
+  public). New module `ingest/rest_funvisis.py`; times are converted from Venezuela local
+  (VET) to UTC. Turn it off with `[sources.funvisis] enabled = false`.
+
 ## [0.3.1] - 2026-07-05
 
 ### Changed
