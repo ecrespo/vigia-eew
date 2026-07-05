@@ -4,6 +4,23 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [0.4.1] - 2026-07-05
+
+### Fixed
+- **Headless import safety (RF-36)**: `vigia-eew --tui` crashed at startup on a host with no
+  X display (`Xlib.error.DisplayNameError`) — exactly the headless-server scenario the TUI is
+  for. `tray.py` imported `pystray` at module level and pystray connects to its GUI backend at
+  import time; `app.py` imports `tray`, so importing the agent required a display. pystray is
+  now imported lazily inside `build_icon`, so `vigia_eew.app` (and `--tui`) import with no
+  display. Regression-tested (`test_app_imports_without_display`).
+
+### Changed
+- Development infrastructure (no runtime effect): GitHub Actions CI on `develop`
+  (ruff/mypy/pytest) and a security gate on PRs to `main` (bandit, semgrep, pip-audit,
+  gitleaks, trivy), mirrored locally by `.pre-commit-config.yaml`. `main` is now
+  branch-protected (PRs + green checks required); releases are cut on `develop` and promoted
+  via PR (see `packaging/RELEASING.md`).
+
 ## [0.4.0] - 2026-07-05
 
 ### Added
