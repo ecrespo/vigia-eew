@@ -17,13 +17,20 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PIL import Image
-from pystray import Icon, Menu, MenuItem
 
 from vigia_eew.agent_state import AgentState
 from vigia_eew.i18n import DEFAULT_LOCALE, t
 from vigia_eew.subprocess_env import system_env
+
+if TYPE_CHECKING:
+    # pystray selects (and connects to) its GUI backend at import time, which fails on a
+    # headless host (no X display). Importing it lazily inside `build_icon` keeps this
+    # module — and everything that imports it, including `--tui` on a headless server
+    # (RF-36) — import-safe without a display.
+    from pystray import Icon
 
 _ICON_FILE_NAME = "tray_icon.png"
 
@@ -73,6 +80,8 @@ def build_icon(
     locale_code: str = DEFAULT_LOCALE,
 ) -> Icon:
     """Assembles the `pystray.Icon` with its menu; does not start it (see `TrayIcon`)."""
+    from pystray import Icon, Menu, MenuItem  # lazy: backend connects to X at import
+
     image = Image.open(icon_path or default_icon_path())
 
     def _status_text(_item: MenuItem) -> str:

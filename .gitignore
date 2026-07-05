@@ -17,7 +17,13 @@ env/
 .mypy_cache/
 .ruff_cache/
 .coverage
+coverage.xml
 htmlcov/
+report.xml
+# CI security scan reports (uploaded as artifacts, never committed)
+*.sarif
+pip-audit-report.json
+trivy-fs.json
 
 # uv
 uv.lock

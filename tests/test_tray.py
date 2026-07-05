@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -130,3 +131,19 @@ def test_stop_calls_stop_and_waits_for_the_thread():
     icon.start()
     icon.stop()
     assert fake.stopped is True
+
+
+# --- Headless import safety (RF-36): the agent must import with no X display ---
+
+
+def test_app_imports_without_display():
+    # pystray connects to its GUI backend at import; importing it lazily keeps
+    # `vigia_eew.app` (and `--tui` on a headless server) import-safe without a display.
+    env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY")}
+    result = subprocess.run(
+        [sys.executable, "-c", "import vigia_eew.app"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

@@ -32,6 +32,12 @@ vigia-eew --install-autostart           # installs autostart (systemd/LaunchAgen
 Quality gate before considering a task done: `pytest`, `ruff check .`, `mypy src` — all
 three green.
 
+CI mirrors this: `.github/workflows/ci.yml` runs the gate on pushes/PRs to `develop`;
+`.github/workflows/security.yml` runs SAST/SCA/secret scans (bandit, pip-audit, gitleaks,
+semgrep, trivy) on PRs to `main`. `.pre-commit-config.yaml` runs the same checks locally
+(`uv run pre-commit install`): fast ones per commit, the heavier ones (pytest, pip-audit,
+semgrep, trivy) pre-push. `build.yml` builds/publishes releases on a `vX.Y.Z` tag.
+
 ## Architecture
 
 **A single asyncio process** per machine. Two ingestors feed a common `raw_queue`:

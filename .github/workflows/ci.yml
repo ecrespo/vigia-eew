@@ -1,0 +1,66 @@
+# Continuous integration — validates the code on the `develop` branch.
+#
+# Runs the project's quality gate (lint + type check + tests with coverage) on every
+# push to `develop` and on pull requests that target `develop`. Security scanning for
+# the develop->main promotion lives in `security.yml`; native packaging/release lives
+# in `build.yml`.
+name: ci
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    # develop: validate feature merges. main: the develop->main promotion runs the
+    # code gate alongside security.yml, so both are required checks before release.
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+# Use uv-managed CPython (python-build-standalone), which bundles tkinter — the
+# runner's system Python lacks it and the GUI modules import tkinter at load time.
+env:
+  UV_PYTHON_PREFERENCE: only-managed
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - run: uv run ruff check .
+
+  mypy:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - run: uv run mypy src
+
+  test:
+    name: Tests (pytest + coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      # The suite imports the GUI modules (tkinter + pystray's X backend), which need a
+      # display even though the real-window tests are skipped. Xvfb provides a headless one.
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: >-
+          xvfb-run -a
+          uv run pytest
+          --cov=vigia_eew
+          --cov-branch
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+          --junitxml=report.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            report.xml
+          retention-days: 7
