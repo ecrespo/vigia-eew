@@ -1,8 +1,9 @@
-"""Capa de ingestión (RF-01..RF-06).
+"""Ingestion layer (RF-01..RF-06).
 
-Las fuentes (WebSocket EMSC y REST USGS) publican **mensajes crudos** (`RawMessage`)
-en una cola asyncio. El pipeline de la Fase 3 los normaliza al `SeismicEvent` común.
-Mantener el crudo aquí desacopla el transporte de la normalización (API-SPEC §3).
+The sources (EMSC WebSocket and USGS REST) publish **raw messages** (`RawMessage`)
+onto an asyncio queue. The Phase 3 pipeline normalizes them into the common
+`SeismicEvent`. Keeping the raw data here decouples the transport from the
+normalization (API-SPEC §3).
 """
 
 from __future__ import annotations
@@ -10,21 +11,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..models import Fuente
+from vigia_eew.models import Source
 
 
 @dataclass(frozen=True, slots=True)
 class RawMessage:
-    """Mensaje sin normalizar emitido por una fuente.
+    """Unnormalized message emitted by a source.
 
     Attributes:
-        fuente: origen del mensaje (`"EMSC"` o `"USGS"`).
-        action: `"create"` o `"update"` (EMSC lo trae explícito; USGS es siempre
-            `"create"`, el manejo de revisiones se hace por `updated`/cursor).
-        feature: el objeto GeoJSON Feature crudo (con `properties` y `geometry`).
+        source: origin of the message (`"EMSC"` or `"USGS"`).
+        action: `"create"` or `"update"` (EMSC provides it explicitly; USGS is
+            always `"create"`, revision handling is done via `updated`/cursor).
+        feature: the raw GeoJSON Feature object (with `properties` and `geometry`).
     """
 
-    fuente: Fuente
+    source: Source
     action: str
     feature: dict[str, Any]
 

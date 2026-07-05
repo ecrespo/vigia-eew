@@ -1,12 +1,12 @@
-"""Orquestador asyncio — patrón "supervisor que reinicia hijos" (RNF-03, RNF-04).
+"""Asyncio orchestrator — "supervisor that restarts children" pattern (RNF-03, RNF-04).
 
-`Supervisor` mantiene vivas un conjunto de tareas de larga vida (ingestión WS, polling
-USGS y, en fases posteriores, el pipeline). Cada tarea se ejecuta dentro de un *guard*
-que captura sus excepciones, las registra y la **reinicia con backoff** sin tumbar el
-proceso ni afectar a las demás (aislamiento de fallos, TECHNICAL-DESIGN §3).
+`Supervisor` keeps a set of long-lived tasks alive (WS ingestion, USGS polling, and,
+in later phases, the pipeline). Each task runs inside a *guard* that captures its
+exceptions, logs them, and **restarts it with backoff** without bringing down the
+process or affecting the others (fault isolation, TECHNICAL-DESIGN §3).
 
-El cierre es **limpio**: `solicitar_parada()` (o SIGINT/SIGTERM) cancela las tareas vivas
-y espera su finalización. El `sleep` del backoff se inyecta para pruebas deterministas.
+Shutdown is **clean**: `request_stop()` (or SIGINT/SIGTERM) cancels the live tasks
+and waits for them to finish. The backoff `sleep` is injected for deterministic tests.
 """
 
 from __future__ import annotations
@@ -17,97 +17,97 @@ import signal
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .backoff import exponential_backoff
+from vigia_eew.backoff import exponential_backoff
 
-# Una tarea registrada es una factoría que produce la corrutina a supervisar.
-Factoria = Callable[[], Awaitable[Any]]
+# A registered task is a factory that produces the coroutine to supervise.
+Factory = Callable[[], Awaitable[Any]]
 _SleepFn = Callable[[float], Any]
 
 
 class Supervisor:
-    """Supervisa tareas asyncio reiniciándolas ante fallos; cierre coordinado."""
+    """Supervises asyncio tasks, restarting them on failure; coordinated shutdown."""
 
     def __init__(
         self,
         *,
         sleep: _SleepFn = asyncio.sleep,
-        backoff_tope: float = 60.0,
+        backoff_cap: float = 60.0,
         jitter: bool = True,
         rng: Callable[[], float] | None = None,
-        manejar_senales: bool = True,
+        handle_signals: bool = True,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._tareas: list[tuple[str, Factoria]] = []
+        self._tasks: list[tuple[str, Factory]] = []
         self._sleep = sleep
-        self._backoff_tope = backoff_tope
+        self._backoff_cap = backoff_cap
         self._jitter = jitter
         self._rng = rng
-        self._manejar_senales = manejar_senales
+        self._handle_signals = handle_signals
         self._log = logger or logging.getLogger("vigia_eew.supervisor")
-        self._parar = asyncio.Event()
+        self._stop = asyncio.Event()
 
-    def add(self, nombre: str, factoria: Factoria) -> None:
-        """Registra una tarea de larga vida bajo un nombre legible."""
-        self._tareas.append((nombre, factoria))
+    def add(self, name: str, factory: Factory) -> None:
+        """Registers a long-lived task under a readable name."""
+        self._tasks.append((name, factory))
 
     @property
-    def nombres(self) -> list[str]:
-        """Nombres de las tareas registradas (en orden de registro)."""
-        return [nombre for nombre, _ in self._tareas]
+    def names(self) -> list[str]:
+        """Names of the registered tasks (in registration order)."""
+        return [name for name, _ in self._tasks]
 
-    def solicitar_parada(self) -> None:
-        """Pide el cierre ordenado del supervisor y sus tareas."""
-        self._parar.set()
+    def request_stop(self) -> None:
+        """Requests an orderly shutdown of the supervisor and its tasks."""
+        self._stop.set()
 
     async def run(self) -> None:
-        """Arranca y supervisa todas las tareas hasta que se solicite la parada."""
-        self._parar.clear()
+        """Starts and supervises all tasks until a stop is requested."""
+        self._stop.clear()
         guards = [
-            asyncio.create_task(self._guard(nombre, factoria), name=nombre)
-            for nombre, factoria in self._tareas
+            asyncio.create_task(self._guard(name, factory), name=name)
+            for name, factory in self._tasks
         ]
-        self._instalar_senales()
+        self._install_signal_handlers()
         try:
-            await self._parar.wait()
+            await self._stop.wait()
         finally:
             for g in guards:
                 g.cancel()
             await asyncio.gather(*guards, return_exceptions=True)
-            self._remover_senales()
-            self._log.info("supervisor_detenido")
+            self._remove_signal_handlers()
+            self._log.info("supervisor_stopped")
 
-    async def _guard(self, nombre: str, factoria: Factoria) -> None:
-        """Mantiene viva una tarea: la reinicia con backoff ante fallo o término."""
-        intento = 0
-        while not self._parar.is_set():
+    async def _guard(self, name: str, factory: Factory) -> None:
+        """Keeps a task alive: restarts it with backoff on failure or completion."""
+        attempt = 0
+        while not self._stop.is_set():
             try:
-                await factoria()
+                await factory()
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001 - aislamiento deliberado (RNF-03)
+            except Exception as exc:  # noqa: BLE001 - deliberate isolation (RNF-03)
                 self._log.warning(
-                    "tarea_fallo nombre=%s tipo=%s detalle=%s", nombre, type(exc).__name__, exc
+                    "task_failed name=%s type=%s detail=%s", name, type(exc).__name__, exc
                 )
             else:
-                self._log.warning("tarea_termino nombre=%s (se reinicia)", nombre)
-            if self._parar.is_set():
+                self._log.warning("task_ended name=%s (restarting)", name)
+            if self._stop.is_set():
                 break
-            intento += 1
-            espera = self._backoff(intento)
+            attempt += 1
+            wait = self._backoff(attempt)
             self._log.info(
-                "tarea_reinicia nombre=%s intento=%d espera_s=%.1f", nombre, intento, espera
+                "task_restarting name=%s attempt=%d wait_s=%.1f", name, attempt, wait
             )
-            await self._sleep(espera)
+            await self._sleep(wait)
 
-    def _backoff(self, intento: int) -> float:
-        kwargs: dict[str, Any] = {"tope": self._backoff_tope, "jitter": self._jitter}
+    def _backoff(self, attempt: int) -> float:
+        kwargs: dict[str, Any] = {"cap": self._backoff_cap, "jitter": self._jitter}
         if self._rng is not None:
             kwargs["rng"] = self._rng
-        return exponential_backoff(intento, **kwargs)
+        return exponential_backoff(attempt, **kwargs)
 
-    def _instalar_senales(self) -> None:
-        """Instala manejadores SIGINT/SIGTERM para un cierre limpio (best-effort)."""
-        if not self._manejar_senales:
+    def _install_signal_handlers(self) -> None:
+        """Installs SIGINT/SIGTERM handlers for a clean shutdown (best-effort)."""
+        if not self._handle_signals:
             return
         try:
             loop = asyncio.get_running_loop()
@@ -115,13 +115,13 @@ class Supervisor:
             return
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
-                loop.add_signal_handler(sig, self.solicitar_parada)
+                loop.add_signal_handler(sig, self.request_stop)
             except (NotImplementedError, RuntimeError, ValueError):
-                # add_signal_handler no está soportado en algunos SO (p. ej. Windows).
-                self._log.debug("senal_no_soportada sig=%s", sig)
+                # add_signal_handler is not supported on some OSes (e.g. Windows).
+                self._log.debug("signal_not_supported sig=%s", sig)
 
-    def _remover_senales(self) -> None:
-        if not self._manejar_senales:
+    def _remove_signal_handlers(self) -> None:
+        if not self._handle_signals:
             return
         try:
             loop = asyncio.get_running_loop()

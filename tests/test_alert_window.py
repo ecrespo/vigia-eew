@@ -1,4 +1,4 @@
-"""Pruebas de la ventana de alerta no descartable (RF-15, RF-16, RF-19)."""
+"""Tests for the undismissable alert window (RF-15, RF-16, RF-19)."""
 
 from __future__ import annotations
 
@@ -10,37 +10,37 @@ import pytest
 from vigia_eew.models import SeismicEvent
 from vigia_eew.notify.alert_window import (
     AlertWindow,
-    configurar_no_descartable,
-    tomar_foco,
+    configure_undismissable,
+    take_focus,
 )
-from vigia_eew.notify.presentacion import DatosAlerta, formatear_evento
+from vigia_eew.notify.presentation import AlertData, format_event
 
 
-def _datos() -> DatosAlerta:
+def _data() -> AlertData:
     ev = SeismicEvent(
         id="x",
-        fuente="EMSC",
-        magnitud=6.1,
+        source="EMSC",
+        magnitude=6.1,
         mag_type="mw",
-        lugar="NEAR COAST OF VENEZUELA",
+        place="NEAR COAST OF VENEZUELA",
         lat=10.6,
         lon=-66.93,
-        profundidad_km=12.0,
-        hora_utc=datetime(2026, 6, 28, 13, 39, tzinfo=UTC),
-        distancia_km=162.0,
-        severidad="critico",
+        depth_km=12.0,
+        time_utc=datetime(2026, 6, 28, 13, 39, tzinfo=UTC),
+        distance_km=162.0,
+        severity="critical",
     )
-    return formatear_evento(ev, nombre_referencia="Caracas")
+    return format_event(ev, reference_name="Caracas")
 
 
-class _FakeRaiz:
-    """Raíz Tk falsa que registra la configuración aplicada."""
+class _FakeRoot:
+    """Fake Tk root that records the configuration applied to it."""
 
     def __init__(self):
         self.calls: list[tuple] = []
         self.binds: dict = {}
-        self.protocolos: dict = {}
-        self.destruida = False
+        self.protocols: dict = {}
+        self.destroyed = False
 
     def overrideredirect(self, v):
         self.calls.append(("overrideredirect", v))
@@ -49,7 +49,7 @@ class _FakeRaiz:
         self.calls.append(("attributes", *a))
 
     def protocol(self, name, fn):
-        self.protocolos[name] = fn
+        self.protocols[name] = fn
 
     def bind(self, seq, fn):
         self.binds[seq] = fn
@@ -61,125 +61,125 @@ class _FakeRaiz:
         self.calls.append(("focus_force",))
 
     def destroy(self):
-        self.destruida = True
+        self.destroyed = True
 
 
-# --- Política no descartable (RF-15, RF-16, RF-19) ---
+# --- Undismissable policy (RF-15, RF-16, RF-19) ---
 
 
-def test_politica_topmost_y_sin_decoracion():
-    r = _FakeRaiz()
-    configurar_no_descartable(r, al_cerrar_intento=lambda: None)
+def test_policy_topmost_and_undecorated():
+    r = _FakeRoot()
+    configure_undismissable(r, on_close_attempt=lambda: None)
     assert ("overrideredirect", True) in r.calls
     assert ("attributes", "-topmost", True) in r.calls
 
 
-def test_politica_x_no_cierra():
-    r = _FakeRaiz()
+def test_policy_x_does_not_close():
+    r = _FakeRoot()
 
-    def cerrar():
+    def close():
         return None
 
-    configurar_no_descartable(r, al_cerrar_intento=cerrar)
-    assert r.protocolos["WM_DELETE_WINDOW"] is cerrar
+    configure_undismissable(r, on_close_attempt=close)
+    assert r.protocols["WM_DELETE_WINDOW"] is close
 
 
-def test_politica_escape_no_cierra():
-    r = _FakeRaiz()
-    configurar_no_descartable(r, al_cerrar_intento=lambda: None)
+def test_policy_escape_does_not_close():
+    r = _FakeRoot()
+    configure_undismissable(r, on_close_attempt=lambda: None)
     assert "<Escape>" in r.binds
-    assert r.binds["<Escape>"](None) == "break"  # interrumpe el evento, no cierra
+    assert r.binds["<Escape>"](None) == "break"  # interrupts the event, doesn't close
 
 
-def test_politica_focusout_se_reeleva():
-    r = _FakeRaiz()
-    configurar_no_descartable(r, al_cerrar_intento=lambda: None)
+def test_policy_focusout_re_raises():
+    r = _FakeRoot()
+    configure_undismissable(r, on_close_attempt=lambda: None)
     assert "<FocusOut>" in r.binds
     r.binds["<FocusOut>"](None)
     assert ("lift",) in r.calls and ("focus_force",) in r.calls
 
 
-def test_tomar_foco_eleva_y_fuerza_foco():
-    r = _FakeRaiz()
-    tomar_foco(r)
+def test_take_focus_raises_and_forces_focus():
+    r = _FakeRoot()
+    take_focus(r)
     assert ("lift",) in r.calls and ("focus_force",) in r.calls
 
 
-# --- Reconocimiento (RF-19, CU-5) ---
+# --- Acknowledgement (RF-19, CU-5) ---
 
 
-def test_reconocer_llama_callback_y_destruye():
-    rec: list[int] = []
-    w = AlertWindow(_datos(), al_reconocer=lambda: rec.append(1), raiz=_FakeRaiz(), construir=False)
-    w.reconocer()
-    assert rec == [1]
-    assert w.raiz.destruida is True
+def test_acknowledge_calls_callback_and_destroys():
+    ack: list[int] = []
+    w = AlertWindow(_data(), on_acknowledge=lambda: ack.append(1), root=_FakeRoot(), build=False)
+    w.acknowledge()
+    assert ack == [1]
+    assert w.root.destroyed is True
 
 
-def test_reconocer_es_idempotente():
-    rec: list[int] = []
-    w = AlertWindow(_datos(), al_reconocer=lambda: rec.append(1), raiz=_FakeRaiz(), construir=False)
-    w.reconocer()
-    w.reconocer()
-    assert rec == [1]  # un solo reconocimiento aunque se invoque dos veces
+def test_acknowledge_is_idempotent():
+    ack: list[int] = []
+    w = AlertWindow(_data(), on_acknowledge=lambda: ack.append(1), root=_FakeRoot(), build=False)
+    w.acknowledge()
+    w.acknowledge()
+    assert ack == [1]  # only acknowledged once even if invoked twice
 
 
-def test_intento_de_cierre_no_destruye():
-    w = AlertWindow(_datos(), al_reconocer=lambda: None, raiz=_FakeRaiz(), construir=False)
-    w._intento_cierre()  # X / WM_DELETE_WINDOW
-    assert w.raiz.destruida is False
+def test_close_attempt_does_not_destroy():
+    w = AlertWindow(_data(), on_acknowledge=lambda: None, root=_FakeRoot(), build=False)
+    w._close_attempt()  # X / WM_DELETE_WINDOW
+    assert w.root.destroyed is False
 
 
-# --- Smoke con Tkinter real (opt-in: VIGIA_GUI_TESTS=1) ---
-
-
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="prueba de GUI real; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_construye_ventana_real():
-    import tkinter as tk
-
-    raiz = tk.Tk()
-    rec: list[int] = []
-    w = AlertWindow(_datos(), al_reconocer=lambda: rec.append(1), raiz=raiz)
-    raiz.update()
-    # El árbol de widgets se construyó (etiquetas + botón RECONOCIDO).
-    # No se verifica `-topmost` por consulta: con overrideredirect la ventana queda
-    # sin gestionar por el WM y el atributo no es consultable de forma fiable.
-    assert len(raiz.winfo_children()) > 0
-    w.reconocer()
-    assert rec == [1]
+# --- Smoke test with real Tkinter (opt-in: VIGIA_GUI_TESTS=1) ---
 
 
 @pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="prueba de GUI real; opt-in VIGIA_GUI_TESTS=1"
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
 )
-def test_smoke_detalle_tiene_wraplength():
-    # Sin wraplength, una línea larga (p. ej. "Hora local (Venezuela): ...") se
-    # recorta contra el borde de la ventana en vez de bajar de línea (ventana fija,
-    # no redimensionable). Ver alert_window.py::_construir.
+def test_smoke_builds_real_window():
     import tkinter as tk
 
-    raiz = tk.Tk()
-    AlertWindow(_datos(), al_reconocer=lambda: None, raiz=raiz)
-    raiz.update()
-    etiquetas = [w for w in raiz.winfo_children() if isinstance(w, tk.Label)]
-    detalle = next(w for w in etiquetas if "Hora local" in w.cget("text"))
-    assert int(detalle.cget("wraplength")) > 0
+    root = tk.Tk()
+    ack: list[int] = []
+    w = AlertWindow(_data(), on_acknowledge=lambda: ack.append(1), root=root)
+    root.update()
+    # The widget tree was built (labels + ACKNOWLEDGED button).
+    # `-topmost` is not queried here: with overrideredirect the window is left
+    # unmanaged by the WM and the attribute isn't reliably queryable.
+    assert len(root.winfo_children()) > 0
+    w.acknowledge()
+    assert ack == [1]
 
 
 @pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="prueba de GUI real; opt-in VIGIA_GUI_TESTS=1"
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
 )
-def test_smoke_alto_ventana_alcanza_para_el_contenido():
-    # La ventana no es redimensionable ni scrolleable (overrideredirect, RF-15): el
-    # alto fijado debe ser siempre >= lo que el contenido empaquetado realmente pide,
-    # medido en la propia pantalla (fuentes/DPI reales), no un número fijo adivinado.
+def test_smoke_detail_has_wraplength():
+    # Without wraplength, a long line (e.g. "Local time (Venezuela): ...") gets
+    # clipped against the window edge instead of wrapping (fixed, non-resizable
+    # window). See alert_window.py::_build.
     import tkinter as tk
 
-    raiz = tk.Tk()
-    w = AlertWindow(_datos(), al_reconocer=lambda: None, raiz=raiz)
-    raiz.update_idletasks()
-    alto_ventana = int(raiz.geometry().split("+")[0].split("x")[1])
-    assert alto_ventana >= raiz.winfo_reqheight()
-    w.reconocer()
+    root = tk.Tk()
+    AlertWindow(_data(), on_acknowledge=lambda: None, root=root)
+    root.update()
+    labels = [w for w in root.winfo_children() if isinstance(w, tk.Label)]
+    detail = next(w for w in labels if "Local time" in w.cget("text"))
+    assert int(detail.cget("wraplength")) > 0
+
+
+@pytest.mark.skipif(
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
+)
+def test_smoke_window_height_fits_the_content():
+    # The window is neither resizable nor scrollable (overrideredirect, RF-15): the
+    # fixed height must always be >= what the packed content actually requests,
+    # measured on the real screen (real fonts/DPI), not a guessed fixed number.
+    import tkinter as tk
+
+    root = tk.Tk()
+    w = AlertWindow(_data(), on_acknowledge=lambda: None, root=root)
+    root.update_idletasks()
+    window_height = int(root.geometry().split("+")[0].split("x")[1])
+    assert window_height >= root.winfo_reqheight()
+    w.acknowledge()

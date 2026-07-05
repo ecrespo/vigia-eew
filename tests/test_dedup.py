@@ -1,4 +1,4 @@
-"""Pruebas de la deduplicación (RF-09, RF-10, RF-11; heurística en TECHNICAL-DESIGN §5)."""
+"""Tests for deduplication (RF-09, RF-10, RF-11; heuristic in TECHNICAL-DESIGN §5)."""
 
 from __future__ import annotations
 
@@ -15,117 +15,117 @@ _BASE = datetime(2026, 6, 28, 13, 39, tzinfo=UTC)
 def _ev(
     *,
     id="evt-1",
-    fuente="EMSC",
-    accion="create",
+    source="EMSC",
+    action="create",
     lat=10.5,
     lon=-66.9,
     mag=6.0,
-    hora=_BASE,
+    time=_BASE,
 ) -> SeismicEvent:
     return SeismicEvent(
         id=id,
-        fuente=fuente,
-        magnitud=mag,
+        source=source,
+        magnitude=mag,
         mag_type="mw",
         lat=lat,
         lon=lon,
-        profundidad_km=10.0,
-        hora_utc=hora,
-        distancia_km=20.0,
-        severidad="critico",
-        accion=accion,
+        depth_km=10.0,
+        time_utc=time,
+        distance_km=20.0,
+        severity="critical",
+        action=action,
     )
 
 
 def _dedup(tmp_path, **cfg):
-    estado = StateStore(tmp_path / "state.json")
-    estado.cargar()
-    return Deduplicator(Dedup(**cfg), estado), estado
+    state = StateStore(tmp_path / "state.json")
+    state.load()
+    return Deduplicator(Dedup(**cfg), state), state
 
 
-# --- Dedup por id (RF-10, RF-11) ---
+# --- Dedup by id (RF-10, RF-11) ---
 
 
-def test_evento_nuevo(tmp_path):
+def test_new_event(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    assert dedup.clasificar(_ev()) == "nuevo"
+    assert dedup.classify(_ev()) == "new"
 
 
-def test_mismo_id_create_es_duplicado(tmp_path):
+def test_same_id_create_is_duplicate(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="abc"))
-    assert dedup.clasificar(_ev(id="abc")) == "duplicado"
+    dedup.register(_ev(id="abc"))
+    assert dedup.classify(_ev(id="abc")) == "duplicate"
 
 
-def test_mismo_id_update_es_actualizar(tmp_path):
+def test_same_id_update_is_update(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="abc"))
-    assert dedup.clasificar(_ev(id="abc", accion="update")) == "actualizar"
+    dedup.register(_ev(id="abc"))
+    assert dedup.classify(_ev(id="abc", action="update")) == "update"
 
 
-def test_update_de_id_no_alertado_es_nuevo(tmp_path):
-    # Un "update" cuyo create nunca se alertó (p. ej. filtrado) se evalúa como nuevo.
+def test_update_of_unalerted_id_is_new(tmp_path):
+    # An "update" whose create was never alerted (e.g. filtered out) is treated as new.
     dedup, _ = _dedup(tmp_path)
-    assert dedup.clasificar(_ev(id="nunca-visto", accion="update")) == "nuevo"
+    assert dedup.classify(_ev(id="never-seen", action="update")) == "new"
 
 
-# --- Heurística inter-fuente (RF-09) ---
+# --- Cross-source heuristic (RF-09) ---
 
 
-def test_inter_fuente_duplicado(tmp_path):
+def test_cross_source_duplicate(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="emsc-1", fuente="EMSC", lat=10.50, lon=-66.90, mag=6.0))
-    # USGS: otro id, cerca (<100 km), <90 s, <0.5 mag -> mismo sismo.
+    dedup.register(_ev(id="emsc-1", source="EMSC", lat=10.50, lon=-66.90, mag=6.0))
+    # USGS: another id, close (<100 km), <90 s, <0.5 mag -> same earthquake.
     usgs = _ev(
-        id="usgs-1", fuente="USGS", lat=10.55, lon=-66.93, mag=6.2,
-        hora=_BASE + timedelta(seconds=30),
+        id="usgs-1", source="USGS", lat=10.55, lon=-66.93, mag=6.2,
+        time=_BASE + timedelta(seconds=30),
     )
-    assert dedup.clasificar(usgs) == "duplicado"
+    assert dedup.classify(usgs) == "duplicate"
 
 
-def test_inter_fuente_lejos_es_nuevo(tmp_path):
+def test_cross_source_far_away_is_new(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0))
-    lejos = _ev(id="usgs-1", fuente="USGS", lat=13.0, lon=-69.0, mag=6.0)
-    assert dedup.clasificar(lejos) == "nuevo"
+    dedup.register(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0))
+    far = _ev(id="usgs-1", source="USGS", lat=13.0, lon=-69.0, mag=6.0)
+    assert dedup.classify(far) == "new"
 
 
-def test_inter_fuente_fuera_de_ventana_es_nuevo(tmp_path):
+def test_cross_source_outside_window_is_new(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0, hora=_BASE))
-    tarde = _ev(
-        id="usgs-1", fuente="USGS", lat=10.5, lon=-66.9, mag=6.0,
-        hora=_BASE + timedelta(seconds=200),
+    dedup.register(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0, time=_BASE))
+    late = _ev(
+        id="usgs-1", source="USGS", lat=10.5, lon=-66.9, mag=6.0,
+        time=_BASE + timedelta(seconds=200),
     )
-    assert dedup.clasificar(tarde) == "nuevo"
+    assert dedup.classify(late) == "new"
 
 
-def test_inter_fuente_magnitud_distinta_es_nuevo(tmp_path):
+def test_cross_source_different_magnitude_is_new(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0))
-    otra_mag = _ev(id="usgs-1", fuente="USGS", lat=10.5, lon=-66.9, mag=7.0)
-    assert dedup.clasificar(otra_mag) == "nuevo"
+    dedup.register(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0))
+    other_mag = _ev(id="usgs-1", source="USGS", lat=10.5, lon=-66.9, mag=7.0)
+    assert dedup.classify(other_mag) == "new"
 
 
-# --- Persistencia (RF-10) ---
+# --- Persistence (RF-10) ---
 
 
-def test_registrar_persiste_id_y_firma(tmp_path):
+def test_register_persists_id_and_signature(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="abc"))
+    dedup.register(_ev(id="abc"))
 
-    recargado = StateStore(tmp_path / "state.json")
-    recargado.cargar()
-    assert recargado.ya_alertado("abc")
-    assert len(recargado.estado.firmas_recientes) == 1
+    reloaded = StateStore(tmp_path / "state.json")
+    reloaded.load()
+    assert reloaded.already_alerted("abc")
+    assert len(reloaded.state.recent_signatures) == 1
 
 
-def test_sobrevive_reinicio(tmp_path):
+def test_survives_restart(tmp_path):
     dedup, _ = _dedup(tmp_path)
-    dedup.registrar(_ev(id="abc"))
+    dedup.register(_ev(id="abc"))
 
-    # Nuevo Deduplicator sobre estado releído (simula reinicio, RF-10).
-    estado2 = StateStore(tmp_path / "state.json")
-    estado2.cargar()
-    dedup2 = Deduplicator(Dedup(), estado2)
-    assert dedup2.clasificar(_ev(id="abc")) == "duplicado"
+    # New Deduplicator over re-read state (simulates a restart, RF-10).
+    state2 = StateStore(tmp_path / "state.json")
+    state2.load()
+    dedup2 = Deduplicator(Dedup(), state2)
+    assert dedup2.classify(_ev(id="abc")) == "duplicate"

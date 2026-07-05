@@ -1,77 +1,77 @@
-"""Pruebas del autoarranque por tarea programada en Windows (RF-22, RF-23)."""
+"""Tests for autostart via scheduled task on Windows (RF-22, RF-23)."""
 
 from __future__ import annotations
 
 from vigia_eew.autostart.windows_task import (
     TASK_NAME,
-    InstaladorSchtasks,
-    comando_borrar,
-    comando_crear,
+    SchtasksInstaller,
+    create_command,
+    delete_command,
 )
 
 
 class _FakeSchtasks:
-    """Runner falso que simula el estado de la tarea programada."""
+    """Fake runner that simulates the scheduled task's state."""
 
     def __init__(self):
         self.cmds: list[list[str]] = []
-        self.existe = False
+        self.exists = False
 
     def __call__(self, cmd):
         self.cmds.append(cmd)
         if "/create" in cmd:
-            self.existe = True
+            self.exists = True
             return 0
         if "/delete" in cmd:
-            self.existe = False
+            self.exists = False
             return 0
         if "/query" in cmd:
-            return 0 if self.existe else 1
+            return 0 if self.exists else 1
         return 0
 
 
-def _instalador(runner):
-    return InstaladorSchtasks(exec_cmd='"C:\\Py\\pythonw.exe" -m vigia_eew.cli', runner=runner)
+def _installer(runner):
+    return SchtasksInstaller(exec_cmd='"C:\\Py\\pythonw.exe" -m vigia_eew.cli', runner=runner)
 
 
-# --- Generación de comandos (pura) ---
+# --- Command generation (pure) ---
 
 
-def test_comando_crear_onlogon():
-    cmd = comando_crear("VigiaEEW", "exe")
+def test_create_command_onlogon():
+    cmd = create_command("VigiaEEW", "exe")
     assert cmd[:2] == ["schtasks", "/create"]
     assert "/tn" in cmd and "VigiaEEW" in cmd
     assert "/tr" in cmd and "exe" in cmd
     assert cmd[cmd.index("/sc") + 1] == "onlogon"
 
 
-def test_comando_borrar():
-    cmd = comando_borrar("VigiaEEW")
+def test_delete_command():
+    cmd = delete_command("VigiaEEW")
     assert cmd[:2] == ["schtasks", "/delete"]
     assert "VigiaEEW" in cmd and "/f" in cmd
 
 
-# --- Instalar / desinstalar ---
+# --- Install / uninstall ---
 
 
-def test_instalar_crea_tarea():
+def test_install_creates_task():
     runner = _FakeSchtasks()
-    inst = _instalador(runner)
-    inst.instalar()
+    inst = _installer(runner)
+    inst.install()
     assert any("/create" in c for c in runner.cmds)
-    assert inst.esta_instalado() is True
+    assert inst.is_installed() is True
 
 
-def test_desinstalar_borra_tarea():
+def test_uninstall_deletes_task():
     runner = _FakeSchtasks()
-    inst = _instalador(runner)
-    inst.instalar()
-    inst.desinstalar()
+    inst = _installer(runner)
+    inst.install()
+    inst.uninstall()
     assert any("/delete" in c for c in runner.cmds)
-    assert inst.esta_instalado() is False
+    assert inst.is_installed() is False
 
 
-def test_usa_task_name_por_defecto():
+def test_uses_default_task_name():
     runner = _FakeSchtasks()
-    InstaladorSchtasks(exec_cmd="x", runner=runner).instalar()
+    SchtasksInstaller(exec_cmd="x", runner=runner).install()
     assert TASK_NAME in runner.cmds[0]

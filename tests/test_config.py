@@ -1,93 +1,93 @@
-"""Pruebas de configuración (RF-24, RF-12)."""
+"""Configuration tests (RF-24, RF-12)."""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from vigia_eew.config import Settings, cargar_config, tiene_referencia_manual
+from vigia_eew.config import Settings, has_manual_reference, load_config
 
-CONFIG_EJEMPLO = """
-[referencia]
-nombre = "Valencia"
+CONFIG_EXAMPLE = """
+[reference]
+name = "Valencia"
 lat = 10.1620
 lon = -68.0077
 
-[filtro]
-radio_km = 150.0
-magnitud_minima = 3.0
+[filter]
+radius_km = 150.0
+min_magnitude = 3.0
 
-[fuentes.emsc]
+[sources.emsc]
 ping_interval_s = 10
 
-[fuentes.usgs]
-intervalo_poll_s = 30
+[sources.usgs]
+poll_interval_s = 30
 
-[severidad]
+[severity]
 info_max = 3.5
-atencion_max = 5.0
+warning_max = 5.0
 """
 
 
-def test_defaults_sin_archivo(tmp_path):
-    # Ruta None y sin archivo de usuario -> defaults (Caracas).
+def test_defaults_without_file(tmp_path):
+    # None path and no user file -> defaults (Caracas).
     cfg = Settings()
-    assert cfg.referencia.nombre == "Caracas"
-    assert cfg.filtro.radio_km == 300.0
-    assert cfg.fuentes_emsc.ping_interval_s == 15
-    assert cfg.notificacion.icono_bandeja is True
+    assert cfg.reference.name == "Caracas"
+    assert cfg.filter.radius_km == 300.0
+    assert cfg.sources_emsc.ping_interval_s == 15
+    assert cfg.notification.tray_icon is True
 
 
-def test_cargar_desde_toml(tmp_path):
-    ruta = tmp_path / "config.toml"
-    ruta.write_text(CONFIG_EJEMPLO, encoding="utf-8")
-    cfg = cargar_config(ruta)
-    assert cfg.referencia.nombre == "Valencia"
-    assert cfg.filtro.radio_km == 150.0
-    # Mapeo de secciones anidadas [fuentes.emsc] / [fuentes.usgs].
-    assert cfg.fuentes_emsc.ping_interval_s == 10
-    assert cfg.fuentes_usgs.intervalo_poll_s == 30
-    assert cfg.severidad.info_max == 3.5
+def test_load_from_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(CONFIG_EXAMPLE, encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.reference.name == "Valencia"
+    assert cfg.filter.radius_km == 150.0
+    # Mapping of nested sections [sources.emsc] / [sources.usgs].
+    assert cfg.sources_emsc.ping_interval_s == 10
+    assert cfg.sources_usgs.poll_interval_s == 30
+    assert cfg.severity.info_max == 3.5
 
 
-def test_ruta_inexistente_explicita_falla(tmp_path):
+def test_nonexistent_explicit_path_fails(tmp_path):
     with pytest.raises(FileNotFoundError):
-        cargar_config(tmp_path / "no_existe.toml")
+        load_config(tmp_path / "does_not_exist.toml")
 
 
-def test_severidad_invalida():
+def test_invalid_severity():
     with pytest.raises(ValidationError):
-        Settings(severidad={"info_max": 6.0, "atencion_max": 5.0})
+        Settings(severity={"info_max": 6.0, "warning_max": 5.0})
 
 
-def test_archivo_ejemplo_es_valido():
-    # El config.toml.example del repo debe cargar sin errores.
+def test_example_file_is_valid():
+    # The repo's config.toml.example must load without errors.
     from pathlib import Path
 
-    raiz = Path(__file__).resolve().parents[1]
-    ejemplo = raiz / "config.toml.example"
-    cfg = cargar_config(ejemplo)
-    assert cfg.referencia.nombre == "Caracas"
-    assert cfg.notificacion.zona_horaria == "America/Caracas"
+    root = Path(__file__).resolve().parents[1]
+    example = root / "config.toml.example"
+    cfg = load_config(example)
+    assert cfg.reference.name == "Caracas"
+    assert cfg.notification.timezone == "America/Caracas"
 
 
-def test_tiene_referencia_manual_ruta_explicita_inexistente(tmp_path):
+def test_has_manual_reference_nonexistent_explicit_path(tmp_path):
     with pytest.raises(FileNotFoundError):
-        tiene_referencia_manual(tmp_path / "no_existe.toml")
+        has_manual_reference(tmp_path / "does_not_exist.toml")
 
 
-def test_tiene_referencia_manual_con_seccion(tmp_path):
-    ruta = tmp_path / "config.toml"
-    ruta.write_text(CONFIG_EJEMPLO, encoding="utf-8")
-    assert tiene_referencia_manual(ruta) is True
+def test_has_manual_reference_with_section(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(CONFIG_EXAMPLE, encoding="utf-8")
+    assert has_manual_reference(path) is True
 
 
-def test_tiene_referencia_manual_sin_seccion(tmp_path):
-    ruta = tmp_path / "config.toml"
-    ruta.write_text("[filtro]\nmagnitud_minima = 4.0\n", encoding="utf-8")
-    assert tiene_referencia_manual(ruta) is False
+def test_has_manual_reference_without_section(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("[filter]\nmin_magnitude = 4.0\n", encoding="utf-8")
+    assert has_manual_reference(path) is False
 
 
-def test_tiene_referencia_manual_sin_ruta_ni_archivo_usuario():
-    # Sin --config y sin config.toml de usuario en este entorno de test -> no manual.
-    assert tiene_referencia_manual(None) is False
+def test_has_manual_reference_no_path_and_no_user_file():
+    # No --config and no user config.toml in this test environment -> not manual.
+    assert has_manual_reference(None) is False

@@ -1,11 +1,11 @@
-"""Detección de ubicación por IP (RF-33) — mejor esfuerzo, sin bloquear el arranque.
+"""IP-based location detection (RF-33) — best-effort, non-blocking at startup.
 
-Cuando el usuario no configura `[referencia]` en `config.toml`, `Aplicacion` recurre a
-`detectar_ubicacion_ip()` para estimar el punto de referencia geográfico consultando un
-servicio HTTPS público de geolocalización por IP (`ipapi.co`, sin API key). Cualquier
-fallo (red, timeout, status inesperado, JSON inválido o campos faltantes) se traduce a
-`None`: el llamador hace fallback al default (Caracas) sin impedir que el agente arranque,
-mismo principio de aislamiento de fallos que `notify/toast.py`.
+When the user doesn't configure `[reference]` in `config.toml`, `Application` falls
+back to `detect_ip_location()` to estimate the geographic reference point by querying
+a public HTTPS IP-geolocation service (`ipapi.co`, no API key). Any failure (network,
+timeout, unexpected status, invalid JSON, or missing fields) is translated to `None`:
+the caller falls back to the default (Caracas) without preventing the agent from
+starting, the same fault-isolation principle used in `notify/toast.py`.
 """
 
 from __future__ import annotations
@@ -15,54 +15,54 @@ from typing import Any
 
 import httpx
 
-from .config import Referencia
+from vigia_eew.config import ReferencePoint
 
-URL_GEOLOCALIZACION_IP = "https://ipapi.co/json/"
+IP_GEOLOCATION_URL = "https://ipapi.co/json/"
 TIMEOUT_S = 5.0
 
 
-def _parsear_respuesta(datos: dict[str, Any]) -> Referencia | None:
-    """Traduce el JSON de `ipapi.co` a una `Referencia`. Pura, testeable con fixtures."""
+def _parse_response(data: dict[str, Any]) -> ReferencePoint | None:
+    """Translates `ipapi.co`'s JSON into a `ReferencePoint`. Pure, testable with fixtures."""
     try:
-        lat = float(datos["latitude"])
-        lon = float(datos["longitude"])
+        lat = float(data["latitude"])
+        lon = float(data["longitude"])
     except (KeyError, TypeError, ValueError):
         return None
-    nombre = datos.get("city") or datos.get("country_name") or "Ubicación detectada"
+    name = data.get("city") or data.get("country_name") or "Detected location"
     try:
-        return Referencia(nombre=str(nombre), lat=lat, lon=lon)
+        return ReferencePoint(name=str(name), lat=lat, lon=lon)
     except ValueError:
-        # Incluye pydantic.ValidationError (subclase de ValueError): lat/lon fuera de rango.
+        # Includes pydantic.ValidationError (a ValueError subclass): lat/lon out of range.
         return None
 
 
-def detectar_ubicacion_ip(
+def detect_ip_location(
     *, client: httpx.Client | None = None, logger: logging.Logger | None = None
-) -> Referencia | None:
-    """Intenta detectar el punto de referencia por IP; `None` si falla (RF-33)."""
+) -> ReferencePoint | None:
+    """Attempts to detect the reference point by IP; `None` on failure (RF-33)."""
     log = logger or logging.getLogger("vigia_eew.geoloc")
-    cliente = client or httpx.Client()
+    active_client = client or httpx.Client()
     try:
         try:
-            resp = cliente.get(URL_GEOLOCALIZACION_IP, timeout=TIMEOUT_S)
+            resp = active_client.get(IP_GEOLOCATION_URL, timeout=TIMEOUT_S)
         except httpx.HTTPError as exc:
-            log.warning("geoloc_error_red tipo=%s detalle=%s", type(exc).__name__, exc)
+            log.warning("geoloc_network_error type=%s detail=%s", type(exc).__name__, exc)
             return None
 
         if resp.status_code != 200:
-            log.warning("geoloc_status_inesperado status=%d", resp.status_code)
+            log.warning("geoloc_unexpected_status status=%d", resp.status_code)
             return None
 
         try:
-            datos = resp.json()
+            data = resp.json()
         except ValueError as exc:
-            log.warning("geoloc_json_invalido detalle=%s", exc)
+            log.warning("geoloc_invalid_json detail=%s", exc)
             return None
 
-        referencia = _parsear_respuesta(datos)
-        if referencia is None:
-            log.warning("geoloc_respuesta_incompleta")
-        return referencia
+        reference = _parse_response(data)
+        if reference is None:
+            log.warning("geoloc_incomplete_response")
+        return reference
     finally:
         if client is None:
-            cliente.close()
+            active_client.close()

@@ -1,15 +1,15 @@
-"""Pruebas del normalizador (RF-07, RF-08, RF-13; mapeo en API-SPEC §3.1)."""
+"""Tests for the normalizer (RF-07, RF-08, RF-13; mapping in API-SPEC §3.1)."""
 
 from __future__ import annotations
 
 from datetime import UTC
 
-from vigia_eew.config import Referencia, Severidad
+from vigia_eew.config import ReferencePoint, Severity
 from vigia_eew.ingest import RawMessage
 from vigia_eew.models import SeismicEvent
 from vigia_eew.pipeline.normalize import Normalizer
 
-# --- Crudos de ejemplo (API-SPEC §1.3 y §2.4) ---
+# --- Sample raw payloads (API-SPEC §1.3 and §2.4) ---
 
 _EMSC_PROPS = {
     "lat": 10.60,
@@ -23,7 +23,7 @@ _EMSC_PROPS = {
     "flynn_region": "NEAR COAST OF VENEZUELA",
 }
 _EMSC = RawMessage(
-    fuente="EMSC",
+    source="EMSC",
     action="create",
     feature={
         "type": "Feature",
@@ -34,7 +34,7 @@ _EMSC = RawMessage(
 )
 
 _USGS = RawMessage(
-    fuente="USGS",
+    source="USGS",
     action="create",
     feature={
         "type": "Feature",
@@ -52,8 +52,8 @@ _USGS = RawMessage(
 )
 
 
-def _normalizador():
-    return Normalizer(Referencia(), Severidad())
+def _normalizer():
+    return Normalizer(ReferencePoint(), Severity())
 
 
 def _emsc(**props):
@@ -63,90 +63,90 @@ def _emsc(**props):
         "id": "x",
         "properties": {**_EMSC_PROPS, **props},
     }
-    return RawMessage(fuente="EMSC", action="create", feature=feature)
+    return RawMessage(source="EMSC", action="create", feature=feature)
 
 
 # --- EMSC ---
 
 
-def test_normaliza_emsc():
-    ev = _normalizador().normalizar(_EMSC)
+def test_normalizes_emsc():
+    ev = _normalizer().normalize(_EMSC)
     assert isinstance(ev, SeismicEvent)
-    assert ev.fuente == "EMSC"
+    assert ev.source == "EMSC"
     assert ev.id == "20260628_0000123"
-    assert ev.magnitud == 6.1
+    assert ev.magnitude == 6.1
     assert ev.mag_type == "mw"
     assert ev.region == "NEAR COAST OF VENEZUELA"
-    assert ev.profundidad_km == 12.0
-    assert ev.hora_utc.tzinfo is not None
-    assert ev.hora_utc.astimezone(UTC).hour == 13
+    assert ev.depth_km == 12.0
+    assert ev.time_utc.tzinfo is not None
+    assert ev.time_utc.astimezone(UTC).hour == 13
     assert ev.lastupdate_utc is not None
 
 
-def test_emsc_magtype_se_normaliza_a_minuscula():
-    ev = _normalizador().normalizar(_emsc(magtype="Mw"))
+def test_emsc_magtype_is_normalized_to_lowercase():
+    ev = _normalizer().normalize(_emsc(magtype="Mw"))
     assert ev is not None and ev.mag_type == "mw"
 
 
-def test_emsc_preserva_accion_update():
-    msg = RawMessage(fuente="EMSC", action="update", feature=_EMSC.feature)
-    ev = _normalizador().normalizar(msg)
-    assert ev is not None and ev.accion == "update"
+def test_emsc_preserves_update_action():
+    msg = RawMessage(source="EMSC", action="update", feature=_EMSC.feature)
+    ev = _normalizer().normalize(msg)
+    assert ev is not None and ev.action == "update"
 
 
 # --- USGS ---
 
 
-def test_normaliza_usgs():
-    ev = _normalizador().normalizar(_USGS)
+def test_normalizes_usgs():
+    ev = _normalizer().normalize(_USGS)
     assert isinstance(ev, SeismicEvent)
-    assert ev.fuente == "USGS"
+    assert ev.source == "USGS"
     assert ev.id == "us6000t8sx"
     assert ev.mag_type == "mb"
-    assert ev.lugar == "19 km WSW of Morón, Venezuela"
-    # Coordenadas desde geometry [lon, lat, depth].
+    assert ev.place == "19 km WSW of Morón, Venezuela"
+    # Coordinates from geometry [lon, lat, depth].
     assert ev.lat == 10.4497
     assert ev.lon == -68.3766
-    assert ev.profundidad_km == 10
+    assert ev.depth_km == 10
     # Epoch ms -> UTC: 1782639238852 == 2026-06-28T13:33:58.852Z
-    assert ev.hora_utc.astimezone(UTC).second == 58
+    assert ev.time_utc.astimezone(UTC).second == 58
     assert ev.lastupdate_utc is not None
 
 
-# --- Derivados (RF-08, RF-13) ---
+# --- Derived fields (RF-08, RF-13) ---
 
 
-def test_distancia_calculada_haversine():
-    ev = _normalizador().normalizar(_USGS)
+def test_distance_computed_via_haversine():
+    ev = _normalizer().normalize(_USGS)
     assert ev is not None
     # Caracas -> Morón ≈ 162 km (API-SPEC §3).
-    assert 158 < ev.distancia_km < 166
+    assert 158 < ev.distance_km < 166
 
 
-def test_severidad_por_magnitud():
-    assert _normalizador().normalizar(_EMSC).severidad == "critico"  # mag 6.1
-    assert _normalizador().normalizar(_USGS).severidad == "atencion"  # mag 4.3
+def test_severity_by_magnitude():
+    assert _normalizer().normalize(_EMSC).severity == "critical"  # mag 6.1
+    assert _normalizer().normalize(_USGS).severity == "warning"  # mag 4.3
 
 
-def test_severidad_respeta_umbrales_de_config():
-    norm = Normalizer(Referencia(), Severidad(info_max=7.0, atencion_max=8.0))
-    assert norm.normalizar(_EMSC).severidad == "info"  # 6.1 < 7.0 con umbrales altos
+def test_severity_respects_config_thresholds():
+    norm = Normalizer(ReferencePoint(), Severity(info_max=7.0, warning_max=8.0))
+    assert norm.normalize(_EMSC).severity == "info"  # 6.1 < 7.0 with high thresholds
 
 
-# --- Resiliencia (RNF-03) ---
+# --- Resilience (RNF-03) ---
 
 
-def test_feature_sin_campos_devuelve_none():
-    msg = RawMessage(fuente="EMSC", action="create", feature={"properties": {}})
-    assert _normalizador().normalizar(msg) is None
+def test_feature_without_fields_returns_none():
+    msg = RawMessage(source="EMSC", action="create", feature={"properties": {}})
+    assert _normalizer().normalize(msg) is None
 
 
-def test_tiempo_invalido_devuelve_none():
-    ev = _normalizador().normalizar(_emsc(time="no-es-fecha"))
+def test_invalid_time_returns_none():
+    ev = _normalizer().normalize(_emsc(time="not-a-date"))
     assert ev is None
 
 
-def test_fuente_desconocida_devuelve_none():
-    msg = RawMessage(fuente="SIMULADO", action="create", feature=_EMSC.feature)
-    # El normalizador solo mapea EMSC/USGS; SIMULADO lo construye el CLI (Fase 5).
-    assert _normalizador().normalizar(msg) is None
+def test_unknown_source_returns_none():
+    msg = RawMessage(source="SIMULATED", action="create", feature=_EMSC.feature)
+    # The normalizer only maps EMSC/USGS; SIMULATED is built by the CLI (Phase 5).
+    assert _normalizer().normalize(msg) is None

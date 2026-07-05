@@ -1,10 +1,10 @@
-"""Autoarranque en Linux mediante systemd `--user` (RF-22, RF-23).
+"""Autostart on Linux via systemd `--user` (RF-22, RF-23).
 
-Escribe un *unit* en el directorio de systemd del usuario y lo habilita con
-`systemctl --user enable --now`, de modo que el agente arranque al iniciar sesión y
-se reinicie ante fallos (`Restart=on-failure`). La desinstalación deshabilita y borra
-el unit. El `runner` (que ejecuta `systemctl`) y el directorio son inyectables para
-poder probar sin tocar el systemd real.
+Writes a unit to the user's systemd directory and enables it with
+`systemctl --user enable --now`, so the agent starts on login and restarts on
+failure (`Restart=on-failure`). Uninstalling disables the unit and removes it. The
+`runner` (which runs `systemctl`) and the directory are injectable so tests don't
+touch the real systemd.
 """
 
 from __future__ import annotations
@@ -17,15 +17,15 @@ from pathlib import Path
 
 _Runner = Callable[[list[str]], int]
 
-NOMBRE_UNIDAD = "vigia-eew.service"
-_DESCRIPCION = "Vigía-eew — agente de alerta sísmica"
+UNIT_NAME = "vigia-eew.service"
+_DESCRIPTION = "Vigía-eew — seismic alert agent"
 
 
-def unidad_systemd(exec_cmd: str, *, descripcion: str = _DESCRIPCION) -> str:
-    """Genera el contenido del unit de systemd (puro)."""
+def systemd_unit(exec_cmd: str, *, description: str = _DESCRIPTION) -> str:
+    """Generate the systemd unit content (pure)."""
     return (
         "[Unit]\n"
-        f"Description={descripcion}\n"
+        f"Description={description}\n"
         "After=graphical-session.target\n"
         "\n"
         "[Service]\n"
@@ -39,56 +39,56 @@ def unidad_systemd(exec_cmd: str, *, descripcion: str = _DESCRIPCION) -> str:
     )
 
 
-def _dir_systemd_usuario() -> Path:
-    """Directorio de units de usuario (respeta `XDG_CONFIG_HOME`)."""
+def _user_systemd_dir() -> Path:
+    """User unit directory (respects `XDG_CONFIG_HOME`)."""
     base = os.environ.get("XDG_CONFIG_HOME")
-    raiz = Path(base) if base else Path.home() / ".config"
-    return raiz / "systemd" / "user"
+    root = Path(base) if base else Path.home() / ".config"
+    return root / "systemd" / "user"
 
 
-def _runner_subprocess(cmd: list[str]) -> int:
+def _subprocess_runner(cmd: list[str]) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-class InstaladorSystemd:
-    """Instala/desinstala el autoarranque del agente vía systemd --user."""
+class SystemdInstaller:
+    """Installs/uninstalls the agent's autostart via systemd --user."""
 
     def __init__(
         self,
         *,
         exec_cmd: str,
-        dir_unidades: Path | None = None,
+        unit_dir: Path | None = None,
         runner: _Runner | None = None,
-        descripcion: str = _DESCRIPCION,
+        description: str = _DESCRIPTION,
         logger: logging.Logger | None = None,
     ) -> None:
         self._exec = exec_cmd
-        self._dir = dir_unidades or _dir_systemd_usuario()
-        self._runner = runner or _runner_subprocess
-        self._descripcion = descripcion
+        self._dir = unit_dir or _user_systemd_dir()
+        self._runner = runner or _subprocess_runner
+        self._description = description
         self._log = logger or logging.getLogger("vigia_eew.autostart.systemd")
 
     @property
-    def ruta(self) -> Path:
-        return self._dir / NOMBRE_UNIDAD
+    def path(self) -> Path:
+        return self._dir / UNIT_NAME
 
-    def esta_instalado(self) -> bool:
-        return self.ruta.exists()
+    def is_installed(self) -> bool:
+        return self.path.exists()
 
-    def instalar(self) -> None:
-        """Escribe el unit y lo habilita para arrancar al iniciar sesión (RF-22)."""
+    def install(self) -> None:
+        """Write the unit and enable it to start on login (RF-22)."""
         self._dir.mkdir(parents=True, exist_ok=True)
-        self.ruta.write_text(
-            unidad_systemd(self._exec, descripcion=self._descripcion), encoding="utf-8"
+        self.path.write_text(
+            systemd_unit(self._exec, description=self._description), encoding="utf-8"
         )
         self._runner(["systemctl", "--user", "daemon-reload"])
-        self._runner(["systemctl", "--user", "enable", "--now", NOMBRE_UNIDAD])
-        self._log.info("autostart_instalado ruta=%s", self.ruta)
+        self._runner(["systemctl", "--user", "enable", "--now", UNIT_NAME])
+        self._log.info("autostart_installed path=%s", self.path)
 
-    def desinstalar(self) -> None:
-        """Deshabilita el servicio y borra el unit (RF-23)."""
-        self._runner(["systemctl", "--user", "disable", "--now", NOMBRE_UNIDAD])
-        if self.ruta.exists():
-            self.ruta.unlink()
+    def uninstall(self) -> None:
+        """Disable the service and remove the unit (RF-23)."""
+        self._runner(["systemctl", "--user", "disable", "--now", UNIT_NAME])
+        if self.path.exists():
+            self.path.unlink()
         self._runner(["systemctl", "--user", "daemon-reload"])
-        self._log.info("autostart_desinstalado")
+        self._log.info("autostart_uninstalled")

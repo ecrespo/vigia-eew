@@ -1,11 +1,11 @@
-"""Punto de entrada de consola `vigia-eew` (RF-26, RF-21).
+"""Console entry point `vigia-eew` (RF-26, RF-21).
 
-Arranca el agente completo (`vigia-eew`) o la prueba de notificación (`--simulate`),
-admite una ruta de config (`--config`) y una verificación rápida (`--check-config`).
-La instalación/desinstalación de autoarranque se añade en la Fase 6.
+Starts the full agent (`vigia-eew`) or the notification test (`--simulate`),
+accepts a config path (`--config`) and a quick check (`--check-config`).
+Autostart install/uninstall was added in Phase 6.
 
-La factoría de la aplicación (`crear_app`) es inyectable para poder probar el despacho
-de la CLI sin arrancar la GUI ni la red.
+The application factory (`create_app`) is injectable so the CLI dispatch can be
+tested without starting the GUI or the network.
 """
 
 from __future__ import annotations
@@ -14,36 +14,41 @@ import argparse
 from collections.abc import Callable
 from typing import Any
 
-from . import __version__
-from .config import cargar_config, tiene_referencia_manual
+from vigia_eew import __version__
+from vigia_eew.config import has_manual_reference, load_config
 
 
-def _construir_parser() -> argparse.ArgumentParser:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vigia-eew",
-        description="Agente de alerta sísmica en tiempo real (EMSC push + USGS respaldo).",
+        description="Real-time seismic alert agent (EMSC push + USGS backup).",
     )
     parser.add_argument("--version", action="version", version=f"vigia-eew {__version__}")
-    parser.add_argument("--config", metavar="RUTA", help="Ruta a un config.toml.")
+    parser.add_argument("--config", metavar="PATH", help="Path to a config.toml.")
     parser.add_argument(
         "--check-config",
         action="store_true",
-        help="Carga y valida la configuración, e imprime el punto de referencia.",
+        help="Loads and validates the configuration, and prints the reference point.",
     )
     parser.add_argument(
         "--simulate",
         action="store_true",
-        help="Inyecta un sismo simulado (M6.1 La Guaira) para probar la alerta (RF-21).",
+        help="Injects a simulated earthquake (M6.1 La Guaira) to test the alert (RF-21).",
+    )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Runs the headless terminal dashboard instead of the desktop GUI (RF-36).",
     )
     parser.add_argument(
         "--install-autostart",
         action="store_true",
-        help="Instala el autoarranque al iniciar sesión (RF-22, RF-23) y sale.",
+        help="Installs autostart on login (RF-22, RF-23) and exits.",
     )
     parser.add_argument(
         "--uninstall-autostart",
         action="store_true",
-        help="Desinstala el autoarranque (RF-23) y sale.",
+        help="Uninstalls autostart (RF-23) and exits.",
     )
     return parser
 
@@ -51,48 +56,50 @@ def _construir_parser() -> argparse.ArgumentParser:
 def main(
     argv: list[str] | None = None,
     *,
-    crear_app: Callable[..., Any] | None = None,
-    crear_instalador: Callable[[], Any] | None = None,
+    create_app: Callable[..., Any] | None = None,
+    create_installer: Callable[[], Any] | None = None,
 ) -> int:
-    """Entrada de consola. Devuelve un código de salida estándar."""
-    args = _construir_parser().parse_args(argv)
+    """Console entry point. Returns a standard exit code."""
+    args = _build_parser().parse_args(argv)
 
     if args.check_config:
-        cfg = cargar_config(args.config)
+        cfg = load_config(args.config)
         print(
-            f"Config OK · referencia={cfg.referencia.nombre} "
-            f"({cfg.referencia.lat}, {cfg.referencia.lon}) · "
-            f"radio={cfg.filtro.radio_km} km · mag_min={cfg.filtro.magnitud_minima}"
+            f"Config OK - reference={cfg.reference.name} "
+            f"({cfg.reference.lat}, {cfg.reference.lon}) - "
+            f"radius={cfg.filter.radius_km} km - min_mag={cfg.filter.min_magnitude}"
         )
         return 0
 
     if args.install_autostart or args.uninstall_autostart:
-        if crear_instalador is None:
-            from .autostart import crear_instalador as crear_instalador_real
+        if create_installer is None:
+            from vigia_eew.autostart import create_installer as create_installer_real
 
-            crear_instalador = crear_instalador_real
-        instalador = crear_instalador()
+            create_installer = create_installer_real
+        installer = create_installer()
         if args.install_autostart:
-            instalador.instalar()
-            print("Autoarranque instalado.")
+            installer.install()
+            print("Autostart installed.")
         else:
-            instalador.desinstalar()
-            print("Autoarranque desinstalado.")
+            installer.uninstall()
+            print("Autostart uninstalled.")
         return 0
 
-    cfg = cargar_config(args.config)
-    if crear_app is None:
-        from .app import Aplicacion
+    cfg = load_config(args.config)
+    if create_app is None:
+        from vigia_eew.app import Application
 
-        crear_app = Aplicacion
-    app = crear_app(
-        cfg, referencia_manual=tiene_referencia_manual(args.config), ruta_config=args.config
+        create_app = Application
+    app = create_app(
+        cfg, manual_reference=has_manual_reference(args.config), config_path=args.config
     )
 
-    if args.simulate:
-        app.simular()
+    if args.tui:
+        app.run_tui(simulate=args.simulate)
+    elif args.simulate:
+        app.simulate()
     else:
-        app.ejecutar()
+        app.execute()
     return 0
 
 

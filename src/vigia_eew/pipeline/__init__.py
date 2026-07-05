@@ -1,7 +1,8 @@
-"""Pipeline de procesamiento: normalización → filtro → dedup (RF-07..RF-13).
+"""Processing pipeline: normalize -> filter -> dedup (RF-07..RF-13).
 
-Consume los `RawMessage` de la capa de ingestión y produce `SeismicEvent` listos para
-notificar. Cada etapa es independiente y testeable por separado (TECHNICAL-DESIGN §2).
+Consumes the `RawMessage` objects from the ingestion layer and produces `SeismicEvent`
+instances ready for notification. Each stage is independent and separately testable
+(TECHNICAL-DESIGN §2).
 """
 
 from __future__ import annotations

@@ -2,99 +2,115 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Qué es esto
+## What this is
 
-Vigía-eew (`vigia-eew`) es un agente de escritorio (Python 3.11+, `src/` layout) que monitorea
-sismos en tiempo real (WebSocket EMSC como vía primaria, polling REST USGS como respaldo) y muestra
-una alerta de escritorio **no descartable** cuando un evento cae dentro del radio/magnitud
-configurados. Proceso único por máquina, sin punto único de fallo (cada máquina corre su propio
-agente).
+Vigía-eew (`vigia-eew`) is a desktop agent (Python 3.11+, `src/` layout) that monitors
+earthquakes in real time (EMSC WebSocket as the primary channel, USGS REST polling as a
+backup) and shows a **non-dismissable** desktop alert when an event falls within the
+configured radius/magnitude. Single process per machine, no single point of failure
+(each machine runs its own agent).
 
-## Comandos
+## Commands
 
 ```bash
-uv venv && uv pip install -e ".[dev]"   # setup (recomendado); o: pip install -e ".[dev]"
+uv venv && uv pip install -e ".[dev]"   # setup (recommended); or: pip install -e ".[dev]"
 
-pytest                                  # suite completa
-PYTHONPATH=src pytest -q                # si el paquete no está instalado editable
-pytest tests/test_dedup.py::test_x -q   # un solo test
-VIGIA_GUI_TESTS=1 pytest                # incluye los smokes de Tkinter real (opt-in, requiere display)
+pytest                                  # full suite
+PYTHONPATH=src pytest -q                # if the package isn't installed editable
+pytest tests/test_dedup.py::test_x -q   # a single test
+VIGIA_GUI_TESTS=1 pytest                # includes the real-Tkinter smokes (opt-in, needs a display)
 
-ruff check .                            # lint (line-length 100, reglas E,F,I,UP,B)
+ruff check .                            # lint (line-length 100, rules E,F,I,UP,B)
 mypy src                                # type check (strict = true)
 
 vigia-eew --help
-vigia-eew --simulate                    # inyecta un sismo simulado (M6.1 La Guaira) sin red
-vigia-eew --check-config                # valida config.toml y sale
-vigia-eew --install-autostart           # instala autoarranque (systemd/LaunchAgent/tarea) y sale
+vigia-eew --simulate                    # injects a simulated earthquake (M6.1 La Guaira), no network
+vigia-eew --check-config                # validates config.toml and exits
+vigia-eew --install-autostart           # installs autostart (systemd/LaunchAgent/task) and exits
 ```
 
-Gate de calidad antes de dar por cerrada una tarea: `pytest`, `ruff check .`, `mypy src` — los tres
-en verde.
+Quality gate before considering a task done: `pytest`, `ruff check .`, `mypy src` — all
+three green.
 
-## Arquitectura
+## Architecture
 
-**Un solo proceso asyncio** por máquina. Dos ingestas alimentan una `raw_queue` común:
+**A single asyncio process** per machine. Two ingestors feed a common `raw_queue`:
 
-- `ingest/ws_emsc.py` (`WSIngestor`): WebSocket EMSC, **vía primaria**, keepalive de 15 s, reconexión
-  con backoff exponencial + jitter (`backoff.py`, compartido con el supervisor).
-- `ingest/rest_usgs.py` (`RESTReconciler`): polling USGS cada 60 s con **cursor persistido**, solo
-  reconcilia lo que el WS pudo perder; no compite con el push.
+- `ingest/ws_emsc.py` (`WSIngestor`): EMSC WebSocket, **primary channel**, 15 s keepalive,
+  reconnection with exponential backoff + jitter (`backoff.py`, shared with the supervisor).
+- `ingest/rest_usgs.py` (`RESTReconciler`): USGS polling every 60 s with a **persisted
+  cursor**, only reconciles what the WS may have missed; doesn't compete with the push.
 
-Un `pipeline/procesador.py` (`Procesador`) consume `raw_queue` y encadena
-`pipeline/normalize.py` → `pipeline/filtro.py` → `pipeline/dedup.py`:
+A `pipeline/processor.py` (`Processor`) consumes `raw_queue` and chains
+`pipeline/normalize.py` → `pipeline/filter.py` → `pipeline/dedup.py`:
 
-- **Normalize**: mapea el crudo de cada fuente al contrato interno único `SeismicEvent`
-  (`models.py`), calcula distancia (`geo.py::haversine_km`) y severidad.
-- **Filtro**: descarta por radio o magnitud mínima (config).
-- **Dedup**: dedup intra-fuente por id, heurística inter-fuente (≤100 km, ≤90 s, ≤0.5 mag) y manejo
-  de `update` de EMSC (actualiza el evento en curso en vez de re-alertar). IDs y firmas recientes se
-  persisten en `state.py` (`StateStore`, JSON atómico vía `platformdirs`).
+- **Normalize**: maps each source's raw payload to the single internal contract
+  `SeismicEvent` (`models.py`), computes distance (`geo.py::haversine_km`) and severity.
+- **Filter**: discards by radius or minimum magnitude (config).
+- **Dedup**: intra-source dedup by id, cross-source heuristic (≤100 km, ≤90 s, ≤0.5 mag)
+  and handling of EMSC `update`s (updates the in-flight event instead of re-alerting).
+  Recent ids/signatures are persisted in `state.py` (`StateStore`, atomic JSON via
+  `platformdirs`).
 
-`supervisor.py` (`Supervisor`) orquesta las tasks asyncio (`ws`, `rest`, `pipeline`) y **reinicia
-cada una con backoff si falla**, sin tumbar el proceso — nunca debe morir por un fallo transitorio
-de red o parseo.
+`supervisor.py` (`Supervisor`) orchestrates the asyncio tasks (`ws`, `rest`, `pipeline`)
+and **restarts each one with backoff on failure**, without taking down the process — it
+must never die from a transient network or parsing failure.
 
-Eventos nuevos/relevantes llegan a `notify/` (`ControladorAlertas` en `controlador.py`), que
-orquesta tres efectos como **callbacks inyectables** (para poder testear sin I/O real):
-`crear_ventana` (Tkinter no descartable, topmost, `alert_window.py`), `reproducir_sonido`
-(`sound.py`, por severidad) y `enviar_toast` (`toast.py`, `desktop-notifier`). `queue.py` mantiene
-**una alerta a la vez** y actualiza in-place ante un `update`.
+New/relevant events reach `notify/` (`AlertController` in `controller.py`), which
+orchestrates three effects as **injectable callbacks** (so they can be tested without
+real I/O): `create_window` (non-dismissable, topmost Tkinter, `alert_window.py`),
+`play_sound` (`sound.py`, by severity), and `send_toast` (`toast.py`,
+`desktop-notifier`). `queue.py` keeps **one alert at a time** and updates it in place on
+an `update`.
 
-**Puente asyncio↔Tkinter** (`app.py`, ADR-006 en `docs/TECHNICAL-DESIGN.md`): Tkinter exige correr
-en el hilo principal, la ingestión vive en asyncio en un hilo de trabajo aparte. `PuenteAsyncioTk`
-(en `notify/queue.py`) cruza los eventos entre ambos vía cola thread-safe + `widget.after()`.
-`Aplicacion` (`app.py`) cablea todo esto; expone `ejecutar()` (agente completo) y `simular()`
-(inyecta el evento de `simulacion.py` sin red, para `--simulate`).
+**asyncio↔Tkinter bridge** (`app.py`, ADR-006 in `docs/TECHNICAL-DESIGN.md`): Tkinter
+must run on the main thread, ingestion lives in asyncio on a separate worker thread.
+`AsyncioTkBridge` (in `notify/queue.py`) crosses events between both via a thread-safe
+queue + `widget.after()`. `Application` (`app.py`) wires all of this together; it exposes
+`execute()` (the full agent) and `simulate()` (injects the event from `simulation.py`
+without network, for `--simulate`).
 
-`autostart/` instala/desinstala el arranque automático por SO (systemd `--user` en Linux,
-LaunchAgent en macOS, tarea programada en Windows), invocado desde `cli.py` vía
+A system tray icon (`tray.py`, `AgentState` in `agent_state.py`) shows connection status
+and the last alert, and lets the user pause/resume notifications, edit the config, and
+quit — best-effort, never blocks startup if the platform can't show it (RF-34).
+
+User-facing text (alert window, toast, tray menu) is internationalized via `i18n.py`
+(RF-35): the language is auto-detected from the OS locale by default, overridable with
+`[notification] language` in `config.toml` (`"auto"`/`"en"`/`"es"`), falling back to
+English for unsupported locales.
+
+`autostart/` installs/uninstalls OS-native autostart (systemd `--user` on Linux,
+LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via
 `--install-autostart`/`--uninstall-autostart`.
 
-### Patrón de testing recurrente
+### Recurring testing pattern
 
-Inyectar dependencias (`connect`/`sleep`/`client`/`runner`/`crear_ventana`/etc.) y separar la
-**lógica pura** (generación de comando/unit/plist, formato, cálculo) del **efecto de sistema**
-(red, Tkinter real, systemctl/launchctl/schtasks, audio). Los tests de GUI real están marcados
-`skipif` salvo `VIGIA_GUI_TESTS=1`; la suite por defecto corre headless.
+Inject dependencies (`connect`/`sleep`/`client`/`runner`/`create_window`/etc.) and
+separate **pure logic** (command/unit/plist generation, formatting, calculations) from
+**system effects** (network, real Tkinter, systemctl/launchctl/schtasks, audio). Real GUI
+tests are marked `skipif` unless `VIGIA_GUI_TESTS=1`; the default suite runs headless.
 
-## Desarrollo dirigido por specs (SDD)
+## Spec-driven development (SDD)
 
-El proyecto se construye **fase por fase** siguiendo `docs/IMPLEMENTATION-PLAN.md`, que enlaza
-`docs/PRD.md` (requisitos RF-xx/RNF-xx), `docs/API-SPEC.md` (contratos EMSC/USGS/interno),
-`docs/TECHNICAL-DESIGN.md` (ADRs numerados) y `docs/DATA-MODEL.md`. `ARCHITECTURE.md` tiene los
-diagramas Mermaid (flujo de datos, secuencia, estados, despliegue). Si se agrega un módulo no
-listado en `IMPLEMENTATION-PLAN.md`, esa sección (estructura + tabla de fase + matriz RF→módulo)
-se actualiza junto con el código.
+The project is built **phase by phase** following `docs/IMPLEMENTATION-PLAN.md`, which
+links `docs/PRD.md` (requirements RF-xx/RNF-xx), `docs/API-SPEC.md` (EMSC/USGS/internal
+contracts), `docs/TECHNICAL-DESIGN.md` (numbered ADRs), and `docs/DATA-MODEL.md`.
+`ARCHITECTURE.md` has the Mermaid diagrams (data flow, sequence, states, deployment). If
+a module not listed in `IMPLEMENTATION-PLAN.md` is added, that section (structure +
+phase table + RF→module matrix) is updated along with the code.
 
-Convención de commits: uno por fase completada (`feat:`/`docs:` conventional, cuerpo describiendo
-qué se agregó y por qué), terminando en un trailer `Co-Authored-By:` con el modelo que lo generó
-(ver `git log`).
+Commit convention: one per completed phase (conventional `feat:`/`docs:`, body
+describing what was added and why), ending with a `Co-Authored-By:` trailer naming the
+model that generated it (see `git log`).
 
-## Convenciones
+## Conventions
 
-- **Español** en código, docstrings, comentarios, mensajes de commit y artefactos (RNF-10).
-- Todo `datetime` interno es **tz-aware en UTC** (`models.py` lo valida y rechaza *naive*); la
-  conversión a hora local (`America/Caracas`) ocurre solo en `notify/presentacion.py`.
-- Contrato interno (`SeismicEvent`) es el único payload que cruza capas — ver `API-SPEC.md` §3 para
-  el mapeo de campos EMSC/USGS y las invariantes (distancia y severidad son siempre derivadas).
+- **English** in code, docstrings, comments, commit messages, and artifacts (RNF-10).
+  User-facing text is internationalized (see `i18n.py`, RF-35) — the source-of-truth
+  strings in the codebase are English, with a Spanish translation shipped alongside.
+- Every internal `datetime` is **tz-aware in UTC** (`models.py` validates this and
+  rejects *naive* values); conversion to local time (`America/Caracas`) happens only in
+  `notify/presentation.py`.
+- The internal contract (`SeismicEvent`) is the only payload that crosses layers — see
+  `API-SPEC.md` §3 for the EMSC/USGS field mapping and invariants (distance and severity
+  are always derived).

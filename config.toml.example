@@ -1,58 +1,61 @@
 # config.toml.example — Vigía-eew
-# Copia este archivo como `config.toml` en el directorio de config del usuario
-# (o pásalo con `vigia-eew --config <ruta>`). Todos los valores tienen defaults
-# sensatos centrados en Caracas; ajusta a tu zona.
+# Copy this file as `config.toml` in the user's config directory
+# (or pass it with `vigia-eew --config <path>`). All values have sensible
+# defaults centered on Caracas; adjust to your area.
 
-# Punto geográfico contra el que se calculan distancia y radio (RF-12). Si **borras o
-# comentas** esta sección completa, el agente detecta tu ubicación automáticamente por IP
-# en el primer arranque y la cachea para no repetir la consulta después (RF-33, ver
-# docs/API-SPEC.md §4). Déjala como está (o ajústala) para fijar tu ubicación a mano.
-[referencia]
-nombre = "Caracas"
+# Geographic point used to calculate distance and radius (RF-12). If you **delete or
+# comment out** this whole section, the agent automatically detects your location by
+# IP on first startup and caches it so the lookup isn't repeated (RF-33, see
+# docs/API-SPEC.md §4). Leave it as-is (or adjust it) to set your location manually.
+[reference]
+name = "Caracas"
 lat = 10.4806
 lon = -66.9036
 
-[filtro]
-radio_km = 300.0
-# Magnitud mínima para que un sismo dispare una alerta (RF-12). Sube este valor si no
-# quieres que se reporten sismos menores; por ejemplo, para ignorar todo lo < 3.0:
-# magnitud_minima = 3.0
-magnitud_minima = 2.5
+[filter]
+radius_km = 300.0
+# Minimum magnitude for an earthquake to trigger an alert (RF-12). Raise this value
+# if you don't want smaller earthquakes reported; for example, to ignore anything < 3.0:
+# min_magnitude = 3.0
+min_magnitude = 2.5
 
-[fuentes.emsc]
-habilitado = true
+[sources.emsc]
+enabled = true
 url = "wss://www.seismicportal.eu/standing_order/websocket"
-ping_interval_s = 15      # keepalive obligatorio (RF-02)
+ping_interval_s = 15      # mandatory keepalive (RF-02)
 ping_timeout_s = 20
-backoff_max_s = 60        # tope del backoff exponencial de reconexión (RF-03)
+backoff_max_s = 60        # cap of the exponential reconnection backoff (RF-03)
 
-[fuentes.usgs]
-habilitado = true
+[sources.usgs]
+enabled = true
 url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
-intervalo_poll_s = 60     # respaldo de baja frecuencia (RF-05)
+poll_interval_s = 60      # low-frequency backup (RF-05)
 timeout_s = 15
 
 [dedup]
-distancia_km = 100.0      # mismo sismo si <= 100 km, <= 90 s y <= 0.5 mag (RF-09)
-ventana_s = 90
-delta_magnitud = 0.5
+distance_km = 100.0       # same earthquake if <= 100 km, <= 90 s, and <= 0.5 mag (RF-09)
+window_s = 90
+magnitude_delta = 0.5
 
-[severidad]
-# Límite superior de cada nivel; por encima de atencion_max es "critico" (RF-13).
+[severity]
+# Upper bound of each level; above warning_max is "critical" (RF-13).
 info_max = 4.0
-atencion_max = 5.5
+warning_max = 5.5
 
-[notificacion]
-pantalla_completa = false
-zona_horaria = "America/Caracas"
-sonido = true
-# Ícono de bandeja del sistema (RF-34): estado, pausar/reanudar, editar config, salir.
-# Mejor esfuerzo — si el SO no puede mostrarlo (p. ej. GNOME/Wayland sin la extensión
-# "AppIndicator and KStatusNotifierItem Support"), el agente sigue funcionando igual.
-icono_bandeja = true
+[notification]
+fullscreen = false
+timezone = "America/Caracas"
+sound = true
+# System tray icon (RF-34): status, pause/resume, edit config, quit.
+# Best-effort — if the OS can't show it (e.g. GNOME/Wayland without the
+# "AppIndicator and KStatusNotifierItem Support" extension), the agent keeps working.
+tray_icon = true
+# User-facing language (RF-35): "auto" detects it from the OS locale, falling back to
+# English if unsupported. Set it explicitly to override: "en" or "es".
+language = "auto"
 
 [logging]
-nivel = "INFO"
-archivo = "vigia-eew.log"
+level = "INFO"
+file = "vigia-eew.log"
 max_bytes = 1048576
 backups = 3

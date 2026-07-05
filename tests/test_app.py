@@ -1,22 +1,22 @@
-"""Pruebas del ensamblaje de la aplicación (RF-26, wiring de supervisor/notificación)."""
+"""Tests for the application assembly (RF-26, supervisor/notification wiring)."""
 
 from __future__ import annotations
 
 import asyncio
 
-from vigia_eew.app import Aplicacion
-from vigia_eew.config import FuenteEMSC, FuenteUSGS, Notificacion, Referencia, Settings
-from vigia_eew.simulacion import evento_simulado
+from vigia_eew.app import Application
+from vigia_eew.config import EMSCSource, Notification, ReferencePoint, Settings, USGSSource
+from vigia_eew.simulation import simulated_event
 from vigia_eew.state import StateStore
-from vigia_eew.tray import IconoBandeja
+from vigia_eew.tray import TrayIcon
 
 
-class _FakeVentana:
-    def actualizar(self, datos):
+class _FakeWindow:
+    def refresh(self, data):
         pass
 
 
-class _FakeRaiz:
+class _FakeRoot:
     def __init__(self):
         self.after_calls: list[tuple[int, object]] = []
 
@@ -27,177 +27,238 @@ class _FakeRaiz:
         pass
 
 
-def _app(**cfg_kw) -> Aplicacion:
-    return Aplicacion(Settings(**cfg_kw))
+def _app(**cfg_kw) -> Application:
+    return Application(Settings(**cfg_kw))
 
 
-# --- Wiring del supervisor según fuentes habilitadas ---
+# --- Supervisor wiring based on enabled sources ---
 
 
-def test_supervisor_con_ambas_fuentes():
+def test_supervisor_with_both_sources():
     app = _app()
-    sup = app._construir_supervisor(asyncio.Queue(), object())
-    assert sup.nombres == ["ws", "rest", "pipeline"]
+    sup = app._build_supervisor(asyncio.Queue(), object())
+    assert sup.names == ["ws", "rest", "pipeline"]
 
 
-def test_supervisor_sin_emsc():
-    app = _app(fuentes_emsc=FuenteEMSC(habilitado=False))
-    sup = app._construir_supervisor(asyncio.Queue(), object())
-    assert sup.nombres == ["rest", "pipeline"]
+def test_supervisor_without_emsc():
+    app = _app(sources_emsc=EMSCSource(enabled=False))
+    sup = app._build_supervisor(asyncio.Queue(), object())
+    assert sup.names == ["rest", "pipeline"]
 
 
-def test_supervisor_sin_usgs():
-    app = _app(fuentes_usgs=FuenteUSGS(habilitado=False))
-    sup = app._construir_supervisor(asyncio.Queue(), object())
-    assert sup.nombres == ["ws", "pipeline"]
+def test_supervisor_without_usgs():
+    app = _app(sources_usgs=USGSSource(enabled=False))
+    sup = app._build_supervisor(asyncio.Queue(), object())
+    assert sup.names == ["ws", "pipeline"]
 
 
-# --- Controlador de notificación construido por la app ---
+# --- Notification controller built by the app ---
 
 
-def test_controlador_formatea_y_muestra():
+def test_controller_formats_and_shows():
     app = _app()
-    vistos: list = []
-    ctrl = app._construir_controlador(
-        lambda datos, severidad, al_reconocer: vistos.append((datos, severidad)) or _FakeVentana(),
+    seen: list = []
+    ctrl = app._build_controller(
+        lambda data, severity, on_acknowledge: seen.append((data, severity)) or _FakeWindow(),
     )
-    ctrl.encolar(evento_simulado(app.cfg.referencia, app.cfg.severidad))
-    assert len(vistos) == 1
-    datos, severidad = vistos[0]
-    assert datos.magnitud == "M 6.1"
-    assert severidad == "critico"
-    assert "La Guaira" in datos.lugar
+    ctrl.enqueue(simulated_event(app.cfg.reference, app.cfg.severity))
+    assert len(seen) == 1
+    data, severity = seen[0]
+    assert data.magnitude == "M 6.1"
+    assert severity == "critical"
+    assert "La Guaira" in data.place
 
 
-# --- Detección automática de ubicación por IP (RF-33) ---
+# --- Automatic IP-based location detection (RF-33) ---
 
 
-def test_preparar_sin_resolver_no_llama_geoloc(tmp_path):
-    llamadas: list[int] = []
-    app = Aplicacion(
+def test_prepare_without_resolve_does_not_call_geoloc(tmp_path):
+    calls: list[int] = []
+    app = Application(
         Settings(),
-        estado=StateStore(tmp_path / "state.json"),
-        referencia_manual=False,
-        detectar_ubicacion=lambda: llamadas.append(1) or None,
+        state=StateStore(tmp_path / "state.json"),
+        manual_reference=False,
+        detect_location=lambda: calls.append(1) or None,
     )
-    app._preparar()  # resolver_ubicacion=False por defecto (usado por --simulate)
-    assert llamadas == []
+    app._prepare()  # resolve_location=False by default (used by --simulate)
+    assert calls == []
 
 
-def test_preparar_resuelve_ubicacion_automatica(tmp_path):
-    detectada = Referencia(nombre="Maracaibo", lat=10.63, lon=-71.64)
-    app = Aplicacion(
+def test_prepare_resolves_automatic_location(tmp_path):
+    detected = ReferencePoint(name="Maracaibo", lat=10.63, lon=-71.64)
+    app = Application(
         Settings(),
-        estado=StateStore(tmp_path / "state.json"),
-        referencia_manual=False,
-        detectar_ubicacion=lambda: detectada,
+        state=StateStore(tmp_path / "state.json"),
+        manual_reference=False,
+        detect_location=lambda: detected,
     )
-    app._preparar(resolver_ubicacion=True)
-    assert app.cfg.referencia.nombre == "Maracaibo"
-    cacheada = app.estado.ubicacion_cacheada()
-    assert cacheada is not None
-    assert cacheada.nombre == "Maracaibo"
+    app._prepare(resolve_location=True)
+    assert app.cfg.reference.name == "Maracaibo"
+    cached = app.state.cached_location()
+    assert cached is not None
+    assert cached.name == "Maracaibo"
 
 
-def test_preparar_respeta_referencia_manual(tmp_path):
-    llamadas: list[int] = []
-    app = Aplicacion(
-        Settings(referencia={"nombre": "Valencia", "lat": 10.16, "lon": -68.0}),
-        estado=StateStore(tmp_path / "state.json"),
-        referencia_manual=True,
-        detectar_ubicacion=lambda: llamadas.append(1) or Referencia(nombre="x", lat=0, lon=0),
+def test_prepare_respects_manual_reference(tmp_path):
+    calls: list[int] = []
+    app = Application(
+        Settings(reference={"name": "Valencia", "lat": 10.16, "lon": -68.0}),
+        state=StateStore(tmp_path / "state.json"),
+        manual_reference=True,
+        detect_location=lambda: calls.append(1) or ReferencePoint(name="x", lat=0, lon=0),
     )
-    app._preparar(resolver_ubicacion=True)
-    assert llamadas == []
-    assert app.cfg.referencia.nombre == "Valencia"
+    app._prepare(resolve_location=True)
+    assert calls == []
+    assert app.cfg.reference.name == "Valencia"
 
 
-def test_preparar_usa_cache_sin_llamar_geoloc(tmp_path):
-    ruta_estado = tmp_path / "state.json"
-    previo = StateStore(ruta_estado)
-    previo.cargar()
-    previo.cachear_ubicacion(Referencia(nombre="Cache", lat=1.0, lon=2.0))
-    previo.guardar()
+def test_prepare_uses_cache_without_calling_geoloc(tmp_path):
+    state_path = tmp_path / "state.json"
+    previous = StateStore(state_path)
+    previous.load()
+    previous.cache_location(ReferencePoint(name="Cache", lat=1.0, lon=2.0))
+    previous.save()
 
-    llamadas: list[int] = []
-    app = Aplicacion(
+    calls: list[int] = []
+    app = Application(
         Settings(),
-        estado=StateStore(ruta_estado),
-        referencia_manual=False,
-        detectar_ubicacion=lambda: llamadas.append(1) or None,
+        state=StateStore(state_path),
+        manual_reference=False,
+        detect_location=lambda: calls.append(1) or None,
     )
-    app._preparar(resolver_ubicacion=True)
-    assert llamadas == []
-    assert app.cfg.referencia.nombre == "Cache"
+    app._prepare(resolve_location=True)
+    assert calls == []
+    assert app.cfg.reference.name == "Cache"
 
 
-def test_preparar_fallback_a_default_si_geoloc_falla(tmp_path):
-    app = Aplicacion(
+def test_prepare_falls_back_to_default_if_geoloc_fails(tmp_path):
+    app = Application(
         Settings(),
-        estado=StateStore(tmp_path / "state.json"),
-        referencia_manual=False,
-        detectar_ubicacion=lambda: None,
+        state=StateStore(tmp_path / "state.json"),
+        manual_reference=False,
+        detect_location=lambda: None,
     )
-    app._preparar(resolver_ubicacion=True)
-    assert app.cfg.referencia.nombre == "Caracas"  # default, sin cachear
-    assert app.estado.ubicacion_cacheada() is None
+    app._prepare(resolve_location=True)
+    assert app.cfg.reference.name == "Caracas"  # default, not cached
+    assert app.state.cached_location() is None
 
 
-# --- Ícono de bandeja (RF-34) ---
+# --- Tray icon (RF-34) ---
 
 
-def test_construir_tray_deshabilitado_devuelve_none():
-    app = _app(notificacion=Notificacion(icono_bandeja=False))
-    assert app._construir_tray() is None
+def test_build_tray_disabled_returns_none():
+    app = _app(notification=Notification(tray_icon=False))
+    assert app._build_tray() is None
 
 
-def test_construir_tray_habilitado_devuelve_icono():
+def test_build_tray_enabled_returns_icon():
     app = _app()
-    icono = app._construir_tray()
-    assert isinstance(icono, IconoBandeja)
+    icon = app._build_tray()
+    assert isinstance(icon, TrayIcon)
 
 
-def test_alternar_pausa_programa_en_hilo_de_tk():
+def test_toggle_pause_schedules_on_tk_thread():
     app = _app()
-    app._root = _FakeRaiz()
-    ctrl = app._construir_controlador(lambda datos, severidad, al_reconocer: _FakeVentana())
-    assert ctrl.pausado is False
+    app._root = _FakeRoot()
+    ctrl = app._build_controller(lambda data, severity, on_acknowledge: _FakeWindow())
+    assert ctrl.paused is False
 
-    app._alternar_pausa()
+    app._toggle_pause()
     assert len(app._root.after_calls) == 1
     ms, callback = app._root.after_calls[0]
     assert ms == 0
-    callback()  # ejecuta lo agendado, como haría el mainloop real de Tk
-    assert ctrl.pausado is True
+    callback()  # runs the scheduled callback, like Tk's real mainloop would
+    assert ctrl.paused is True
 
 
-def test_salir_desde_tray_programa_quit():
+def test_exit_from_tray_schedules_quit():
     app = _app()
-    app._root = _FakeRaiz()
-    app._salir_desde_tray()
+    app._root = _FakeRoot()
+    app._exit_from_tray()
     assert len(app._root.after_calls) == 1
     ms, callback = app._root.after_calls[0]
     assert ms == 0
     assert callable(callback)
 
 
-def test_editar_config_usa_ruta_explicita(monkeypatch, tmp_path):
-    ruta = tmp_path / "config.toml"
-    llamadas = []
+def test_edit_config_uses_explicit_path(monkeypatch, tmp_path):
+    path = tmp_path / "config.toml"
+    calls = []
     import vigia_eew.app as app_mod
 
-    monkeypatch.setattr(app_mod.tray, "abrir_config", lambda r: llamadas.append(r))
-    app = Aplicacion(Settings(), ruta_config=ruta)
-    app._editar_config()
-    assert llamadas == [ruta]
+    monkeypatch.setattr(app_mod.tray, "open_config", lambda r: calls.append(r))
+    app = Application(Settings(), config_path=path)
+    app._edit_config()
+    assert calls == [path]
 
 
-def test_editar_config_usa_ruta_default_sin_config_explicito(monkeypatch):
-    llamadas = []
+def test_edit_config_uses_default_path_without_explicit_config(monkeypatch):
+    calls = []
     import vigia_eew.app as app_mod
 
-    monkeypatch.setattr(app_mod.tray, "abrir_config", lambda r: llamadas.append(r))
+    monkeypatch.setattr(app_mod.tray, "open_config", lambda r: calls.append(r))
     app = _app()
-    app._editar_config()
-    assert len(llamadas) == 1
-    assert llamadas[0] == app_mod.ruta_config_predeterminada()
+    app._edit_config()
+    assert len(calls) == 1
+    assert calls[0] == app_mod.default_config_path()
+
+
+# --- Headless TUI dashboard wiring (RF-36) ---
+
+
+class _FakeTuiApp:
+    def __init__(self):
+        self.pushed: list = []
+        self.bound_controller = None
+        self.bound_supervisor = None
+
+    def push_alert(self, data, severity, on_acknowledge):
+        self.pushed.append((data, severity))
+        return object()
+
+    def bind_controller(self, ctrl):
+        self.bound_controller = ctrl
+
+    def bind_supervisor(self, sup):
+        self.bound_supervisor = sup
+
+
+def test_wire_tui_builds_controller_using_push_alert():
+    app = _app()
+    tui_app = _FakeTuiApp()
+    ctrl = app._wire_tui(tui_app)
+    ctrl.enqueue(simulated_event(app.cfg.reference, app.cfg.severity))
+    assert len(tui_app.pushed) == 1
+    data, severity = tui_app.pushed[0]
+    assert data.magnitude == "M 6.1"
+    assert severity == "critical"
+
+
+def test_wire_tui_binds_controller_and_supervisor():
+    from vigia_eew.supervisor import Supervisor
+
+    app = _app()
+    tui_app = _FakeTuiApp()
+    ctrl = app._wire_tui(tui_app)
+    assert tui_app.bound_controller is ctrl
+    assert isinstance(tui_app.bound_supervisor, Supervisor)
+    assert tui_app.bound_supervisor.names == ["ws", "rest", "pipeline"]
+
+
+def test_controller_for_tui_binds_controller_without_supervisor():
+    app = _app()
+    tui_app = _FakeTuiApp()
+    ctrl = app._controller_for_tui(tui_app)
+    assert tui_app.bound_controller is ctrl
+    assert tui_app.bound_supervisor is None  # simulate mode: no ingestion
+
+
+def test_inject_simulated_alert_pushes_event():
+    app = _app()
+    tui_app = _FakeTuiApp()
+    app._controller_for_tui(tui_app)
+    app._inject_simulated_alert()
+    assert len(tui_app.pushed) == 1
+    data, severity = tui_app.pushed[0]
+    assert data.magnitude == "M 6.1"
+    assert severity == "critical"

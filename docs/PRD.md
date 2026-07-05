@@ -1,184 +1,191 @@
-# PRD — Vigía-eew (Documento de Requisitos de Producto)
+# PRD — Vigía-eew (Product Requirements Document)
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
-| Producto | **Vigía** (`vigia-eew`) — agente de alerta sísmica de escritorio |
-| Versión del documento | 1.0 (borrador para revisión) |
-| Estado | 🟡 Pendiente de aprobación (puerta de fase SDD) |
-| Fecha | 2026-06-28 |
-| Autor | Ernesto Crespo |
-| Repositorio | https://github.com/ecrespo/vigia-eew |
-| Metodología | Spec-Driven Development (las specs preceden al código) |
+| Product | **Vigía** (`vigia-eew`) — desktop seismic alert agent |
+| Document version | 1.0 (draft for review) |
+| Status | 🟡 Pending approval (SDD phase gate) |
+| Date | 2026-06-28 |
+| Author | Ernesto Crespo |
+| Repository | https://github.com/ecrespo/vigia-eew |
+| Methodology | Spec-Driven Development (specs precede code) |
 
-> Este PRD es el artefacto primario. Ningún código de aplicación se escribe hasta que el
-> conjunto de artefactos SDD (PRD, API Spec, Technical Design, Data Model, Implementation
-> Plan) y `ARCHITECTURE.md` esté aprobado. Cada requisito tiene un **ID trazable** que se
-> referencia desde el resto de documentos y desde el código.
+> This PRD is the primary artifact. No application code is written until the full set of SDD
+> artifacts (PRD, API Spec, Technical Design, Data Model, Implementation Plan) and
+> `ARCHITECTURE.md` are approved. Every requirement has a **traceable ID** that is referenced
+> from the rest of the documents and from the code.
 
 ---
 
-## 1. Problema
+## 1. Problem
 
-Una notificación de escritorio convencional es **descartable**: se silencia con "No molestar",
-se cierra con un clic accidental o queda enterrada detrás de otras ventanas. En una emergencia
-sísmica eso es exactamente lo que no debe ocurrir. La población y los equipos operativos en
-Venezuela carecen de una herramienta **gratuita, auto-alojada y robusta** que garantice que una
-alerta sísmica relevante **se vea y se reconozca**, sin depender de un teléfono, de servicios
-pagos ni de claves de API.
+A conventional desktop notification is **dismissible**: it gets silenced by "Do Not Disturb",
+closed by an accidental click, or buried behind other windows. In a seismic emergency, that is
+exactly what must not happen. The population and operational teams in Venezuela lack a **free,
+self-hosted, and robust** tool that guarantees a relevant seismic alert **is seen and
+acknowledged**, without depending on a phone, paid services, or API keys.
 
-El proyecto nace tras el terremoto de Venezuela de junio de 2026. Dependiendo de la distancia al
-epicentro, una alerta basada en *push* real puede llegar **antes que las ondas sísmicas más
-destructivas**; y cuando no, garantiza que la alerta no se pierda y quede registrada.
+The project was born after the June 2026 Venezuela earthquake. Depending on the distance to the
+epicenter, a real *push*-based alert can arrive **before the most destructive seismic waves**;
+and when it doesn't, it still guarantees the alert is not lost and is logged.
 
-## 2. Usuarios y personas
+## 2. Users and personas
 
-| Persona | Descripción | Necesidad principal |
+| Persona | Description | Primary need |
 |---|---|---|
-| **P1 — Operador humanitario** | Coordina respuesta en una ONG/protección civil. Tiene una estación de trabajo encendida 24/7. | Que la alerta interrumpa cualquier actividad y exija reconocimiento explícito; registro auditable. |
-| **P2 — Ciudadano técnico** | Usuario avanzado (Linux/Win/macOS) que quiere alerta personal en su equipo. | Instalación simple, autoarranque, configurable por punto de referencia. |
-| **P3 — Administrador de flotilla** | Despliega el agente en muchas máquinas. | Empaquetado nativo por SO, autoarranque, sin punto único de fallo. |
+| **P1 — Humanitarian operator** | Coordinates response at an NGO/civil protection agency. Has a workstation on 24/7. | The alert must interrupt any activity and require explicit acknowledgment; an auditable log. |
+| **P2 — Technical citizen** | Advanced user (Linux/Win/macOS) who wants a personal alert on their machine. | Simple installation, autostart, configurable by reference point. |
+| **P3 — Fleet administrator** | Deploys the agent across many machines. | Native per-OS packaging, autostart, no single point of failure. |
 
-El usuario primario para el diseño de UX de la alerta es **P1 (operador humanitario)**.
+The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 
-## 3. Objetivos y métricas de éxito
+## 3. Goals and success metrics
 
-| ID | Objetivo | Métrica / criterio |
+| ID | Goal | Metric / criterion |
 |---|---|---|
-| OBJ-1 | Alerta imposible de ignorar | La ventana de alerta solo se cierra con el botón **RECONOCIDO** (no Esc, no X, no clic fuera). |
-| OBJ-2 | Latencia baja por *push* real | Tiempo desde mensaje EMSC recibido hasta ventana visible ≤ 1 s en hardware típico. |
-| OBJ-3 | Cero eventos perdidos | Todo evento dentro del filtro reportado por EMSC **o** USGS termina alertado (push + reconciliación). |
-| OBJ-4 | Robustez 24/7 | El agente nunca muere por un fallo transitorio (WS caído, 429/5xx, JSON inválido, red). |
-| OBJ-5 | Multiplataforma sin fricción | Ejecutable en Linux, Windows y macOS; autoarranque y artefactos instalables nativos. |
-| OBJ-6 | Auto-alojado y gratuito | Sin claves de API, sin servicios pagos; cada máquina corre su propio agente. |
+| OBJ-1 | Impossible-to-ignore alert | The alert window only closes via the **ACKNOWLEDGED** button (not Esc, not X, not clicking outside). |
+| OBJ-2 | Low latency via real push | Time from EMSC message received to window visible ≤ 1 s on typical hardware. |
+| OBJ-3 | Zero missed events | Every event within the filter reported by EMSC **or** USGS ends up alerted (push + reconciliation). |
+| OBJ-4 | 24/7 robustness | The agent never dies from a transient failure (WS down, 429/5xx, invalid JSON, network). |
+| OBJ-5 | Frictionless cross-platform | Runs on Linux, Windows, and macOS; native autostart and installable artifacts. |
+| OBJ-6 | Self-hosted and free | No API keys, no paid services; each machine runs its own agent. |
 
-## 4. Casos de uso
+## 4. Use cases
 
-| ID | Caso de uso | Actor | Flujo resumido |
+| ID | Use case | Actor | Summary flow |
 |---|---|---|---|
-| CU-1 | Recibir alerta por sismo (push) | Sistema/P1 | EMSC empuja `create` → normaliza → pasa filtro → dedup (nuevo) → alerta en pantalla + sonido + toast. |
-| CU-2 | Recuperar evento perdido (respaldo) | Sistema | USGS FDSN (cada 60 s) detecta evento que el WS no entregó → normaliza → filtro → dedup → alerta. |
-| CU-3 | Recibir corrección de magnitud | Sistema | EMSC empuja `update` del mismo `unid` → se actualiza el evento mostrado **sin** disparar una alerta nueva. |
-| CU-4 | Evitar alerta duplicada entre fuentes | Sistema | EMSC y USGS reportan el mismo sismo → la heurística de dedup lo reconoce → una sola alerta. |
-| CU-5 | Reconocer una alerta | P1 | El usuario pulsa **RECONOCIDO** → la ventana se cierra → se registra el reconocimiento → se muestra el siguiente en cola. |
-| CU-6 | Encolar múltiples sismos | Sistema/P1 | Varios eventos simultáneos → se muestran en orden, uno a uno. |
-| CU-7 | Probar la capa de alerta | P2/P3 | Ejecutar `vigia-eew --simulate` → inyecta M6.1 cerca de La Guaira → verifica alerta sin sismo real. |
-| CU-8 | Configurar filtro | P2 | Editar `config.toml` (punto de referencia, radio, magnitud mínima, severidades). |
-| CU-9 | Instalar autoarranque | P2/P3 | Ejecutar el instalador de autoarranque del SO (systemd user / LaunchAgent / tarea programada). |
-| CU-10 | Reiniciar sin re-alertar | Sistema | Tras reinicio, el estado persistido evita volver a alertar eventos ya reconocidos. |
+| CU-1 | Receive earthquake alert (push) | System/P1 | EMSC pushes `create` → normalize → passes filter → dedup (new) → on-screen alert + sound + toast. |
+| CU-2 | Recover a missed event (fallback) | System | USGS FDSN (every 60 s) detects an event the WS didn't deliver → normalize → filter → dedup → alert. |
+| CU-3 | Receive a magnitude correction | System | EMSC pushes an `update` for the same `unid` → the displayed event is updated **without** triggering a new alert. |
+| CU-4 | Avoid a duplicate alert across sources | System | EMSC and USGS report the same earthquake → the dedup heuristic recognizes it → a single alert. |
+| CU-5 | Acknowledge an alert | P1 | The user presses **ACKNOWLEDGED** → the window closes → the acknowledgment is logged → the next one in queue is shown. |
+| CU-6 | Queue multiple earthquakes | System/P1 | Several simultaneous events → shown in order, one at a time. |
+| CU-7 | Test the alert layer | P2/P3 | Run `vigia-eew --simulate` → injects an M6.1 near La Guaira → verifies the alert without a real earthquake. |
+| CU-8 | Configure the filter | P2 | Edit `config.toml` (reference point, radius, minimum magnitude, severities). |
+| CU-9 | Install autostart | P2/P3 | Run the OS autostart installer (user systemd / LaunchAgent / scheduled task). |
+| CU-10 | Restart without re-alerting | System | After a restart, the persisted state prevents re-alerting already-acknowledged events. |
 
-## 5. Requisitos funcionales (RF)
+## 5. Functional requirements (RF)
 
-### 5.1 Ingestión (push primario + respaldo)
-- **RF-01** — Conectarse por WebSocket a `wss://www.seismicportal.eu/standing_order/websocket` como **vía primaria** (push real, sin polling de alta frecuencia).
-- **RF-02** — Enviar **keepalive (ping) cada ~15 s** sobre el WS; sin keepalive el socket muere en silencio.
-- **RF-03** — **Reconexión perpetua** con *backoff* exponencial al detectar cierre del WS; nunca quedarse con el socket caído.
-- **RF-04** — Procesar mensajes EMSC con `action` ∈ {`create`, `update`} y `data` como Feature GeoJSON.
-- **RF-05** — Consultar **USGS FDSN** por REST como **respaldo de baja frecuencia (cada 60 s)** únicamente para reconciliar/recuperar eventos no entregados por el WS y cubrir sismos locales pequeños.
-- **RF-06** — Mantener un **cursor persistido** ("desde el último evento visto") para la consulta USGS.
+### 5.1 Ingestion (primary push + fallback)
+- **RF-01** — Connect via WebSocket to `wss://www.seismicportal.eu/standing_order/websocket` as the **primary channel** (real push, no high-frequency polling).
+- **RF-02** — Send a **keepalive (ping) every ~15 s** over the WS; without a keepalive the socket dies silently.
+- **RF-03** — **Perpetual reconnection** with exponential *backoff* upon detecting a WS closure; never remain with the socket down.
+- **RF-04** — Process EMSC messages with `action` ∈ {`create`, `update`} and `data` as a GeoJSON Feature.
+- **RF-05** — Query **USGS FDSN** over REST as a **low-frequency fallback (every 60 s)** solely to reconcile/recover events not delivered by the WS and to cover small local earthquakes.
+- **RF-06** — Maintain a **persisted cursor** ("since the last event seen") for the USGS query.
 
-### 5.2 Normalización
-- **RF-07** — Normalizar EMSC y USGS a un **esquema de evento común**: `id`, `magnitud`, `magType`, `lugar/region`, `lat`, `lon`, `profundidad_km`, `hora_utc`, `fuente`, `distancia_km` al punto de referencia.
-- **RF-08** — Calcular la `distancia_km` entre el epicentro y el punto de referencia (haversine).
+### 5.2 Normalization
+- **RF-07** — Normalize EMSC and USGS to a **common event schema**: `id`, `magnitude`, `magType`, `place/region`, `lat`, `lon`, `depth_km`, `time_utc`, `source`, `distance_km` to the reference point.
+- **RF-08** — Calculate the `distance_km` between the epicenter and the reference point (haversine).
 
-### 5.3 Deduplicación
-- **RF-09** — Considerar **el mismo sismo** si coincide dentro de **~100 km, ~90 s y ~0.5 de magnitud** entre fuentes.
-- **RF-10** — **Persistir los `id` ya alertados** para no repetir tras reinicios.
-- **RF-11** — Manejar `update` del WS (corrección de magnitud) **sin** disparar alerta nueva (actualiza el evento existente).
+### 5.3 Deduplication
+- **RF-09** — Treat as **the same earthquake** if it matches within **~100 km, ~90 s, and ~0.5 magnitude** across sources.
+- **RF-10** — **Persist already-alerted `id`s** so they are not repeated after restarts.
+- **RF-11** — Handle a WS `update` (magnitude correction) **without** triggering a new alert (updates the existing event).
 
-### 5.4 Filtrado (configurable)
-- **RF-12** — Filtrar por **punto de referencia (lat/lon), radio en km y magnitud mínima** configurables.
-- **RF-13** — Clasificar **severidad por magnitud** (p. ej. `<4` info, `4–5.5` atención, `5.5+` crítico), configurable, que cambie **color y sonido** de la alerta.
-- **RF-33** — Cuando el usuario **no** configura `[referencia]` manualmente, **detectar automáticamente** el punto de referencia geográfico por geolocalización de IP (mejor esfuerzo), cachear el resultado para no repetir la consulta en cada arranque, y hacer **fallback silencioso** al default (Caracas) si la detección falla, sin bloquear el arranque del agente.
+### 5.4 Filtering (configurable)
+- **RF-12** — Filter by **reference point (lat/lon), radius in km, and minimum magnitude**, all configurable.
+- **RF-13** — Classify **severity by magnitude** (e.g. `<4` info, `4–5.5` warning, `5.5+` critical), configurable, changing the alert's **color and sound**.
+- **RF-33** — When the user does **not** manually configure `[reference]`, **automatically detect** the geographic reference point via IP geolocation (best effort), cache the result so the lookup isn't repeated on every startup, and **silently fall back** to the default (Caracas) if detection fails, without blocking the agent's startup.
 
-### 5.5 Notificación (requisito central)
-- **RF-14** — Mostrar un **toast nativo** del SO (informativo) con `desktop-notifier` (Linux/Win/macOS).
-- **RF-15** — Mostrar una **ventana de alerta superpuesta** siempre al frente (*topmost*), sin decoración, overlay grande centrado o pantalla completa.
-- **RF-16** — La ventana **toma el foco** al aparecer y **se re-eleva** si lo pierde.
-- **RF-17** — Reproducir **sonido de alarma**, más insistente según severidad.
-- **RF-18** — Mostrar grande y legible: **MAGNITUD**, lugar/región, **distancia** al punto de referencia, profundidad, **hora local (zona de Venezuela)** y fuente.
-- **RF-19** — La ventana **no se cierra con Esc, la X ni clic fuera**; solo con el botón **RECONOCIDO** (cierre explícito, no técnicamente imposible, para no bloquear al usuario ante un bug).
-- **RF-20** — **Encolar múltiples sismos** y mostrarlos en orden.
+### 5.5 Notification (core requirement)
+- **RF-14** — Show a **native OS toast** (informational) via `desktop-notifier` (Linux/Win/macOS).
+- **RF-15** — Show an **overlay alert window** always on top (*topmost*), undecorated, large centered overlay or fullscreen.
+- **RF-16** — The window **takes focus** when it appears and **re-raises itself** if it loses focus.
+- **RF-17** — Play an **alarm sound**, more insistent depending on severity.
+- **RF-18** — Display large and legible: **MAGNITUDE**, place/region, **distance** to the reference point, depth, **local time (Venezuela timezone)**, and source.
+- **RF-19** — The window **does not close via Esc, the X, or a click outside**; only via the **ACKNOWLEDGED** button (an explicit close, not technically impossible, so as not to lock the user out in case of a bug).
+- **RF-20** — **Queue multiple earthquakes** and display them in order.
 
-### 5.6 Modo de prueba
-- **RF-21** — Flag `--simulate` que **inyecte un evento falso** (p. ej. M6.1 cerca de La Guaira) para validar la capa de notificación en cada SO sin esperar un sismo real.
+### 5.6 Test mode
+- **RF-21** — `--simulate` flag that **injects a fake event** (e.g. M6.1 near La Guaira) to validate the notification layer on each OS without waiting for a real earthquake.
 
-### 5.7 Autoarranque
-- **RF-22** — Permitir **inicio automático al iniciar sesión**: Linux (systemd de usuario), macOS (LaunchAgent/Login Item), Windows (tarea programada al inicio de sesión).
-- **RF-23** — Proveer comando/script para **instalar y desinstalar** el autoarranque en cada SO.
+### 5.7 Autostart
+- **RF-22** — Allow **automatic startup at login**: Linux (user systemd), macOS (LaunchAgent/Login Item), Windows (scheduled task at logon).
+- **RF-23** — Provide a command/script to **install and uninstall** autostart on each OS.
 
-### 5.8 Configuración, logging y CLI
-- **RF-24** — Configuración en archivo **`config.toml`** validada con **pydantic**, con *defaults* sensatos (Caracas: lat 10.4806, lon -66.9036).
-- **RF-25** — **Logging estructurado** a consola y a **archivo rotativo**.
-- **RF-26** — CLI con *entry point* de consola **`vigia-eew`** (subcomandos/flags: ejecutar, `--simulate`, instalar/desinstalar autoarranque, ruta de config).
+### 5.8 Configuration, logging, and CLI
+- **RF-24** — Configuration in a **`config.toml`** file validated with **pydantic**, with sensible *defaults* (Caracas: lat 10.4806, lon -66.9036).
+- **RF-25** — **Structured logging** to console and to a **rotating file**.
+- **RF-26** — CLI with a console *entry point* **`vigia-eew`** (subcommands/flags: run, `--simulate`, install/uninstall autostart, config path).
 
-### 5.9 Empaquetado y distribución
-- **RF-27** — Paquete **PyPI** publicable con `pyproject.toml` (build con **hatchling**, gestor **uv**), versionado semántico.
-- **RF-28** — **Windows**: `.exe` con PyInstaller (onefile, sin consola para la GUI).
-- **RF-29** — **macOS**: bundle `.app` empaquetado en `.dmg`.
-- **RF-30** — **Linux**: AppImage (recomendado) + `.deb` y `.rpm` (vía `fpm`); snap opcional/documentado.
-- **RF-31** — **CI de build**: GitHub Actions con matriz (windows/macos/ubuntu-latest) que produzca todos los artefactos como *release assets*; más scripts locales (`build_windows.ps1`, `build_macos.sh`, `build_linux.sh`).
-- **RF-32** — Documentar cómo servir el `.deb` desde un **repositorio apt propio en Cloudflare R2**.
+### 5.9 Packaging and distribution
+- **RF-27** — Publishable **PyPI** package with `pyproject.toml` (built with **hatchling**, managed with **uv**), semantic versioning.
+- **RF-28** — **Windows**: `.exe` with PyInstaller (onefile, no console for the GUI).
+- **RF-29** — **macOS**: `.app` bundle packaged into a `.dmg`.
+- **RF-30** — **Linux**: AppImage (recommended) + `.deb` and `.rpm` (via `fpm`); snap optional/documented.
+- **RF-31** — **Build CI**: GitHub Actions with a matrix (windows/macos/ubuntu-latest) producing all artifacts as *release assets*; plus local scripts (`build_windows.ps1`, `build_macos.sh`, `build_linux.sh`).
+- **RF-32** — Document how to serve the `.deb` from a **self-hosted apt repository on Cloudflare R2**.
 
-### 5.10 Ícono de bandeja del sistema
-- **RF-34** — Mostrar un **ícono de bandeja** (system tray) mientras el agente corre, con menú: **estado** (WS conectado/reconectando, última alerta), **pausar/reanudar notificaciones** (sin perder eventos: solo retrasa su presentación), **editar configuración** (abre `config.toml` con la app asociada del SO) y **salir**. Es una mejora de **mejor esfuerzo**: si el backend gráfico no está disponible (sin display, GNOME/Wayland sin extensión de bandeja, etc.), el agente sigue funcionando con normalidad, sin ícono. Configurable (`[notificacion] icono_bandeja`, default `true`). No se activa en `--simulate` (RF-21).
+### 5.10 System tray icon
+- **RF-34** — Show a **tray icon** (system tray) while the agent runs, with a menu: **status** (WS connected/reconnecting, last alert), **pause/resume notifications** (without losing events: only delays their presentation), **edit configuration** (opens `config.toml` with the OS's associated app), and **quit**. This is a **best-effort** enhancement: if the graphical backend is unavailable (no display, GNOME/Wayland without a tray extension, etc.), the agent keeps working normally, without the icon. Configurable (`[notification] tray_icon`, default `true`). Not activated in `--simulate` (RF-21).
 
-## 6. Requisitos no funcionales (RNF)
+### 5.11 Internationalization (i18n)
+- **RF-35** — All user-facing text (alert window, toast, tray menu) must be internationalized. The language is **auto-detected from the OS locale** by default; a config parameter allows **overriding** it; the initial release supports **English and Spanish**; if the detected or configured language is not supported, the agent **falls back to English**.
 
-| ID | Categoría | Requisito |
+### 5.12 Headless terminal dashboard (TUI)
+- **RF-36** — Provide a **headless terminal dashboard** (`--tui`) as an alternative frontend to the desktop GUI + tray icon, for running the agent on a **server over SSH with no display**. It shows the live connection status (WS connected/reconnecting) and a log of recent alerts, and presents each relevant event as a **non-dismissable modal** inside the terminal: only an explicit acknowledgment (ENTER) closes it (same "impossible to ignore" contract as RF-19; Escape is disabled). Keyboard shortcuts: pause/resume notifications and quit. Combinable with `--simulate` (`--simulate --tui`) to test the modal without waiting for a real earthquake. In this mode there is **no toast and no tray icon** (no desktop session). The dashboard uses `textual` — a documented exception to RNF-06, the same as RF-34.
+
+## 6. Non-functional requirements (RNF)
+
+| ID | Category | Requirement |
 |---|---|---|
-| RNF-01 | Latencia | EMSC recibido → ventana visible ≤ **1 s** (P95) en hardware típico. |
-| RNF-02 | Disponibilidad | Operación **24/7**; sin punto único de fallo (cada máquina, su agente). |
-| RNF-03 | Robustez | El proceso **no termina** por fallos transitorios (WS caído, timeouts, 429/5xx, JSON inválido, pérdida de red). |
-| RNF-04 | Concurrencia | Basado en **asyncio**; tareas de ingestión sin bloquear la UI. |
-| RNF-05 | "Alerta no descartable" | La alerta no se puede ocultar con un clic accidental; solo cierre explícito (RF-19). |
-| RNF-06 | Portabilidad | Linux, Windows, macOS; UI por defecto en **Tkinter** (cero dependencias extra). Excepción explícita (RF-34, ADR-012): el ícono de bandeja usa `pystray` + `Pillow` — mejor esfuerzo, nunca bloquea el arranque si no está disponible en la plataforma. |
-| RNF-07 | Observabilidad | Logs estructurados con niveles; archivo rotativo; eventos de conexión/reconexión registrados. |
-| RNF-08 | Mantenibilidad/Trazabilidad | Cada componente del código rastreable a un RF del PRD. |
-| RNF-09 | Seguridad/Privacidad | Sin claves de API; sin enviar datos del usuario a terceros; solo lectura de fuentes públicas. Excepción explícita: la detección automática de ubicación (RF-33) consulta un servicio de geolocalización por IP, y solo cuando el usuario no fijó `[referencia]` manualmente — desactivable configurando la referencia a mano. |
-| RNF-10 | Idioma | Código, comentarios y artefactos SDD en **español**. |
-| RNF-11 | Versión de Python | **Python 3.11+** (uso de `tomllib` de la stdlib). |
-| RNF-12 | Zona horaria | Hora local mostrada en **zona de Venezuela** (America/Caracas, UTC-4). |
+| RNF-01 | Latency | EMSC received → window visible ≤ **1 s** (P95) on typical hardware. |
+| RNF-02 | Availability | **24/7** operation; no single point of failure (each machine, its own agent). |
+| RNF-03 | Robustness | The process **does not terminate** due to transient failures (WS down, timeouts, 429/5xx, invalid JSON, network loss). |
+| RNF-04 | Concurrency | Based on **asyncio**; ingestion tasks do not block the UI. |
+| RNF-05 | "Non-dismissible alert" | The alert cannot be hidden by an accidental click; only an explicit close (RF-19). |
+| RNF-06 | Portability | Linux, Windows, macOS; UI defaults to **Tkinter** (zero extra dependencies). Explicit exception (RF-34, ADR-012): the tray icon uses `pystray` + `Pillow` — best effort, never blocks startup if unavailable on the platform. Explicit exception (RF-36, ADR-013): the optional headless dashboard (`--tui`) uses `textual`. |
+| RNF-07 | Observability | Structured logs with levels; rotating file; connection/reconnection events logged. |
+| RNF-08 | Maintainability/Traceability | Every code component traceable to a PRD RF. |
+| RNF-09 | Security/Privacy | No API keys; no user data sent to third parties; read-only access to public sources. Explicit exception: automatic location detection (RF-33) queries an IP geolocation service, and only when the user has not manually set `[reference]` — can be disabled by setting the reference point manually. |
+| RNF-10 | Language | Code, comments, and SDD artifacts in English; user-facing text (alert window, toast, tray menu) is internationalized (i18n) with OS-locale detection, a config override, and English/Spanish support, falling back to English for unsupported locales. |
+| RNF-11 | Python version | **Python 3.11+** (uses the stdlib's `tomllib`). |
+| RNF-12 | Time zone | Local time shown in **Venezuela's time zone** (America/Caracas, UTC-4). |
 
-## 7. Criterios de aceptación
+## 7. Acceptance criteria
 
-| ID | Criterio (verificable) | Cubre |
+| ID | Criterion (verifiable) | Covers |
 |---|---|---|
-| CA-01 | Con `--simulate`, en **los tres SO**, aparece la ventana de alerta al frente, con sonido, y **solo** se cierra con RECONOCIDO. | RF-15..RF-21, RNF-05 |
-| CA-02 | Matar la red del WS hace que el agente reintente con *backoff* y se **reconecte** sin intervención, sin terminar el proceso. | RF-03, RNF-03 |
-| CA-03 | Sin tráfico de eventos, el WS permanece vivo gracias al **ping cada ~15 s** (no se cierra por inactividad). | RF-02 |
-| CA-04 | Un evento que el WS no entregó aparece vía **USGS** en ≤ 60 s y genera alerta. | RF-05, OBJ-3 |
-| CA-05 | El **mismo** sismo reportado por EMSC y USGS produce **una sola** alerta. | RF-09, CU-4 |
-| CA-06 | Un `update` de EMSC **actualiza** el evento mostrado y **no** crea una alerta nueva. | RF-11, CU-3 |
-| CA-07 | Tras reiniciar el agente, los eventos **ya reconocidos no se vuelven a alertar**. | RF-10, CU-10 |
-| CA-08 | Cambiar `radio`, `magnitud mínima` y `severidades` en `config.toml` modifica el comportamiento sin tocar código. | RF-12, RF-13, RF-24 |
-| CA-09 | La hora se muestra en **America/Caracas** y la distancia en km al punto de referencia. | RF-08, RF-18, RNF-12 |
-| CA-10 | El autoarranque se **instala y desinstala** correctamente en cada SO. | RF-22, RF-23 |
-| CA-11 | El CI produce `.exe`, `.dmg`, AppImage, `.deb`, `.rpm` y el paquete de PyPI como artefactos. | RF-27..RF-31 |
-| CA-12 | Sin `[referencia]` en `config.toml`, el agente detecta la ubicación por IP en el primer arranque y **reutiliza el caché** en arranques siguientes sin volver a llamar al servicio; si la detección falla, usa el default (Caracas) sin dejar de arrancar. | RF-33 |
-| CA-13 | Pausar desde el ícono de bandeja deja de mostrar alertas nuevas sin perderlas (se muestran al reanudar); si el ícono no puede arrancar, el agente sigue funcionando igual. | RF-34 |
+| CA-01 | With `--simulate`, on **all three OSes**, the alert window appears on top, with sound, and **only** closes via ACKNOWLEDGED. | RF-15..RF-21, RNF-05 |
+| CA-02 | Killing the WS network makes the agent retry with *backoff* and **reconnect** without intervention, without terminating the process. | RF-03, RNF-03 |
+| CA-03 | With no event traffic, the WS stays alive thanks to the **ping every ~15 s** (not closed due to inactivity). | RF-02 |
+| CA-04 | An event the WS didn't deliver appears via **USGS** within ≤ 60 s and generates an alert. | RF-05, OBJ-3 |
+| CA-05 | The **same** earthquake reported by EMSC and USGS produces **a single** alert. | RF-09, CU-4 |
+| CA-06 | An EMSC `update` **updates** the displayed event and does **not** create a new alert. | RF-11, CU-3 |
+| CA-07 | After restarting the agent, **already-acknowledged** events **are not re-alerted**. | RF-10, CU-10 |
+| CA-08 | Changing `radius`, `minimum magnitude`, and `severities` in `config.toml` changes behavior without touching code. | RF-12, RF-13, RF-24 |
+| CA-09 | The time is shown in **America/Caracas** and the distance in km to the reference point. | RF-08, RF-18, RNF-12 |
+| CA-10 | Autostart **installs and uninstalls** correctly on each OS. | RF-22, RF-23 |
+| CA-11 | CI produces `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`, and the PyPI package as artifacts. | RF-27..RF-31 |
+| CA-12 | Without `[reference]` in `config.toml`, the agent detects the location via IP on first startup and **reuses the cache** on subsequent startups without calling the service again; if detection fails, it uses the default (Caracas) without failing to start. | RF-33 |
+| CA-13 | Pausing from the tray icon stops showing new alerts without losing them (they are shown on resume); if the icon fails to start, the agent still works the same. | RF-34 |
+| CA-14 | With the OS locale set to Spanish, the alert window, toast, and tray menu appear in Spanish; overriding the language in `config.toml` forces the configured language; an unsupported locale (e.g. French) falls back to English. | RF-35 |
+| CA-15 | With `--tui` on a headless server, the dashboard shows the WS status and, on a relevant event, a **non-dismissable** modal that only ENTER closes (Escape does not); `--simulate --tui` shows the simulated modal without ingestion. | RF-36 |
 
-## 8. Fuera de alcance (v1)
+## 8. Out of scope (v1)
 
-- Captura de notificaciones del teléfono celular como fuente (la fuente de verdad son **APIs sísmicas públicas**).
-- Push real desde USGS por PDL (pesado/Java): se usa **polling** de respaldo en su lugar.
-- Relay central FastAPI con *fan-out* por WebSocket: **documentado como evolución futura**, no implementado en v1 (cada máquina corre su propio agente).
-- Frontend de presentación por **D-Bus** + **extensión de GNOME Shell** (modal con *grab* real en Wayland): **documentado como evolución futura** (ADR-010), no implementado en v1; el default sigue siendo Tkinter.
-- Predicción sísmica o estimación de intensidad/sacudida (MMI/ShakeMap) propias.
-- App móvil nativa, panel web, multiusuario/cuentas, telemetría centralizada.
-- Firma de código con certificado de pago (se documenta el procedimiento; la firma efectiva depende de disponer del certificado).
+- Capturing phone notifications as a source (the source of truth is **public seismic APIs**).
+- Real USGS push via PDL (heavy/Java): **fallback polling** is used instead.
+- Central FastAPI relay with WebSocket *fan-out*: **documented as future work**, not implemented in v1 (each machine runs its own agent).
+- Presentation frontend via **D-Bus** + **GNOME Shell extension** (modal with real *grab* on Wayland): **documented as future work** (ADR-010), not implemented in v1; the default remains Tkinter.
+- Custom seismic prediction or intensity/shaking estimation (MMI/ShakeMap).
+- Native mobile app, web dashboard, multi-user/accounts, centralized telemetry.
+- Code signing with a paid certificate (the procedure is documented; actual signing depends on having the certificate).
 
-## 9. Riesgos y mitigaciones
+## 9. Risks and mitigations
 
-| Riesgo | Impacto | Mitigación |
+| Risk | Impact | Mitigation |
 |---|---|---|
-| WS de EMSC pierde mensajes o sufre timeouts (documentado). | Evento no alertado. | Respaldo USGS + reconciliación con cursor (RF-05, RF-06). |
-| "No molestar" del SO silencia toasts. | Alerta no vista. | Ventana superpuesta *topmost* con foco (RF-15, RF-16) además del toast. |
-| Backoff agresivo satura el endpoint. | Bloqueo/baneo. | Backoff exponencial con tope y *jitter* (Technical Design). |
-| Diferencias de campos entre fuentes (`magtype` vs `magType`). | Datos mal normalizados. | Normalizador con mapeo explícito por fuente (API Spec / Data Model). |
-| Gatekeeper/SmartScreen bloquean instaladores sin firmar. | Fricción de instalación. | Documentar codesign/notarización y procedimiento de confianza. |
+| EMSC's WS loses messages or suffers timeouts (documented). | Event not alerted. | USGS fallback + reconciliation with cursor (RF-05, RF-06). |
+| OS "Do Not Disturb" silences toasts. | Alert not seen. | *Topmost* overlay window with focus (RF-15, RF-16) in addition to the toast. |
+| Aggressive backoff saturates the endpoint. | Blocking/ban. | Exponential backoff with a cap and *jitter* (Technical Design). |
+| Field differences between sources (`magtype` vs `magType`). | Poorly normalized data. | Normalizer with explicit per-source mapping (API Spec / Data Model). |
+| Gatekeeper/SmartScreen block unsigned installers. | Installation friction. | Document codesigning/notarization and the trust procedure. |
 
-## 10. Trazabilidad (resumen)
+## 10. Traceability (summary)
 
-Los RF se mapean a componentes en `IMPLEMENTATION-PLAN.md` (matriz RF→componente) y a decisiones
-en `TECHNICAL-DESIGN.md` (ADRs). Los contratos de entrada/salida están en `API-SPEC.md`; las
-estructuras de datos en `DATA-MODEL.md`; la vista de sistema y diagramas en `ARCHITECTURE.md`.
+RFs are mapped to components in `IMPLEMENTATION-PLAN.md` (RF→component matrix) and to decisions
+in `TECHNICAL-DESIGN.md` (ADRs). Input/output contracts are in `API-SPEC.md`; data structures in
+`DATA-MODEL.md`; the system view and diagrams in `ARCHITECTURE.md`.

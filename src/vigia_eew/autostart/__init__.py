@@ -1,13 +1,13 @@
-"""Autoarranque al iniciar sesión (RF-22, RF-23).
+"""Autostart on login (RF-22, RF-23).
 
-Cada SO tiene su mecanismo: **systemd --user** (Linux), **LaunchAgent** (macOS) y
-**tarea programada / schtasks** (Windows). Cada backend separa la *generación* del
-artefacto (unit/plist/comando, puro y testeable) del *runner* del sistema (inyectable),
-y expone una interfaz común (`Instalador`): `instalar()`, `desinstalar()`, `esta_instalado()`.
+Each OS has its own mechanism: **systemd --user** (Linux), **LaunchAgent** (macOS), and
+**scheduled task / schtasks** (Windows). Each backend separates the *generation* of the
+artifact (unit/plist/command, pure and testable) from the system *runner* (injectable),
+and exposes a common interface (`Installer`): `install()`, `uninstall()`, `is_installed()`.
 
-`crear_instalador()` selecciona el backend por plataforma; la CLI lo usa para
-`--install-autostart` / `--uninstall-autostart`. `comando_agente()` define cómo se lanza
-el agente (RF-26) en el artefacto de autoarranque.
+`create_installer()` selects the backend by platform; the CLI uses it for
+`--install-autostart` / `--uninstall-autostart`. `agent_command()` defines how the
+agent is launched (RF-26) in the autostart artifact.
 """
 
 from __future__ import annotations
@@ -18,64 +18,65 @@ import sys
 from collections.abc import Callable
 from typing import Protocol
 
-from .linux_systemd import InstaladorSystemd
-from .macos_launchagent import InstaladorLaunchAgent
-from .windows_task import InstaladorSchtasks
+from vigia_eew.autostart.linux_systemd import SystemdInstaller
+from vigia_eew.autostart.macos_launchagent import LaunchAgentInstaller
+from vigia_eew.autostart.windows_task import SchtasksInstaller
 
 _Runner = Callable[[list[str]], int]
 
 
-class Instalador(Protocol):
-    """Interfaz común de los instaladores de autoarranque."""
+class Installer(Protocol):
+    """Common interface for autostart installers."""
 
-    def instalar(self) -> None: ...
-    def desinstalar(self) -> None: ...
-    def esta_instalado(self) -> bool: ...
+    def install(self) -> None: ...
+    def uninstall(self) -> None: ...
+    def is_installed(self) -> bool: ...
 
 
-def comando_agente() -> list[str]:
-    """Comando que lanza el agente desde el autoarranque (RF-26).
+def agent_command() -> list[str]:
+    """Command that launches the agent from autostart (RF-26).
 
-    Empaquetado (PyInstaller, RF-28..RF-30): `sys.frozen` es `True` y `sys.executable`
-    **es** el propio binario del agente (`.exe`/AppImage) — se invoca solo, sin `-m`.
-    En checkout de desarrollo: usa el intérprete actual con `-m vigia_eew.cli`, robusto
-    frente a la instalación del *console script*. En Windows prefiere `pythonw.exe`
-    (sin consola para la GUI).
+    Packaged (PyInstaller, RF-28..RF-30): `sys.frozen` is `True` and `sys.executable`
+    **is** the agent's own binary (`.exe`/AppImage) — invoked directly, without `-m`.
+    In a development checkout: uses the current interpreter with `-m vigia_eew.cli`,
+    robust against how the *console script* is installed. On Windows it prefers
+    `pythonw.exe` (no console window for the GUI).
     """
     if getattr(sys, "frozen", False):
         return [sys.executable]
-    ejecutable = sys.executable
-    if sys.platform == "win32" and ejecutable.lower().endswith("python.exe"):
-        sin_consola = ejecutable[: -len("python.exe")] + "pythonw.exe"
-        ejecutable = sin_consola
-    return [ejecutable, "-m", "vigia_eew.cli"]
+    executable = sys.executable
+    if sys.platform == "win32" and executable.lower().endswith("python.exe"):
+        no_console = executable[: -len("python.exe")] + "pythonw.exe"
+        executable = no_console
+    return [executable, "-m", "vigia_eew.cli"]
 
 
-def crear_instalador(
-    plataforma: str | None = None,
+def create_installer(
+    platform: str | None = None,
     *,
     exec_cmd: str | None = None,
     runner: _Runner | None = None,
-) -> Instalador:
-    """Devuelve el instalador de autoarranque adecuado para la plataforma.
+) -> Installer:
+    """Return the autostart installer appropriate for the platform.
 
     Args:
-        plataforma: identificador estilo `sys.platform`; por defecto el actual.
-        exec_cmd: comando del agente ya formateado; por defecto se deriva de `comando_agente`.
-        runner: ejecutor de comandos del sistema (inyectable para pruebas).
+        platform: `sys.platform`-style identifier; defaults to the current one.
+        exec_cmd: already-formatted agent command; defaults to one derived from
+            `agent_command`.
+        runner: system command executor (injectable for tests).
 
     Raises:
-        NotImplementedError: si la plataforma no tiene mecanismo de autoarranque soportado.
+        NotImplementedError: if the platform has no supported autostart mechanism.
     """
-    plataforma = plataforma or sys.platform
-    args = comando_agente()
+    platform = platform or sys.platform
+    args = agent_command()
 
-    if plataforma.startswith("linux"):
-        return InstaladorSystemd(exec_cmd=exec_cmd or shlex.join(args), runner=runner)
-    if plataforma == "darwin":
-        return InstaladorLaunchAgent(program_args=args, runner=runner)
-    if plataforma == "win32":
-        return InstaladorSchtasks(
+    if platform.startswith("linux"):
+        return SystemdInstaller(exec_cmd=exec_cmd or shlex.join(args), runner=runner)
+    if platform == "darwin":
+        return LaunchAgentInstaller(program_args=args, runner=runner)
+    if platform == "win32":
+        return SchtasksInstaller(
             exec_cmd=exec_cmd or subprocess.list2cmdline(args), runner=runner
         )
-    raise NotImplementedError(f"Autoarranque no soportado en la plataforma: {plataforma}")
+    raise NotImplementedError(f"Autostart not supported on platform: {platform}")
