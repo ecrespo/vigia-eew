@@ -29,10 +29,15 @@ class ReferencePoint(BaseModel):
 
 
 class Filter(BaseModel):
-    """Geographic and magnitude filter (RF-12)."""
+    """Geographic and magnitude filter (RF-12, RF-37)."""
 
     radius_km: float = Field(default=300.0, gt=0)
     min_magnitude: float = Field(default=2.5, ge=0)
+    # Country filter (RF-37): when enabled, drop events that fall positively inside
+    # another country (offshore/ocean events are kept). Opt-in, off by default.
+    country_filter: bool = False
+    # ISO-A2 code of the user's country, or "auto" to derive it from the reference point.
+    country: str = "auto"
 
 
 class EMSCSource(BaseModel):

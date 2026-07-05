@@ -127,6 +127,9 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 ### 5.12 Headless terminal dashboard (TUI)
 - **RF-36** — Provide a **headless terminal dashboard** (`--tui`) as an alternative frontend to the desktop GUI + tray icon, for running the agent on a **server over SSH with no display**. It shows the live connection status (WS connected/reconnecting) and a log of recent alerts, and presents each relevant event as a **non-dismissable modal** inside the terminal: only an explicit acknowledgment (ENTER) closes it (same "impossible to ignore" contract as RF-19; Escape is disabled). Keyboard shortcuts: pause/resume notifications and quit. Combinable with `--simulate` (`--simulate --tui`) to test the modal without waiting for a real earthquake. In this mode there is **no toast and no tray icon** (no desktop session). The dashboard uses `textual` — a documented exception to RNF-06, the same as RF-34.
 
+### 5.13 Country notification filter
+- **RF-37** — Optionally restrict notifications to the user's **own country**: do not notify earthquakes located in a **different** country. To avoid dropping the offshore/coastal earthquakes that matter most (often the most dangerous), the rule is a **block-list**: an event is suppressed only when it falls **positively inside another country**; events over the sea / offshore / of undetermined country are **kept** (still subject to the radius and minimum magnitude of RF-12). The country of each earthquake is determined **offline** from a bundled boundary dataset (no per-event network calls, no new pip dependency). The user's country is derived from the reference point, or set explicitly (`[filter] country`). The feature is **opt-in and off by default** (`[filter] country_filter = false`): being a safety tool, it must never silence a real alert due to a country-detection gap (fail-safe — if the country can't be determined, the filter stays inert).
+
 ## 6. Non-functional requirements (RNF)
 
 | ID | Category | Requirement |
@@ -163,6 +166,7 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | CA-13 | Pausing from the tray icon stops showing new alerts without losing them (they are shown on resume); if the icon fails to start, the agent still works the same. | RF-34 |
 | CA-14 | With the OS locale set to Spanish, the alert window, toast, and tray menu appear in Spanish; overriding the language in `config.toml` forces the configured language; an unsupported locale (e.g. French) falls back to English. | RF-35 |
 | CA-15 | With `--tui` on a headless server, the dashboard shows the WS status and, on a relevant event, a **non-dismissable** modal that only ENTER closes (Escape does not); `--simulate --tui` shows the simulated modal without ingestion. | RF-36 |
+| CA-16 | With `country_filter = true` and the user in Venezuela, an earthquake in Colombia/Trinidad within the radius is **not** notified, while an onshore Venezuelan quake and an offshore one near the Venezuelan coast **are** notified; with `country_filter = false` (default) behavior is unchanged. | RF-37 |
 
 ## 8. Out of scope (v1)
 

@@ -5,7 +5,14 @@ from __future__ import annotations
 import asyncio
 
 from vigia_eew.app import Application
-from vigia_eew.config import EMSCSource, Notification, ReferencePoint, Settings, USGSSource
+from vigia_eew.config import (
+    EMSCSource,
+    Filter,
+    Notification,
+    ReferencePoint,
+    Settings,
+    USGSSource,
+)
 from vigia_eew.simulation import simulated_event
 from vigia_eew.state import StateStore
 from vigia_eew.tray import TrayIcon
@@ -262,3 +269,65 @@ def test_inject_simulated_alert_pushes_event():
     data, severity = tui_app.pushed[0]
     assert data.magnitude == "M 6.1"
     assert severity == "critical"
+
+
+# --- Country notification filter wiring (RF-37) ---
+
+
+def _country_event(lat, lon, distance_km=50.0):
+    from datetime import UTC, datetime
+
+    from vigia_eew.models import SeismicEvent
+
+    return SeismicEvent(
+        id="c",
+        source="USGS",
+        magnitude=6.0,
+        mag_type="mb",
+        lat=lat,
+        lon=lon,
+        depth_km=10.0,
+        time_utc=datetime(2026, 6, 28, tzinfo=UTC),
+        distance_km=distance_km,
+        severity="critical",
+    )
+
+
+def test_resolve_user_country_uses_config_override():
+    app = _app(filter=Filter(country_filter=True, country="ve"))
+    assert app._resolve_user_country() == "VE"
+
+
+def test_resolve_user_country_auto_from_reference_point():
+    app = _app(
+        reference=ReferencePoint(name="Caracas", lat=10.48, lon=-66.90),
+        filter=Filter(country_filter=True, country="auto"),
+    )
+    assert app._resolve_user_country() == "VE"
+
+
+def test_build_geo_filter_disabled_keeps_other_country():
+    app = _app(filter=Filter(country_filter=False))
+    geo = app._build_geo_filter()
+    assert geo.accepts(_country_event(4.71, -74.07)) is True  # Bogotá, kept (filter off)
+
+
+def test_build_geo_filter_enabled_drops_other_country():
+    app = _app(
+        reference=ReferencePoint(name="Caracas", lat=10.48, lon=-66.90),
+        filter=Filter(country_filter=True, country="auto", radius_km=2000),
+    )
+    geo = app._build_geo_filter()
+    assert geo.accepts(_country_event(4.71, -74.07)) is False  # Bogotá (CO) dropped
+    assert geo.accepts(_country_event(10.48, -66.90)) is True  # Caracas (VE) kept
+    assert geo.accepts(_country_event(12.0, -64.0)) is True  # offshore VE -> kept
+
+
+def test_build_geo_filter_inactive_when_country_unresolved():
+    # country="auto" but reference is mid-ocean -> no country -> fail-safe (inert).
+    app = _app(
+        reference=ReferencePoint(name="Ocean", lat=0.0, lon=-30.0),
+        filter=Filter(country_filter=True, country="auto"),
+    )
+    geo = app._build_geo_filter()
+    assert geo.accepts(_country_event(4.71, -74.07)) is True  # not suppressed
