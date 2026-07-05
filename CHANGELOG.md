@@ -4,7 +4,7 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
-## [Unreleased]
+## [0.2.0] - 2026-07-04
 
 ### Changed
 - **Breaking**: the entire codebase (source, tests, docs) and `config.toml` are now in
@@ -27,31 +27,25 @@ de publicación en `packaging/RELEASING.md`.
   is now translated based on `[notification] language` (`"auto"` detects the OS locale,
   or set `"en"`/`"es"` explicitly). Falls back to English for unsupported locales.
   New module `i18n.py`.
+- System tray icon (RF-34): menu with status (WS connected/reconnecting, last alert),
+  pause/resume notifications (without losing events — only delays their presentation),
+  edit `config.toml` with the OS's associated app, and quit. New toggle
+  `[notification] tray_icon` (default `true`). Best-effort: if the graphical backend is
+  unavailable (GNOME/Wayland without a tray extension, unvalidated macOS, etc.) the agent
+  keeps running normally without the icon. Not activated in `--simulate`. New
+  dependencies: `pystray` + `Pillow` (documented RNF-06 exception).
 
-## [Sin publicar]
-
-### Agregado
-- Ícono de bandeja del sistema (RF-34): menú con estado (WS conectado/reconectando,
-  última alerta), pausar/reanudar notificaciones (sin perder eventos, solo retrasa su
-  presentación), editar `config.toml` con la app asociada del SO, y salir. Nuevo toggle
-  `[notificacion] icono_bandeja` (default `true`). Mejor esfuerzo: si el backend gráfico
-  no está disponible (GNOME/Wayland sin extensión de bandeja, macOS sin validar, etc.),
-  el agente sigue funcionando normalmente sin el ícono. No se activa en `--simulate`.
-  Nuevas dependencias: `pystray` + `Pillow` (excepción documentada a RNF-06).
-
-### Corregido
-- La línea "Hora local (Venezuela): ..." de la ventana de alerta se recortaba contra el
-  borde (se veía la fecha, pero la hora quedaba cortada). Causa: el `Label` de detalle no
-  tenía `wraplength`, así que una línea más ancha que la ventana (fija, no redimensionable
-  por RF-15) se dibujaba fuera del área visible en vez de bajar de línea. Se agregó
-  `wraplength` acorde al ancho real de la ventana (fijo o pantalla completa) en
-  `notify/alert_window.py`.
-- Tras el fix anterior, el contenido podía quedar recortado contra el **borde inferior**
-  en máquinas con otras métricas de fuente/DPI: el alto de la ventana era un número fijo
-  (620px) que no reflejaba lo que el contenido realmente necesitaba. Ahora el alto se mide
-  con `winfo_reqheight()` después de empaquetar el contenido (en la pantalla real del
-  usuario) y la ventana se dimensiona a ese valor (con un piso visual de 620px), en vez de
-  adivinar una constante.
+### Fixed
+- The "Local time (Venezuela): ..." line of the alert window was clipped against the edge
+  (the date was visible but the time was cut off). Cause: the detail `Label` had no
+  `wraplength`, so a line wider than the (fixed, non-resizable per RF-15) window was drawn
+  outside the visible area instead of wrapping. Added a `wraplength` matching the real
+  window width (fixed or fullscreen) in `notify/alert_window.py`.
+- After the fix above, content could still be clipped against the **bottom** edge on
+  machines with different font/DPI metrics: the window height was a fixed constant (620px)
+  that didn't reflect what the content actually needed. The height is now measured with
+  `winfo_reqheight()` after packing the content (on the user's real screen) and the window
+  is sized to that value (with a 620px visual floor), instead of guessing a constant.
 
 ## [0.1.3] - 2026-07-04
 
