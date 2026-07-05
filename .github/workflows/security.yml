@@ -35,6 +35,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+          cache-dependency-glob: pyproject.toml  # uv.lock is gitignored (see setup-python-env)
       - name: semgrep scan
         env:
           SEMGREP_SEND_METRICS: "off"
