@@ -36,6 +36,19 @@ def test_defaults_without_file(tmp_path):
     assert cfg.filter.radius_km == 300.0
     assert cfg.sources_emsc.ping_interval_s == 15
     assert cfg.notification.tray_icon is True
+    # Country filter is opt-in, off by default (RF-37).
+    assert cfg.filter.country_filter is False
+    assert cfg.filter.country == "auto"
+
+
+def test_country_filter_loaded_from_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[filter]\ncountry_filter = true\ncountry = "VE"\n', encoding="utf-8"
+    )
+    cfg = load_config(path)
+    assert cfg.filter.country_filter is True
+    assert cfg.filter.country == "VE"
 
 
 def test_load_from_toml(tmp_path):

@@ -18,6 +18,15 @@ radius_km = 300.0
 # if you don't want smaller earthquakes reported; for example, to ignore anything < 3.0:
 # min_magnitude = 3.0
 min_magnitude = 2.5
+# Country notification filter (RF-37), opt-in and OFF by default. When true, earthquakes
+# located in a *different* country are not notified; events over the sea / offshore /
+# of undetermined country are kept (still subject to radius_km and min_magnitude), so
+# coastal quakes are never missed. The country is determined offline (bundled dataset,
+# no network). Fail-safe: if the country can't be determined the filter stays inert.
+country_filter = false
+# The user's country as an ISO-A2 code (e.g. "VE"), or "auto" to derive it from the
+# reference point above. Only used when country_filter = true.
+country = "auto"
 
 [sources.emsc]
 enabled = true

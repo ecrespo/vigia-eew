@@ -4,6 +4,28 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [Unreleased]
+
+### Added
+- Optional **country notification filter** (`[filter] country_filter`, RF-37): when
+  enabled, earthquakes located in a *different* country are not notified; events over the
+  sea / offshore / of undetermined country are kept (still subject to `radius_km` and
+  `min_magnitude`), so coastal quakes are never missed. The country is determined
+  **offline** from a bundled Natural Earth boundary dataset (`assets/countries.geojson`,
+  point-in-polygon in pure Python — no new dependency, no per-event network calls). The
+  user's country is derived from the reference point or set explicitly (`[filter] country`).
+  Opt-in, **off by default**; fail-safe (never suppresses if the country can't be
+  determined). New module `geocode.py`.
+
+### Fixed
+- Autostart install from the packaged binary printed dynamic-loader errors
+  (`systemctl: .../libcrypto.so.3: version 'OPENSSL_3.4.0' not found`) and could silently
+  fail: the PyInstaller onefile bundle injects its temp library path into
+  `LD_LIBRARY_PATH`, which leaked into spawned system binaries so `systemctl` loaded the
+  bundled (older) OpenSSL instead of the system's. System subprocesses
+  (`systemctl`/`launchctl`/`schtasks`/`xdg-open`/audio players) are now launched with a
+  sanitized environment (`subprocess_env.py`) that restores/removes that injected path.
+
 ## [0.2.0] - 2026-07-04
 
 ### Changed

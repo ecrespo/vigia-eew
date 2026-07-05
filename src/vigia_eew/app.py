@@ -24,7 +24,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from vigia_eew import geoloc, tray
+from vigia_eew import geocode, geoloc, tray
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings, default_config_path
 from vigia_eew.i18n import resolve_locale
@@ -105,6 +105,31 @@ class Application:
             )
         sup.add("pipeline", lambda: processor.run())
         return sup
+
+    def _resolve_user_country(self) -> str | None:
+        """ISO-A2 code of the user's country: config override, or derived by
+        reverse-geocoding the (already resolved) reference point (RF-37)."""
+        configured = self.cfg.filter.country
+        if configured != "auto":
+            return configured.upper()
+        return geocode.country_of(self.cfg.reference.lat, self.cfg.reference.lon)
+
+    def _build_geo_filter(self) -> GeoFilter:
+        """Builds the geo/magnitude filter, wiring the country filter when enabled (RF-37).
+
+        Fail-safe: if the filter is enabled but the user's country can't be determined,
+        the filter stays inert (never suppresses alerts on a detection gap).
+        """
+        if not self.cfg.filter.country_filter:
+            return GeoFilter(self.cfg.filter)
+        user_country = self._resolve_user_country()
+        if user_country is None:
+            self._log.warning("country_filter_no_country_using_none")
+            return GeoFilter(self.cfg.filter)
+        self._log.info("country_filter_active country=%s", user_country)
+        return GeoFilter(
+            self.cfg.filter, user_country=user_country, country_of=geocode.country_of
+        )
 
     def _build_controller(
         self,
@@ -295,7 +320,7 @@ class Application:
         processor = Processor(
             raw_queue,
             Normalizer(self.cfg.reference, self.cfg.severity),
-            GeoFilter(self.cfg.filter),
+            self._build_geo_filter(),
             Deduplicator(self.cfg.dedup, self.state),
             on_alert=ctrl.enqueue,
             on_update=ctrl.enqueue,
@@ -373,7 +398,7 @@ class Application:
         processor = Processor(
             raw_queue,
             Normalizer(self.cfg.reference, self.cfg.severity),
-            GeoFilter(self.cfg.filter),
+            self._build_geo_filter(),
             Deduplicator(self.cfg.dedup, self.state),
             on_alert=bridge.publish,
             on_update=bridge.publish,

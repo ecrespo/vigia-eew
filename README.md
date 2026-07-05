@@ -23,6 +23,7 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 🔁 **REST fallback (USGS FDSN)** that reconciles and recovers anything the WebSocket may drop.
 - 🚨 **Non-dismissable alert**: a front-most window, with sound, that only closes on acknowledgment.
 - 📍 **Configurable geographic filter**: reference point, radius in km, and minimum magnitude — auto-detected by IP geolocation if you don't set one manually.
+- 🌎 **Optional country filter**: only notify earthquakes in your own country (offshore/coastal quakes kept), determined offline — opt-in, off by default.
 - 🟢 **Cross-platform**: Linux, Windows, and macOS, with autostart on login.
 - 📦 **Full distribution**: PyPI, `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`.
 - 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake.
@@ -101,6 +102,8 @@ lon = -66.9036
 [filter]
 radius_km = 300.0           # only alert on earthquakes within this radius
 min_magnitude = 2.5         # raise to ignore smaller quakes (e.g. 3.0)
+country_filter = false      # true = don't notify quakes in *other* countries (offshore kept)
+country = "auto"            # "auto" derives it from the reference point, or set "VE", "CO", ...
 
 [notification]
 fullscreen = false          # make the alert take the whole screen
@@ -112,6 +115,8 @@ language = "auto"           # "auto" = detect from OS locale; or "en" / "es"
 - **Location** — set `[reference]` manually, **or delete/comment the whole section** to have
   Vigía detect your location by IP on first startup (cached afterwards).
 - **What triggers an alert** — `radius_km` and `min_magnitude` in `[filter]`.
+- **Only my country** — set `[filter] country_filter = true` to suppress earthquakes in
+  other countries (offshore/coastal quakes are kept). Off by default.
 - **Language** — `[notification] language` (`"auto"`, `"en"`, or `"es"`).
 
 Validate a config without starting the agent:

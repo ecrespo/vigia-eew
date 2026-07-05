@@ -38,19 +38,19 @@ def test_open_command_windows_uses_startfile(monkeypatch, tmp_path):
 def test_open_config_creates_file_if_missing(monkeypatch, tmp_path):
     path = tmp_path / "sub" / "config.toml"
     calls = []
-    monkeypatch.setattr(subprocess, "Popen", lambda cmd: calls.append(cmd))
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: calls.append((cmd, kw)))
     monkeypatch.setattr(sys, "platform", "linux")
 
     open_config(path)
 
     assert path.exists()
-    assert calls == [["xdg-open", str(path)]]
+    assert calls == [(["xdg-open", str(path)], {"env": None})]  # None = inherit (unfrozen)
 
 
 def test_open_config_does_not_overwrite_existing_file(monkeypatch, tmp_path):
     path = tmp_path / "config.toml"
     path.write_text("[filter]\nmin_magnitude = 4.0\n", encoding="utf-8")
-    monkeypatch.setattr(subprocess, "Popen", lambda cmd: None)
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: None)
     monkeypatch.setattr(sys, "platform", "linux")
 
     open_config(path)
@@ -61,7 +61,7 @@ def test_open_config_does_not_overwrite_existing_file(monkeypatch, tmp_path):
 def test_open_config_failure_does_not_raise(monkeypatch, tmp_path):
     path = tmp_path / "config.toml"
 
-    def _fail(cmd):
+    def _fail(cmd, **kw):
         raise OSError("no xdg-open available")
 
     monkeypatch.setattr(subprocess, "Popen", _fail)

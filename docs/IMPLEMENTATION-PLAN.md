@@ -37,6 +37,8 @@ vigia-eew/
 │   ├── config.py               # Settings (pydantic) + config.toml loading
 │   ├── models.py                # SeismicEvent, AppState, signatures
 │   ├── geo.py                  # haversine_km (shared by normalize and dedup)
+│   ├── geocode.py              # offline lat/lon -> country, point-in-polygon (RF-37)
+│   ├── subprocess_env.py       # sanitized env for system subprocesses (PyInstaller onefile)
 │   ├── backoff.py               # exponential_backoff (shared by ws_emsc and supervisor)
 │   ├── supervisor.py            # asyncio orchestrator (tasks + backoff restart)
 │   ├── ingest/
@@ -68,7 +70,7 @@ vigia-eew/
 │   ├── tray.py                  # system tray icon (pystray, best-effort, RF-34)
 │   ├── logging_conf.py         # structured + rotating logging
 │   ├── i18n.py                  # i18n: OS-locale detection + en/es translation catalog (RF-35)
-│   └── assets/                 # info.wav / atencion.wav / critico.wav / tray_icon.png (generated)
+│   └── assets/                 # info/warning/critical.wav, tray_icon.png, countries.geojson (generated)
 ├── packaging/
 │   ├── entrypoint.py            # entry script for PyInstaller (not a pip entry point)
 │   ├── vigia-eew.spec           # PyInstaller spec (onefile; .app BUNDLE on macOS)
@@ -209,6 +211,24 @@ gate needed) covers compose/status/push/acknowledge/Escape-no-op/refresh/pause/q
 wiring and dispatch. Verified in a real pseudo-terminal (modal renders M 6.1 / La Guaira /
 SIMULATED with footer bindings). Gate green: 255 passed, 3 skipped; ruff + mypy strict clean.
 
+### Phase 12 — Country notification filter (RF-37, ADR-014)
+| ID | Task | Depends on | RF | Status |
+|---|---|---|---|---|
+| F12-1 | `geocode.py`: `country_of(lat, lon)` offline point-in-polygon (ray casting + bbox, holes) | F1-3 | RF-37 | ✅ |
+| F12-2 | `assets/countries.geojson` + `packaging/build_countries_geojson.py` (Natural Earth 1:110m, reduced) | — | RF-37 | ✅ |
+| F12-3 | `config.py`: `[filter] country_filter` (default `false`) + `country` (`"auto"`/ISO-A2) | F1-3 | RF-37 | ✅ |
+| F12-4 | `pipeline/filter.py`: `GeoFilter` drops events positively inside another country (offshore kept) | F3, F12-1 | RF-37 | ✅ |
+| F12-5 | `app.py`: `_resolve_user_country`/`_build_geo_filter` (fail-safe inert), used by `execute()`/`run_tui()` | F12-3, F12-4, F5-b | RF-37 | ✅ |
+
+Tests: `tests/test_geocode.py` (synthetic polygons + real-asset smokes VE/CO/ocean),
+`tests/test_filter.py` (block-list semantics: other-country dropped, same/offshore/disabled
+kept), `tests/test_config.py`, `tests/test_app.py` (config-override vs auto-from-reference,
+fail-safe). Verified end to end against the real dataset: Caracas kept, Bogotá/Trinidad/Lima
+dropped, offshore Venezuela kept. Gate green; ruff + mypy strict clean. No new pip dependency
+(bundled data asset; RNF-06 unaffected). Also in this cycle: `subprocess_env.py` fixes the
+PyInstaller onefile `LD_LIBRARY_PATH` leak into `systemctl`/`launchctl`/`schtasks`/`xdg-open`/
+audio players.
+
 ## 3. Traceability matrix: RF → component
 
 | RF | Component(s) | Phase |
@@ -234,6 +254,7 @@ SIMULATED with footer bindings). Gate green: 255 passed, 3 skipped; ruff + mypy 
 | RF-34 | `tray.py`, `agent_state.py`, `notify/queue.py` (pause/resume), `notify/controller.py`, `ingest/ws_emsc.py`, `config.py`, `app.py`, `cli.py` | F10 |
 | RF-35 | `i18n.py`, `config.py`, `notify/presentation.py`, `notify/alert_window.py`, `notify/toast.py`, `tray.py` | TBD (placeholder, wiring to be finalized) |
 | RF-36 | `tui.py`, `app.py` (`run_tui`/`_wire_tui`/`_controller_for_tui`), `cli.py` (`--tui`), `pyproject.toml` | F11 |
+| RF-37 | `geocode.py`, `assets/countries.geojson`, `pipeline/filter.py`, `config.py`, `app.py` (`_build_geo_filter`) | F12 |
 
 ## 4. Test strategy (summary)
 
@@ -273,3 +294,4 @@ SIMULATED with footer bindings). Gate green: 255 passed, 3 skipped; ruff + mypy 
 6. **M5**: Phase 9 (automatic IP-based location detection, RF-33).
 7. **M6**: Phase 10 (system tray icon, RF-34).
 8. **M7**: Phase 11 (headless TUI dashboard `--tui`, RF-36).
+9. **M8**: Phase 12 (country notification filter, RF-37).
