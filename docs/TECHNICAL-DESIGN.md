@@ -40,7 +40,8 @@ External sources ──▶ Ingestion ──▶ Asyncio queue ──▶ Normaliza
 | Persistence | `StateStore` | Alerted ids + cursor on disk | RF-06, RF-10 |
 | Config | `Settings` (pydantic) | Load/validate `config.toml` | RF-24 |
 | Platform | `autostart/` | systemd/LaunchAgent/scheduled task | RF-22, RF-23 |
-| CLI | `cli` (`vigia-eew`) | Startup, `--simulate`, autostart | RF-21, RF-26 |
+| CLI | `cli` (`vigia-eew`) | Startup, `--simulate`, `--tui`, autostart | RF-21, RF-26, RF-36 |
+| TUI | `tui` (`--tui`) | Headless Textual dashboard + modal alert | RF-36 |
 
 ## 3. Concurrency model (asyncio) — RNF-04
 
@@ -56,6 +57,12 @@ Asyncio tasks coordinated by an orchestrator (`Supervisor`):
 - **T5 tray icon** (RF-34, ADR-012): `pystray.Icon.run()` runs on its own **worker thread**
   (neither asyncio nor Tk); its callbacks that touch Tk (pause/resume, quit) are scheduled back
   onto the main thread with `root.after(0, ...)`, the same pattern as the T4 bridge.
+
+**Alternative frontend (`--tui`, RF-36, ADR-013)**: when the agent is launched with `--tui`, T4
+(Tkinter) and T5 (tray) are replaced by a **Textual** app running on the **same asyncio loop** as
+the pipeline — the `Supervisor` runs as a Textual worker and the `Processor` calls the alert
+controller directly, so **no bridge/thread is needed**. This mode targets headless servers over
+SSH.
 
 Resilience: each *task* is wrapped in a guard that catches exceptions, logs them, and **restarts
 the task with backoff** without bringing down the process (a "supervisor that restarts children"
@@ -135,6 +142,7 @@ def is_duplicate(ev, recent, alerted_ids):
 | UI failure | Isolated from the pipeline; ingestion continues; showing the alert is retried. |
 | IP geolocation fails (network/timeout/JSON/status) | `geoloc.py` never raises: it returns `None`; `Application` falls back to the default (Caracas) without blocking startup (ADR-011). |
 | Tray icon fails to start (no graphical backend, GNOME/Wayland without the extension, exception from `pystray`) | `TrayIcon` catches the exception **inside its own thread** and logs a *warning*; the agent keeps running normally, without the icon (ADR-012). |
+| TUI: sound device absent on a headless server (`--tui`, RF-36) | `SoundPlayer` is best-effort in a daemon thread; a missing audio backend is harmless — the modal alert and log still work (ADR-013). |
 
 ## 9. Logging and observability — RNF-07
 
@@ -148,6 +156,9 @@ def is_duplicate(ev, recent, alerted_ids):
 - **Exception** (RF-34, ADR-012): `pystray` + `Pillow` are new dependencies exclusive to the
   tray icon, a documented exception to RNF-06 ("zero extra dependencies" for the default UI).
   They do no networking or telemetry; local GUI only.
+- **Exception** (RF-36, ADR-013): `textual` is a new dependency exclusive to the `--tui`
+  headless dashboard, a documented exception to RNF-06. It does no networking or telemetry;
+  local terminal UI only.
 - Strict input validation (pydantic) for external messages.
 - **Explicit exception** (RF-33, ADR-011): if there is no manual `[reference]`, an IP
   geolocation service is queried (`ipapi.co`) — the source IP is visible to that third party,
@@ -412,6 +423,50 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
 - **Consequences**: a new `tray.py` module, a new `agent_state.py`; `WSIngestor` and
   `AlertController` gain an optional `state` parameter; `Application` gains `config_path` so
   that "edit configuration" opens the file actually in use (not always the default).
+
+### ADR-013 — Headless TUI dashboard with Textual (`--tui`) (RF-36)
+
+- **Context**: the desktop UI (Tkinter alert window + tray icon) assumes a graphical session.
+  To run the agent on a **headless server over SSH** (no display), there was no way to see its
+  status or acknowledge an alert. The user asked for a terminal dashboard as an alternative
+  frontend (not an extra layer on top of Tkinter).
+- **Decision**: a new `tui.py` module built on **Textual** (`VigiaTuiApp`), selected with a new
+  `--tui` CLI flag. It shows a live status bar (WS connected/reconnecting), a scrolling alerts
+  log, and — for each relevant event — a **non-dismissable modal** (`AlertScreen`, a
+  `ModalScreen`): only **ENTER** acknowledges it; `escape` is deliberately bound to a no-op so it
+  can't close the alert (parity with RF-19/OBJ-1, the same "impossible to ignore" contract as the
+  Tkinter window). The `p` key pauses/resumes and `q` quits.
+- **No extra thread or asyncio↔UI bridge** (unlike ADR-006): Textual is already asyncio-native,
+  so the `Supervisor` (tasks `ws`/`rest`/`pipeline`) runs as a Textual **worker**
+  (`run_worker(supervisor.run(), exclusive=True)`) on the **same event loop** as the app,
+  started in `on_mount()`. The `Processor` therefore calls `AlertController.enqueue` **directly**
+  (no `AsyncioTkBridge`). This makes the TUI path simpler than the GUI path.
+- **Reuses the existing effect contract**: `Application._controller_for_tui` builds the same
+  `AlertController` used by Tkinter, injecting `create_window = tui_app.push_alert` (matching the
+  `(data, severity, on_acknowledge)` factory signature). `push_alert` returns a small
+  `_AlertHandle` whose `.refresh(data)` forwards to `AlertScreen.update_data(data)` — **not**
+  named `refresh` on the screen itself, because `Widget.refresh()` already exists (argument-less,
+  forces a re-render). Likewise the internal re-paint method is `_paint`, **not** `_render`:
+  overriding Textual's internal `Widget._render()` hook silently breaks rendering (it would
+  return `None` instead of the widget's visual). Severity color reuses
+  `notify.presentation.severity_color()` (hex values, valid Textual styles as-is).
+- **No toast, no tray, no bridge in this mode**: a headless server has no desktop session, so
+  `send_toast` is `None` and `_build_tray()` is not called. Sound stays best-effort (reused
+  `SoundPlayer` in a daemon thread), harmless when no audio device is present.
+- **`--simulate --tui`**: injects the simulated event into the already-running `VigiaTuiApp`
+  (via an `on_start` hook fired from `on_mount`) **without** starting the real `Supervisor` —
+  analogous to how `simulate()` injects into the Tk controller. `q` still exits cleanly with no
+  supervisor bound.
+- **Testing advantage**: Textual ships `App.run_test()`, a **headless** pilot harness (no real
+  terminal, no `VIGIA_GUI_TESTS=1` gate), so pause/resume/acknowledge/refresh are covered in the
+  default suite (`async with app.run_test() as pilot: await pilot.press("enter")`). Verified end
+  to end in a real pseudo-terminal (the modal renders M 6.1 / La Guaira / SIMULATED with the
+  footer bindings).
+- **New dependency**: `textual` — a documented exception to RNF-06 (see §10), the same treatment
+  as `pystray`/`Pillow` (ADR-012); it is only pulled in when the TUI frontend is used.
+- **Consequences**: a new `tui.py` module; `Application` gains `run_tui(simulate=...)`,
+  `_wire_tui`, `_controller_for_tui`, and `_inject_simulated_alert`; `cli.py` gains the `--tui`
+  flag. ADR-006 (Tkinter on the main thread) is unchanged — the TUI is a separate run mode.
 
 ## 12. Traceability
 

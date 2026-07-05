@@ -30,8 +30,9 @@ vigia-eew/
 │   └── IMPLEMENTATION-PLAN.md
 ├── src/vigia_eew/
 │   ├── __init__.py
-│   ├── cli.py                  # entry point, flags, --simulate (dispatches to Application)
-│   ├── app.py                  # Application: run()/simulate() wiring (ADR-006)
+│   ├── cli.py                  # entry point, flags, --simulate, --tui (dispatches to Application)
+│   ├── app.py                  # Application: run()/simulate()/run_tui() wiring (ADR-006/ADR-013)
+│   ├── tui.py                  # headless Textual dashboard + modal alert (--tui, RF-36)
 │   ├── simulation.py           # simulated_event (M6.1 La Guaira)
 │   ├── config.py               # Settings (pydantic) + config.toml loading
 │   ├── models.py                # SeismicEvent, AppState, signatures
@@ -193,6 +194,21 @@ vigia-eew/
 | F10-7 | `app.py`: `_build_tray`/`_toggle_pause`/`_exit_from_tray`/`_edit_config`, only in `run()` | F10-2, F10-4, F10-6, F5-b | RF-34 | ✅ |
 | F10-8 | `cli.py`: passes `config_path` to `Application` (so "edit configuration" opens the file currently in use) | F10-7, F5-1 | RF-34 | ✅ |
 
+### Phase 11 — Headless TUI dashboard (RF-36, ADR-013)
+| ID | Task | Depends on | RF | Status |
+|---|---|---|---|---|
+| F11-1 | `tui.py`: `AlertScreen` (`ModalScreen`, non-dismissable — ENTER acknowledges, Escape no-op) + `_AlertHandle` (`.refresh`→`update_data`) | F4-4 | RF-36 | ✅ |
+| F11-2 | `tui.py`: `VigiaTuiApp` (status bar, alerts log, `p`/`q` bindings, `on_start` hook, supervisor worker) | F11-1, F1-1 | RF-36 | ✅ |
+| F11-3 | `app.py`: `_controller_for_tui`/`_wire_tui`/`run_tui(simulate=...)`/`_inject_simulated_alert` (no toast/tray/bridge) | F11-2, F5-b | RF-36 | ✅ |
+| F11-4 | `cli.py`: `--tui` flag, dispatch to `run_tui` (combinable with `--simulate`) | F11-3, F5-1 | RF-36 | ✅ |
+| F11-5 | `pyproject.toml`: `textual` dependency (RNF-06 exception) | — | RF-36 | ✅ |
+
+Tests: `tests/test_tui.py` (13, using Textual's headless `App.run_test()` — no `VIGIA_GUI_TESTS`
+gate needed) covers compose/status/push/acknowledge/Escape-no-op/refresh/pause/quit and the full
+`--simulate --tui` wiring end to end; `tests/test_app.py` and `tests/test_cli.py` cover the
+wiring and dispatch. Verified in a real pseudo-terminal (modal renders M 6.1 / La Guaira /
+SIMULATED with footer bindings). Gate green: 255 passed, 3 skipped; ruff + mypy strict clean.
+
 ## 3. Traceability matrix: RF → component
 
 | RF | Component(s) | Phase |
@@ -217,6 +233,7 @@ vigia-eew/
 | RF-33 | `geoloc.py`, `config.py` (`has_manual_reference`), `state.py`/`models.py` (`DetectedLocation`), `app.py`, `cli.py` | F9 |
 | RF-34 | `tray.py`, `agent_state.py`, `notify/queue.py` (pause/resume), `notify/controller.py`, `ingest/ws_emsc.py`, `config.py`, `app.py`, `cli.py` | F10 |
 | RF-35 | `i18n.py`, `config.py`, `notify/presentation.py`, `notify/alert_window.py`, `notify/toast.py`, `tray.py` | TBD (placeholder, wiring to be finalized) |
+| RF-36 | `tui.py`, `app.py` (`run_tui`/`_wire_tui`/`_controller_for_tui`), `cli.py` (`--tui`), `pyproject.toml` | F11 |
 
 ## 4. Test strategy (summary)
 
@@ -244,6 +261,7 @@ vigia-eew/
 | PyInstaller, fpm, linuxdeploy | packaging | RF-28..RF-30 |
 | `pystray` | tray icon (best-effort) | RF-34/ADR-012 |
 | `Pillow` | tray icon image (`pystray` requirement) | RF-34/ADR-012 |
+| `textual` | headless TUI dashboard (`--tui`) | RF-36/ADR-013 |
 
 ## 6. Milestones and delivery order
 
@@ -254,3 +272,4 @@ vigia-eew/
 5. **M4**: Phase 8 (packaging + CI with release assets).
 6. **M5**: Phase 9 (automatic IP-based location detection, RF-33).
 7. **M6**: Phase 10 (system tray icon, RF-34).
+8. **M7**: Phase 11 (headless TUI dashboard `--tui`, RF-36).

@@ -75,6 +75,7 @@ class Application:
         self._config_path = config_path
         self._agent_state = AgentState()
         self._tray_icon: tray.TrayIcon | None = None
+        self._tui_app: Any = None
         self._locale = resolve_locale(cfg.notification.language)
 
     # --- Testable wiring ---
@@ -257,6 +258,53 @@ class Application:
             create_window, play_sound=play_sound_fn, publish_toast=publish_toast
         )
 
+    # --- Headless TUI dashboard construction (RF-36, ADR-013) ---
+
+    def _controller_for_tui(self, tui_app: Any) -> AlertController:
+        """Builds the alert controller wired to the TUI (RF-36).
+
+        There is no toast in this mode (there's no desktop session on a
+        headless server); sound stays best-effort like in the Tk path.
+        """
+        sound = SoundPlayer(enabled=self.cfg.notification.sound)
+
+        def create_window(
+            data: AlertData, severity: SeverityLevel, on_acknowledge: Callable[[], None]
+        ) -> Any:
+            return tui_app.push_alert(data, severity, on_acknowledge)
+
+        def play_sound(severity: SeverityLevel) -> None:
+            threading.Thread(target=sound.play, args=(severity,), daemon=True).start()
+
+        play_sound_fn = play_sound if self.cfg.notification.sound else None
+        ctrl = self._build_controller(
+            create_window, play_sound=play_sound_fn, publish_toast=None
+        )
+        tui_app.bind_controller(ctrl)
+        return ctrl
+
+    def _wire_tui(self, tui_app: Any) -> AlertController:
+        """Wires the controller + supervisor for the TUI dashboard (RF-36).
+
+        Unlike `execute()`, no asyncio<->Tk bridge is needed: Textual runs on
+        the same asyncio loop as the supervisor worker, so the processor calls
+        `ctrl.enqueue` directly.
+        """
+        ctrl = self._controller_for_tui(tui_app)
+        raw_queue: asyncio.Queue[RawMessage] = asyncio.Queue()
+        processor = Processor(
+            raw_queue,
+            Normalizer(self.cfg.reference, self.cfg.severity),
+            GeoFilter(self.cfg.filter),
+            Deduplicator(self.cfg.dedup, self.state),
+            on_alert=ctrl.enqueue,
+            on_update=ctrl.enqueue,
+        )
+        sup = self._build_supervisor(raw_queue, processor)
+        self._sup = sup
+        tui_app.bind_supervisor(sup)
+        return ctrl
+
     # --- Run modes ---
 
     def simulate(self) -> None:
@@ -268,6 +316,34 @@ class Application:
         ctrl.enqueue(simulated_event(self.cfg.reference, self.cfg.severity))
         self._log.info("simulation_started")
         root.mainloop()
+
+    def run_tui(self, *, simulate: bool = False) -> None:
+        """Starts the agent with the headless TUI dashboard (RF-36, ADR-013).
+
+        With `simulate=True` (`--simulate --tui`), injects the simulated event
+        into the running TUI without starting the real ingestion, analogous to
+        `simulate()` for the Tk path.
+        """
+        from vigia_eew.tui import VigiaTuiApp
+
+        self._prepare(resolve_location=not simulate)
+        if simulate:
+            self._tui_app = VigiaTuiApp(
+                state=self._agent_state,
+                locale_code=self._locale,
+                on_start=self._inject_simulated_alert,
+            )
+            self._controller_for_tui(self._tui_app)
+        else:
+            self._tui_app = VigiaTuiApp(state=self._agent_state, locale_code=self._locale)
+            self._wire_tui(self._tui_app)
+        self._log.info("tui_simulation_started" if simulate else "tui_started")
+        self._tui_app.run()
+
+    def _inject_simulated_alert(self) -> None:
+        """Enqueues the simulated event into the running TUI (`--simulate --tui`)."""
+        if self._ctrl is not None:
+            self._ctrl.enqueue(simulated_event(self.cfg.reference, self.cfg.severity))
 
     def execute(self) -> None:
         """Starts the full agent: ingestion + pipeline + notification (CU-1, CU-2)."""

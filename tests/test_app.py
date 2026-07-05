@@ -201,3 +201,64 @@ def test_edit_config_uses_default_path_without_explicit_config(monkeypatch):
     app._edit_config()
     assert len(calls) == 1
     assert calls[0] == app_mod.default_config_path()
+
+
+# --- Headless TUI dashboard wiring (RF-36) ---
+
+
+class _FakeTuiApp:
+    def __init__(self):
+        self.pushed: list = []
+        self.bound_controller = None
+        self.bound_supervisor = None
+
+    def push_alert(self, data, severity, on_acknowledge):
+        self.pushed.append((data, severity))
+        return object()
+
+    def bind_controller(self, ctrl):
+        self.bound_controller = ctrl
+
+    def bind_supervisor(self, sup):
+        self.bound_supervisor = sup
+
+
+def test_wire_tui_builds_controller_using_push_alert():
+    app = _app()
+    tui_app = _FakeTuiApp()
+    ctrl = app._wire_tui(tui_app)
+    ctrl.enqueue(simulated_event(app.cfg.reference, app.cfg.severity))
+    assert len(tui_app.pushed) == 1
+    data, severity = tui_app.pushed[0]
+    assert data.magnitude == "M 6.1"
+    assert severity == "critical"
+
+
+def test_wire_tui_binds_controller_and_supervisor():
+    from vigia_eew.supervisor import Supervisor
+
+    app = _app()
+    tui_app = _FakeTuiApp()
+    ctrl = app._wire_tui(tui_app)
+    assert tui_app.bound_controller is ctrl
+    assert isinstance(tui_app.bound_supervisor, Supervisor)
+    assert tui_app.bound_supervisor.names == ["ws", "rest", "pipeline"]
+
+
+def test_controller_for_tui_binds_controller_without_supervisor():
+    app = _app()
+    tui_app = _FakeTuiApp()
+    ctrl = app._controller_for_tui(tui_app)
+    assert tui_app.bound_controller is ctrl
+    assert tui_app.bound_supervisor is None  # simulate mode: no ingestion
+
+
+def test_inject_simulated_alert_pushes_event():
+    app = _app()
+    tui_app = _FakeTuiApp()
+    app._controller_for_tui(tui_app)
+    app._inject_simulated_alert()
+    assert len(tui_app.pushed) == 1
+    data, severity = tui_app.pushed[0]
+    assert data.magnitude == "M 6.1"
+    assert severity == "critical"

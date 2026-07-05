@@ -124,6 +124,9 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 ### 5.11 Internationalization (i18n)
 - **RF-35** — All user-facing text (alert window, toast, tray menu) must be internationalized. The language is **auto-detected from the OS locale** by default; a config parameter allows **overriding** it; the initial release supports **English and Spanish**; if the detected or configured language is not supported, the agent **falls back to English**.
 
+### 5.12 Headless terminal dashboard (TUI)
+- **RF-36** — Provide a **headless terminal dashboard** (`--tui`) as an alternative frontend to the desktop GUI + tray icon, for running the agent on a **server over SSH with no display**. It shows the live connection status (WS connected/reconnecting) and a log of recent alerts, and presents each relevant event as a **non-dismissable modal** inside the terminal: only an explicit acknowledgment (ENTER) closes it (same "impossible to ignore" contract as RF-19; Escape is disabled). Keyboard shortcuts: pause/resume notifications and quit. Combinable with `--simulate` (`--simulate --tui`) to test the modal without waiting for a real earthquake. In this mode there is **no toast and no tray icon** (no desktop session). The dashboard uses `textual` — a documented exception to RNF-06, the same as RF-34.
+
 ## 6. Non-functional requirements (RNF)
 
 | ID | Category | Requirement |
@@ -133,7 +136,7 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | RNF-03 | Robustness | The process **does not terminate** due to transient failures (WS down, timeouts, 429/5xx, invalid JSON, network loss). |
 | RNF-04 | Concurrency | Based on **asyncio**; ingestion tasks do not block the UI. |
 | RNF-05 | "Non-dismissible alert" | The alert cannot be hidden by an accidental click; only an explicit close (RF-19). |
-| RNF-06 | Portability | Linux, Windows, macOS; UI defaults to **Tkinter** (zero extra dependencies). Explicit exception (RF-34, ADR-012): the tray icon uses `pystray` + `Pillow` — best effort, never blocks startup if unavailable on the platform. |
+| RNF-06 | Portability | Linux, Windows, macOS; UI defaults to **Tkinter** (zero extra dependencies). Explicit exception (RF-34, ADR-012): the tray icon uses `pystray` + `Pillow` — best effort, never blocks startup if unavailable on the platform. Explicit exception (RF-36, ADR-013): the optional headless dashboard (`--tui`) uses `textual`. |
 | RNF-07 | Observability | Structured logs with levels; rotating file; connection/reconnection events logged. |
 | RNF-08 | Maintainability/Traceability | Every code component traceable to a PRD RF. |
 | RNF-09 | Security/Privacy | No API keys; no user data sent to third parties; read-only access to public sources. Explicit exception: automatic location detection (RF-33) queries an IP geolocation service, and only when the user has not manually set `[reference]` — can be disabled by setting the reference point manually. |
@@ -159,6 +162,7 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | CA-12 | Without `[reference]` in `config.toml`, the agent detects the location via IP on first startup and **reuses the cache** on subsequent startups without calling the service again; if detection fails, it uses the default (Caracas) without failing to start. | RF-33 |
 | CA-13 | Pausing from the tray icon stops showing new alerts without losing them (they are shown on resume); if the icon fails to start, the agent still works the same. | RF-34 |
 | CA-14 | With the OS locale set to Spanish, the alert window, toast, and tray menu appear in Spanish; overriding the language in `config.toml` forces the configured language; an unsupported locale (e.g. French) falls back to English. | RF-35 |
+| CA-15 | With `--tui` on a headless server, the dashboard shows the WS status and, on a relevant event, a **non-dismissable** modal that only ENTER closes (Escape does not); `--simulate --tui` shows the simulated modal without ingestion. | RF-36 |
 
 ## 8. Out of scope (v1)
 

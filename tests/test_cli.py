@@ -16,6 +16,7 @@ class _FakeApp:
         self.config_path = config_path
         self.simulated = False
         self.executed = False
+        self.tui_simulate: bool | None = None
         _FakeApp.created.append(self)
 
     def simulate(self):
@@ -23,6 +24,9 @@ class _FakeApp:
 
     def execute(self):
         self.executed = True
+
+    def run_tui(self, *, simulate=False):
+        self.tui_simulate = simulate
 
 
 def _create(cfg, **kwargs):
@@ -43,6 +47,22 @@ def test_run_by_default_invokes_execute():
     rc = main([], create_app=_create)
     assert rc == 0
     assert _FakeApp.created[-1].executed is True
+
+
+def test_tui_invokes_run_tui():
+    rc = main(["--tui"], create_app=_create)
+    assert rc == 0
+    app = _FakeApp.created[-1]
+    assert app.tui_simulate is False
+    assert app.executed is False
+
+
+def test_tui_with_simulate_invokes_run_tui_simulate():
+    rc = main(["--tui", "--simulate"], create_app=_create)
+    assert rc == 0
+    app = _FakeApp.created[-1]
+    assert app.tui_simulate is True
+    assert app.simulated is False  # goes to run_tui, not the Tk simulate()
 
 
 def test_check_config_does_not_create_app(capsys):

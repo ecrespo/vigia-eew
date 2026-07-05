@@ -36,6 +36,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Injects a simulated earthquake (M6.1 La Guaira) to test the alert (RF-21).",
     )
     parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Runs the headless terminal dashboard instead of the desktop GUI (RF-36).",
+    )
+    parser.add_argument(
         "--install-autostart",
         action="store_true",
         help="Installs autostart on login (RF-22, RF-23) and exits.",
@@ -89,7 +94,9 @@ def main(
         cfg, manual_reference=has_manual_reference(args.config), config_path=args.config
     )
 
-    if args.simulate:
+    if args.tui:
+        app.run_tui(simulate=args.simulate)
+    elif args.simulate:
         app.simulate()
     else:
         app.execute()

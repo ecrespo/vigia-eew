@@ -37,6 +37,7 @@ dependencies = [
     "tzdata>=2024.1",          # America/Caracas zone on Win/macOS (RF-18/RNF-12)
     "pystray>=0.19",           # system tray icon (RF-34/ADR-012)
     "Pillow>=10.0",            # tray icon image, pystray requirement (RF-34)
+    "textual>=0.60",           # headless TUI dashboard (RF-36/ADR-013)
 ]
 
 [project.urls]

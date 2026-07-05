@@ -15,6 +15,14 @@ de publicación en `packaging/RELEASING.md`.
   Existing `config.toml` files must be rewritten with the new keys.
 
 ### Added
+- Headless TUI dashboard (`--tui`, RF-36): an alternative terminal frontend to the
+  desktop GUI + tray icon, for running the agent on a server over SSH with no display.
+  Shows the live WS connection status and a log of recent alerts, and presents each
+  relevant event as a **non-dismissable** modal inside the terminal (only ENTER
+  acknowledges it; Escape is disabled — same contract as RF-19). Keys: `p`
+  pause/resume, `q` quit. Combinable with `--simulate` (`--simulate --tui`). No toast or
+  tray icon in this mode. New module `tui.py` (built on `textual`) and
+  `Application.run_tui()`.
 - Internationalization (i18n, RF-35): user-facing text (alert window, toast, tray menu)
   is now translated based on `[notification] language` (`"auto"` detects the OS locale,
   or set `"en"`/`"es"` explicitly). Falls back to English for unsupported locales.
