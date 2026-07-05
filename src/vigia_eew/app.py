@@ -29,6 +29,7 @@ from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings, default_config_path
 from vigia_eew.i18n import resolve_locale
 from vigia_eew.ingest import RawMessage
+from vigia_eew.ingest.rest_funvisis import FUNVISISPoller
 from vigia_eew.ingest.rest_usgs import RESTReconciler
 from vigia_eew.ingest.ws_emsc import WSIngestor
 from vigia_eew.logging_conf import configure_logging
@@ -102,6 +103,11 @@ class Application:
                     self.state,
                     raw_queue,
                 ).run(),
+            )
+        if self.cfg.sources_funvisis.enabled:
+            sup.add(
+                "funvisis",
+                lambda: FUNVISISPoller(self.cfg.sources_funvisis, raw_queue).run(),
             )
         sup.add("pipeline", lambda: processor.run())
         return sup

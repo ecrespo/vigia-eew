@@ -8,6 +8,7 @@ from vigia_eew.app import Application
 from vigia_eew.config import (
     EMSCSource,
     Filter,
+    FUNVISISSource,
     Notification,
     ReferencePoint,
     Settings,
@@ -41,22 +42,28 @@ def _app(**cfg_kw) -> Application:
 # --- Supervisor wiring based on enabled sources ---
 
 
-def test_supervisor_with_both_sources():
+def test_supervisor_with_all_sources():
     app = _app()
     sup = app._build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["ws", "rest", "pipeline"]
+    assert sup.names == ["ws", "rest", "funvisis", "pipeline"]
 
 
 def test_supervisor_without_emsc():
     app = _app(sources_emsc=EMSCSource(enabled=False))
     sup = app._build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["rest", "pipeline"]
+    assert sup.names == ["rest", "funvisis", "pipeline"]
 
 
 def test_supervisor_without_usgs():
     app = _app(sources_usgs=USGSSource(enabled=False))
     sup = app._build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["ws", "pipeline"]
+    assert sup.names == ["ws", "funvisis", "pipeline"]
+
+
+def test_supervisor_without_funvisis():
+    app = _app(sources_funvisis=FUNVISISSource(enabled=False))
+    sup = app._build_supervisor(asyncio.Queue(), object())
+    assert sup.names == ["ws", "rest", "pipeline"]
 
 
 # --- Notification controller built by the app ---
@@ -249,7 +256,7 @@ def test_wire_tui_binds_controller_and_supervisor():
     ctrl = app._wire_tui(tui_app)
     assert tui_app.bound_controller is ctrl
     assert isinstance(tui_app.bound_supervisor, Supervisor)
-    assert tui_app.bound_supervisor.names == ["ws", "rest", "pipeline"]
+    assert tui_app.bound_supervisor.names == ["ws", "rest", "funvisis", "pipeline"]
 
 
 def test_controller_for_tui_binds_controller_without_supervisor():

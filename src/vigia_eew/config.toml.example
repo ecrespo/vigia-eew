@@ -42,6 +42,20 @@ url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 poll_interval_s = 60      # low-frequency backup (RF-05)
 timeout_s = 15
 
+[sources.funvisis]
+# FUNVISIS — the Venezuelan national seismic network. VENEZUELA-ONLY local coverage:
+# it catches the small local quakes (M2-3) that EMSC/USGS don't catalog. There is no
+# real-time push; the agent polls FUNVISIS's `maravilla.json` (the file its web map
+# uses). FUNVISIS only reports Venezuelan events, so for users elsewhere they simply
+# fall outside `radius_km` and are ignored. Only earthquakes appearing *after* the
+# agent starts are alerted (the batch already published at startup is not).
+enabled = true
+# NOTE: plain HTTP — FUNVISIS offers no valid HTTPS. The data is public; there is no
+# encrypted channel available, so this is polled over http://.
+url = "http://www.funvisis.gob.ve/maravilla.json"
+poll_interval_s = 60
+timeout_s = 15
+
 [dedup]
 distance_km = 100.0       # same earthquake if <= 100 km, <= 90 s, and <= 0.5 mag (RF-09)
 window_s = 90

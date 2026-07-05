@@ -48,6 +48,24 @@ def test_defaults_without_file(tmp_path):
     assert cfg.filter.country == "auto"
 
 
+def test_funvisis_source_defaults():
+    cfg = Settings()
+    assert cfg.sources_funvisis.enabled is True  # Venezuela-only, on by default
+    assert "funvisis" in cfg.sources_funvisis.url
+    assert cfg.sources_funvisis.url.startswith("http://")  # no valid HTTPS available
+    assert cfg.sources_funvisis.poll_interval_s == 60
+
+
+def test_funvisis_source_loaded_from_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "[sources.funvisis]\nenabled = false\npoll_interval_s = 120\n", encoding="utf-8"
+    )
+    cfg = load_config(path)
+    assert cfg.sources_funvisis.enabled is False
+    assert cfg.sources_funvisis.poll_interval_s == 120
+
+
 def test_country_filter_loaded_from_toml(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text(

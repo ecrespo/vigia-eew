@@ -21,6 +21,7 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 
 - 🛰️ **Real WebSocket push (EMSC)** as the primary channel — no constant polling.
 - 🔁 **REST fallback (USGS FDSN)** that reconciles and recovers anything the WebSocket may drop.
+- 🇻🇪 **FUNVISIS local coverage (Venezuela only)**: polls the Venezuelan national network so the small local quakes (M2–3) that EMSC/USGS don't catalog still trigger alerts. Polling (no push); enabled by default, harmless elsewhere (its events fall outside your radius).
 - 🚨 **Non-dismissable alert**: a front-most window, with sound, that only closes on acknowledgment.
 - 📍 **Configurable geographic filter**: reference point, radius in km, and minimum magnitude — auto-detected by IP geolocation if you don't set one manually.
 - 🌎 **Optional country filter**: only notify earthquakes in your own country (offshore/coastal quakes kept), determined offline — opt-in, off by default.
@@ -120,6 +121,10 @@ language = "auto"           # "auto" = detect from OS locale; or "en" / "es"
 - **Only my country** — set `[filter] country_filter = true` to suppress earthquakes in
   other countries (offshore/coastal quakes are kept). Off by default.
 - **Language** — `[notification] language` (`"auto"`, `"en"`, or `"es"`).
+- **FUNVISIS (Venezuela)** — `[sources.funvisis]` polls the Venezuelan network for local
+  quakes EMSC/USGS miss. Enabled by default; it only reports Venezuelan events (harmless
+  elsewhere — they fall outside your radius) and it's polled over plain HTTP (FUNVISIS has
+  no HTTPS). Set `enabled = false` to turn it off.
 
 Validate a config without starting the agent:
 

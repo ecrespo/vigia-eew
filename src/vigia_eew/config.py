@@ -62,6 +62,21 @@ class USGSSource(BaseModel):
     timeout_s: int = Field(default=15, gt=0)
 
 
+class FUNVISISSource(BaseModel):
+    """FUNVISIS polling parameters — **Venezuela-only** local coverage (RF-05).
+
+    FUNVISIS (the Venezuelan national seismic network) publishes the ~20 most recent
+    earthquakes as a GeoJSON file that its web map polls; there is no push/streaming
+    channel. It fills the gap of small local events (M2-3) that EMSC/USGS don't catalog.
+    The endpoint is **plain HTTP** (FUNVISIS offers no valid HTTPS); the data is public.
+    """
+
+    enabled: bool = True
+    url: str = "http://www.funvisis.gob.ve/maravilla.json"
+    poll_interval_s: int = Field(default=60, gt=0)
+    timeout_s: int = Field(default=15, gt=0)
+
+
 class Dedup(BaseModel):
     """Inter-source deduplication thresholds (RF-09)."""
 
@@ -111,6 +126,7 @@ class Settings(BaseModel):
     filter: Filter = Field(default_factory=Filter)
     sources_emsc: EMSCSource = Field(default_factory=EMSCSource)
     sources_usgs: USGSSource = Field(default_factory=USGSSource)
+    sources_funvisis: FUNVISISSource = Field(default_factory=FUNVISISSource)
     dedup: Dedup = Field(default_factory=Dedup)
     severity: Severity = Field(default_factory=Severity)
     notification: Notification = Field(default_factory=Notification)
@@ -185,6 +201,8 @@ def _map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
             result["sources_emsc"] = sources["emsc"]
         if "usgs" in sources:
             result["sources_usgs"] = sources["usgs"]
+        if "funvisis" in sources:
+            result["sources_funvisis"] = sources["funvisis"]
     return result
 
 

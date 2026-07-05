@@ -44,7 +44,8 @@ vigia-eew/
 │   ├── ingest/
 │   │   ├── __init__.py         # RawMessage (raw wrapper, source→pipeline)
 │   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconnection)
-│   │   └── rest_usgs.py        # RESTReconciler (60 s poll, cursor)
+│   │   ├── rest_usgs.py        # RESTReconciler (60 s poll, cursor)
+│   │   └── rest_funvisis.py    # FUNVISISPoller (Venezuela-only local coverage, RF-05)
 │   ├── pipeline/
 │   │   ├── __init__.py         # pipeline docstring
 │   │   ├── normalize.py        # Normalizer (per-source mapping, geo.haversine_km, severity)

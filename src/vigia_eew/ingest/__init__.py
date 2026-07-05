@@ -1,8 +1,8 @@
 """Ingestion layer (RF-01..RF-06).
 
-The sources (EMSC WebSocket and USGS REST) publish **raw messages** (`RawMessage`)
-onto an asyncio queue. The Phase 3 pipeline normalizes them into the common
-`SeismicEvent`. Keeping the raw data here decouples the transport from the
+The sources (EMSC WebSocket, USGS REST, and FUNVISIS polling) publish **raw messages**
+(`RawMessage`) onto an asyncio queue. The Phase 3 pipeline normalizes them into the
+common `SeismicEvent`. Keeping the raw data here decouples the transport from the
 normalization (API-SPEC §3).
 """
 
@@ -19,9 +19,9 @@ class RawMessage:
     """Unnormalized message emitted by a source.
 
     Attributes:
-        source: origin of the message (`"EMSC"` or `"USGS"`).
-        action: `"create"` or `"update"` (EMSC provides it explicitly; USGS is
-            always `"create"`, revision handling is done via `updated`/cursor).
+        source: origin of the message (`"EMSC"`, `"USGS"`, or `"FUNVISIS"`).
+        action: `"create"` or `"update"` (EMSC provides it explicitly; USGS and
+            FUNVISIS are always `"create"`).
         feature: the raw GeoJSON Feature object (with `properties` and `geometry`).
     """
 
