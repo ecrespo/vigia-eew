@@ -43,7 +43,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python-env
+      # The suite imports the GUI modules (tkinter + pystray's X backend), which need a
+      # display even though the real-window tests are skipped. Xvfb provides a headless one.
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: >-
+          xvfb-run -a
           uv run pytest
           --cov=vigia_eew
           --cov-branch
