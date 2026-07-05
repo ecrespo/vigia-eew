@@ -4,6 +4,24 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [0.3.0] - 2026-07-05
+
+### Added
+- **First-run config seeding** (RF-24): when no `config.toml` exists at the per-OS config
+  path, the agent now creates that directory and seeds it from a bundled template on
+  startup, so every user gets a documented, editable `config.toml` to customize. The
+  template ships inside the wheel and the native artifacts (`.exe`/`.dmg`/AppImage/`.deb`/
+  `.rpm`) as a package resource, resolved the same way in editable checkouts, `pipx`
+  installs and the PyInstaller-frozen binary. Seeding is idempotent (never overwrites an
+  existing file) and best-effort (an `OSError` is logged and the agent starts on defaults
+  anyway). The template's `[reference]` section is **commented out**, so seeding preserves
+  the IP-based location auto-detection on first run (RF-33). The tray's "Edit
+  configuration…" also seeds the full template instead of a stub (RF-34).
+
+### Changed
+- `config.toml.example` moved into the package (`src/vigia_eew/config.toml.example`) as the
+  single source of truth for both the shipped example and the first-run seed.
+
 ## [0.2.1] - 2026-07-05
 
 ### Added
