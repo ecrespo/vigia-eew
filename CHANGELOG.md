@@ -4,6 +4,15 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [0.3.1] - 2026-07-05
+
+### Changed
+- Release pipeline (CI): the wheel/sdist is now published to PyPI from a dedicated
+  `publish-pypi` job that runs **only after** the Python package and every native binary
+  (`.exe`/`.dmg`/AppImage/`.deb`/`.rpm`) have built successfully, so an irreversible PyPI
+  upload never happens on a partially failed release. No runtime code changes — this is the
+  first version published to PyPI through the automated pipeline.
+
 ## [0.3.0] - 2026-07-05
 
 ### Added

@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigia-eew"
-version = "0.3.0"                       # semantic versioning (RF-27)
+version = "0.3.1"                       # semantic versioning (RF-27)
 description = "Real-time desktop seismic alert agent, impossible to ignore (EMSC push + USGS backup)."
 readme = "README.md"
 requires-python = ">=3.11"             # uses stdlib tomllib (RNF-11)
