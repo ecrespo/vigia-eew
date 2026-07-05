@@ -17,8 +17,8 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
-from .config import APP_NAME, ReferencePoint
-from .models import AlertedId, AppState, DetectedLocation, EventSignature
+from vigia_eew.config import APP_NAME, ReferencePoint
+from vigia_eew.models import AlertedId, AppState, DetectedLocation, EventSignature
 
 STATE_FILE_NAME = "state.json"
 # Maximum age of ids/signatures before pruning them (DATA-MODEL §2.2).

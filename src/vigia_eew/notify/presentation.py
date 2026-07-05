@@ -12,8 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
-from ..i18n import DEFAULT_LOCALE, t
-from ..models import SeismicEvent, SeverityLevel
+from vigia_eew.i18n import DEFAULT_LOCALE, t
+from vigia_eew.models import SeismicEvent, SeverityLevel
 
 VENEZUELA_ZONE = "America/Caracas"
 

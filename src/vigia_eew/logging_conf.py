@@ -14,7 +14,7 @@ from pathlib import Path
 
 from platformdirs import user_log_dir
 
-from .config import APP_NAME, LoggingCfg
+from vigia_eew.config import APP_NAME, LoggingCfg
 
 _FORMAT = "%(asctime)sZ level=%(levelname)s logger=%(name)s %(message)s"
 _DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"

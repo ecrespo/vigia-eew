@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..models import SeverityLevel
+from vigia_eew.models import SeverityLevel
 
 _Player = Callable[[Path], None]
 _SleepFn = Callable[[float], None]

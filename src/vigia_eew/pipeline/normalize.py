@@ -23,10 +23,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..config import ReferencePoint, Severity
-from ..geo import haversine_km
-from ..ingest import RawMessage
-from ..models import Action, SeismicEvent, classify_severity
+from vigia_eew.config import ReferencePoint, Severity
+from vigia_eew.geo import haversine_km
+from vigia_eew.ingest import RawMessage
+from vigia_eew.models import Action, SeismicEvent, classify_severity
 
 
 class Normalizer:

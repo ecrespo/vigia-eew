@@ -18,9 +18,9 @@ import sys
 from collections.abc import Callable
 from typing import Protocol
 
-from .linux_systemd import SystemdInstaller
-from .macos_launchagent import LaunchAgentInstaller
-from .windows_task import SchtasksInstaller
+from vigia_eew.autostart.linux_systemd import SystemdInstaller
+from vigia_eew.autostart.macos_launchagent import LaunchAgentInstaller
+from vigia_eew.autostart.windows_task import SchtasksInstaller
 
 _Runner = Callable[[list[str]], int]
 

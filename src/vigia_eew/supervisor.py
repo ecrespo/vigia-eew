@@ -17,7 +17,7 @@ import signal
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .backoff import exponential_backoff
+from vigia_eew.backoff import exponential_backoff
 
 # A registered task is a factory that produces the coroutine to supervise.
 Factory = Callable[[], Awaitable[Any]]

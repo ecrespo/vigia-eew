@@ -21,8 +21,8 @@ from pathlib import Path
 from PIL import Image
 from pystray import Icon, Menu, MenuItem
 
-from .agent_state import AgentState
-from .i18n import DEFAULT_LOCALE, t
+from vigia_eew.agent_state import AgentState
+from vigia_eew.i18n import DEFAULT_LOCALE, t
 
 _ICON_FILE_NAME = "tray_icon.png"
 

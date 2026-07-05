@@ -17,7 +17,7 @@ import queue as _stdqueue
 from collections import deque
 from collections.abc import Callable
 
-from ..models import SeismicEvent
+from vigia_eew.models import SeismicEvent
 
 _Sink = Callable[[SeismicEvent], None]
 

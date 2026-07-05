@@ -14,8 +14,8 @@ import argparse
 from collections.abc import Callable
 from typing import Any
 
-from . import __version__
-from .config import has_manual_reference, load_config
+from vigia_eew import __version__
+from vigia_eew.config import has_manual_reference, load_config
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -68,7 +68,7 @@ def main(
 
     if args.install_autostart or args.uninstall_autostart:
         if create_installer is None:
-            from .autostart import create_installer as create_installer_real
+            from vigia_eew.autostart import create_installer as create_installer_real
 
             create_installer = create_installer_real
         installer = create_installer()
@@ -82,7 +82,7 @@ def main(
 
     cfg = load_config(args.config)
     if create_app is None:
-        from .app import Application
+        from vigia_eew.app import Application
 
         create_app = Application
     app = create_app(

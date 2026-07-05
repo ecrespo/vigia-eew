@@ -23,8 +23,8 @@ import tkinter as tk
 from collections.abc import Callable
 from typing import Any
 
-from ..i18n import DEFAULT_LOCALE, t
-from .presentation import AlertData, severity_color
+from vigia_eew.i18n import DEFAULT_LOCALE, t
+from vigia_eew.notify.presentation import AlertData, severity_color
 
 _MIN_HEIGHT = 620  # visual floor (ADR-003); the real height grows if content requires it
 

@@ -25,9 +25,9 @@ from typing import Any
 
 import httpx
 
-from ..config import Filter, ReferencePoint, USGSSource
-from ..state import StateStore
-from . import RawMessage
+from vigia_eew.config import Filter, ReferencePoint, USGSSource
+from vigia_eew.ingest import RawMessage
+from vigia_eew.state import StateStore
 
 _SleepFn = Callable[[float], Any]
 

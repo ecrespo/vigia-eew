@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .config import ReferencePoint, Severity
-from .geo import haversine_km
-from .models import SeismicEvent, classify_severity
+from vigia_eew.config import ReferencePoint, Severity
+from vigia_eew.geo import haversine_km
+from vigia_eew.models import SeismicEvent, classify_severity
 
 # Simulated epicenter: near La Guaira, Venezuela.
 _SIM_LAT = 10.60

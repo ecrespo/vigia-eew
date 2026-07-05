@@ -20,11 +20,11 @@ import asyncio
 import logging
 from collections.abc import Callable
 
-from ..ingest import RawMessage
-from ..models import SeismicEvent
-from .dedup import Deduplicator
-from .filter import GeoFilter
-from .normalize import Normalizer
+from vigia_eew.ingest import RawMessage
+from vigia_eew.models import SeismicEvent
+from vigia_eew.pipeline.dedup import Deduplicator
+from vigia_eew.pipeline.filter import GeoFilter
+from vigia_eew.pipeline.normalize import Normalizer
 
 _Callback = Callable[[SeismicEvent], None]
 

@@ -24,10 +24,10 @@ from typing import Any
 
 import websockets
 
-from ..agent_state import AgentState
-from ..backoff import exponential_backoff
-from ..config import EMSCSource
-from . import RawMessage
+from vigia_eew.agent_state import AgentState
+from vigia_eew.backoff import exponential_backoff
+from vigia_eew.config import EMSCSource
+from vigia_eew.ingest import RawMessage
 
 # Default connection factory: the real `websockets` client.
 _ConnectFactory = Callable[..., Any]

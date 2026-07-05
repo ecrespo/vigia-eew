@@ -9,8 +9,8 @@ the minimum magnitude passes).
 
 from __future__ import annotations
 
-from ..config import Filter
-from ..models import SeismicEvent
+from vigia_eew.config import Filter
+from vigia_eew.models import SeismicEvent
 
 
 class GeoFilter:

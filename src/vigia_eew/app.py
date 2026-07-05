@@ -24,27 +24,27 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import geoloc, tray
-from .agent_state import AgentState
-from .config import ReferencePoint, Settings, default_config_path
-from .i18n import resolve_locale
-from .ingest import RawMessage
-from .ingest.rest_usgs import RESTReconciler
-from .ingest.ws_emsc import WSIngestor
-from .logging_conf import configure_logging
-from .models import SeismicEvent, SeverityLevel
-from .notify.controller import AlertController
-from .notify.presentation import AlertData
-from .notify.queue import AsyncioTkBridge
-from .notify.sound import SoundPlayer
-from .notify.toast import Toaster
-from .pipeline.dedup import Deduplicator
-from .pipeline.filter import GeoFilter
-from .pipeline.normalize import Normalizer
-from .pipeline.processor import Processor
-from .simulation import simulated_event
-from .state import StateStore
-from .supervisor import Supervisor
+from vigia_eew import geoloc, tray
+from vigia_eew.agent_state import AgentState
+from vigia_eew.config import ReferencePoint, Settings, default_config_path
+from vigia_eew.i18n import resolve_locale
+from vigia_eew.ingest import RawMessage
+from vigia_eew.ingest.rest_usgs import RESTReconciler
+from vigia_eew.ingest.ws_emsc import WSIngestor
+from vigia_eew.logging_conf import configure_logging
+from vigia_eew.models import SeismicEvent, SeverityLevel
+from vigia_eew.notify.controller import AlertController
+from vigia_eew.notify.presentation import AlertData
+from vigia_eew.notify.queue import AsyncioTkBridge
+from vigia_eew.notify.sound import SoundPlayer
+from vigia_eew.notify.toast import Toaster
+from vigia_eew.pipeline.dedup import Deduplicator
+from vigia_eew.pipeline.filter import GeoFilter
+from vigia_eew.pipeline.normalize import Normalizer
+from vigia_eew.pipeline.processor import Processor
+from vigia_eew.simulation import simulated_event
+from vigia_eew.state import StateStore
+from vigia_eew.supervisor import Supervisor
 
 _WindowFactory = Callable[[AlertData, SeverityLevel, Callable[[], None]], Any]
 
@@ -225,7 +225,7 @@ class Application:
     def _controller_for_gui(self, root: Any, *, loop_mode: bool) -> AlertController:
         import tkinter as tk
 
-        from .notify.alert_window import AlertWindow
+        from vigia_eew.notify.alert_window import AlertWindow
 
         sound = SoundPlayer(enabled=self.cfg.notification.sound)
         toaster = Toaster(reference_name=self.cfg.reference.name, locale_code=self._locale)

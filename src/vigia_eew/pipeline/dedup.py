@@ -19,10 +19,10 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from ..config import Dedup
-from ..geo import haversine_km
-from ..models import AlertedId, EventSignature, SeismicEvent
-from ..state import StateStore
+from vigia_eew.config import Dedup
+from vigia_eew.geo import haversine_km
+from vigia_eew.models import AlertedId, EventSignature, SeismicEvent
+from vigia_eew.state import StateStore
 
 DedupResult = Literal["new", "update", "duplicate"]
 

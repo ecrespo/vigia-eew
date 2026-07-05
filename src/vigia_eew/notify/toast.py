@@ -16,9 +16,9 @@ from typing import Any, Protocol, cast
 
 from desktop_notifier import Urgency
 
-from ..i18n import DEFAULT_LOCALE
-from ..models import SeismicEvent, SeverityLevel
-from .presentation import VENEZUELA_ZONE, toast_text
+from vigia_eew.i18n import DEFAULT_LOCALE
+from vigia_eew.models import SeismicEvent, SeverityLevel
+from vigia_eew.notify.presentation import VENEZUELA_ZONE, toast_text
 
 _URGENCY_BY_SEVERITY: dict[SeverityLevel, Urgency] = {
     "info": Urgency.Low,

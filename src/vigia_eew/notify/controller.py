@@ -16,11 +16,11 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from ..agent_state import AgentState
-from ..i18n import DEFAULT_LOCALE
-from ..models import SeismicEvent, SeverityLevel
-from .presentation import VENEZUELA_ZONE, AlertData, format_event
-from .queue import AlertQueue
+from vigia_eew.agent_state import AgentState
+from vigia_eew.i18n import DEFAULT_LOCALE
+from vigia_eew.models import SeismicEvent, SeverityLevel
+from vigia_eew.notify.presentation import VENEZUELA_ZONE, AlertData, format_event
+from vigia_eew.notify.queue import AlertQueue
 
 # create_window(data, severity, on_acknowledge) -> window object (with `refresh`)
 _WindowFactory = Callable[[AlertData, SeverityLevel, Callable[[], None]], Any]

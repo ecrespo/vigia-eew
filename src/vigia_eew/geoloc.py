@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from .config import ReferencePoint
+from vigia_eew.config import ReferencePoint
 
 IP_GEOLOCATION_URL = "https://ipapi.co/json/"
 TIMEOUT_S = 5.0
