@@ -11,8 +11,10 @@ gate de calidad en verde (`pytest`, `ruff check .`, `mypy src`).
    (F8-1), el `.exe` de Windows (F8-2), el `.app`/`.dmg` de macOS (F8-3) y el
    AppImage/`.deb`/`.rpm` de Linux (F8-4); publica todo como *assets* de un GitHub Release
    con el mismo tag.
-5. Publicar en PyPI: el job `pypi` del workflow solo corre si existe el secreto del
-   repositorio `PYPI_API_TOKEN` (no configurado por defecto); si no está, el paso se omite
+5. Publicar en PyPI: tras construirse **todos** los paquetes (wheel/sdist + los binarios
+   nativos), el job `publish-pypi` descarga el wheel/sdist y lo publica en PyPI con
+   `uv publish`, usando el secreto del repositorio `PYPI_API_TOKEN`. Si el secreto no está
+   configurado (p. ej. en un *dispatch* manual desde un *fork*), el paso se omite sin fallar
    y `dist/*.whl`/`dist/*.tar.gz` quedan igual disponibles como *assets* del Release para
    publicar manualmente con `uv publish` o `twine upload`.
 6. Actualizar el repo apt (F8-6, ver `packaging/apt-r2/README.md`) con el nuevo `.deb`.

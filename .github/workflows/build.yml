@@ -1,8 +1,10 @@
 # Matriz de empaquetado y release (Fase 8, F8-5, RF-31).
 #
 # Dispara con un tag `vX.Y.Z` (ver packaging/RELEASING.md) o manualmente. Construye,
-# en paralelo, el paquete PyPI, el .exe de Windows, el .dmg de macOS y el
-# AppImage/.deb/.rpm de Linux; un job final los junta en un GitHub Release.
+# en paralelo, el paquete PyPI (wheel+sdist), el .exe de Windows, el .dmg de macOS y el
+# AppImage/.deb/.rpm de Linux; luego un job `publish-pypi` publica el wheel/sdist en PyPI
+# (solo si TODOS los paquetes se construyeron bien) y un job `release` los junta en un
+# GitHub Release.
 name: build
 
 on:
@@ -16,7 +18,7 @@ permissions:
 
 jobs:
   pypi:
-    name: PyPI (wheel + sdist)
+    name: PyPI package (wheel + sdist)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,11 +28,6 @@ jobs:
         with:
           name: pypi-dist
           path: dist/*
-      - name: Publicar en PyPI (opcional, requiere el secreto PYPI_API_TOKEN)
-        env:
-          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        if: ${{ env.PYPI_TOKEN != '' }}
-        run: uv publish --token "$PYPI_TOKEN"
 
   windows:
     name: Windows .exe
@@ -91,6 +88,28 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/*.rpm
+
+  publish-pypi:
+    name: Publish to PyPI
+    # Runs only after every package (the Python wheel/sdist and all native
+    # binaries) built successfully, so a failed platform build never leaves a
+    # half-published release: PyPI uploads are irreversible.
+    needs: [pypi, windows, macos, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+      PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    steps:
+      - uses: astral-sh/setup-uv@v3
+      - name: Download the built wheel + sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: pypi-dist
+          path: dist
+      - name: Publish to PyPI
+        # Skip gracefully if the token isn't configured (e.g. manual dispatch on a fork).
+        if: ${{ env.PYPI_TOKEN != '' }}
+        run: uv publish --token "$PYPI_TOKEN" dist/*
 
   release:
     name: Crear GitHub Release
