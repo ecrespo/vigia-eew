@@ -15,6 +15,11 @@ on:
 permissions:
   contents: read
 
+# Use uv-managed CPython (python-build-standalone), which bundles tkinter — the
+# runner's system Python lacks it and the GUI modules import tkinter at load time.
+env:
+  UV_PYTHON_PREFERENCE: only-managed
+
 jobs:
   lint:
     name: Lint (ruff)
