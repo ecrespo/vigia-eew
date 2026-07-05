@@ -17,7 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 # --- Domain type aliases ---
-Source = Literal["EMSC", "USGS", "SIMULATED"]
+Source = Literal["EMSC", "USGS", "FUNVISIS", "SIMULATED"]
 SeverityLevel = Literal["info", "warning", "critical"]
 Action = Literal["create", "update"]
 
