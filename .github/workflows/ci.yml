@@ -10,7 +10,9 @@ on:
   push:
     branches: [develop]
   pull_request:
-    branches: [develop]
+    # develop: validate feature merges. main: the develop->main promotion runs the
+    # code gate alongside security.yml, so both are required checks before release.
+    branches: [develop, main]
 
 permissions:
   contents: read

@@ -3,10 +3,18 @@
 Versionado semántico (`MAYOR.MENOR.PARCHE`, RF-27). Cada release parte de `develop` con el
 gate de calidad en verde (`pytest`, `ruff check .`, `mypy src`).
 
-1. Actualizar `version` en `pyproject.toml` y mover la sección `[Sin publicar]` de
-   `CHANGELOG.md` a una nueva `## [X.Y.Z] - AAAA-MM-DD`.
-2. Commitear (`chore: release vX.Y.Z`) y mergear a `main`.
-3. Crear el tag anotado y pushearlo: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+`main` está **protegida**: no se puede pushear directo (ni siquiera admins) y todo cambio
+entra por PR con los checks `ci` (ruff/mypy/pytest) y `security` (bandit/semgrep/pip-audit/
+gitleaks/trivy) en verde. Por eso el release se corta **en `develop` y se promueve por PR**:
+
+1. En `develop`: actualizar `version` en `pyproject.toml` y mover la sección `[Sin publicar]`
+   de `CHANGELOG.md` a una nueva `## [X.Y.Z] - AAAA-MM-DD`. Commitear `chore: release vX.Y.Z`
+   y `git push origin develop`.
+2. Abrir el PR `develop → main` (`gh pr create --base main --head develop …`). Esperar a que
+   `ci` + `security` pasen y **mergear** el PR (los tags no están protegidos, pero el commit de
+   release sí debe llegar a `main` por esta vía).
+3. Traer `main` y taguear el commit ya en `main`:
+   `git checkout main && git pull origin main && git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
 4. El push del tag dispara `.github/workflows/build.yml` (F8-5): construye wheel/sdist
    (F8-1), el `.exe` de Windows (F8-2), el `.app`/`.dmg` de macOS (F8-3) y el
    AppImage/`.deb`/`.rpm` de Linux (F8-4); publica todo como *assets* de un GitHub Release
