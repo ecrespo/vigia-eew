@@ -1,0 +1,91 @@
+# Pre-commit hooks — mirror the GitHub Actions gates locally (ci.yml + security.yml).
+#
+# Two stages so commits stay fast:
+#   pre-commit (every commit): hygiene, ruff, mypy, bandit, gitleaks
+#   pre-push   (before push):  pytest, pip-audit, semgrep, trivy
+#
+# Install both hook types once:  uv run pre-commit install
+# Run everything on demand:      uv run pre-commit run --all-files --hook-stage pre-push
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  # ── Hygiene ────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.geojson$'
+      - id: end-of-file-fixer
+        exclude: '\.geojson$'
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=5120]
+
+  # ── Secrets (matches security.yml gitleaks version) ────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ── Project tools via uv (parity with CI commands + lockfile) ──
+  - repo: local
+    hooks:
+      # -- pre-commit stage (fast) --
+      - id: ruff
+        name: ruff (lint)
+        entry: uv run --extra dev --extra security ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: mypy
+        name: mypy (strict)
+        entry: uv run --extra dev --extra security mypy src
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: bandit
+        name: bandit (SAST)
+        entry: uv run --extra dev --extra security bandit -r src --severity-level=medium
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # -- pre-push stage (slower / network) --
+      - id: pytest
+        name: pytest (unit tests)
+        entry: uv run --extra dev --extra security pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: pip-audit
+        name: pip-audit (dependency CVEs)
+        entry: uv run --extra dev --extra security pip-audit --skip-editable
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: semgrep
+        name: semgrep (SAST — OWASP/python/secrets over src/)
+        entry: uvx semgrep scan --config=p/python --config=p/secrets --config=p/owasp-top-ten --error --metrics=off src/
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: trivy
+        name: trivy fs (HIGH,CRITICAL) — best-effort locally
+        # Runs only if the trivy binary is installed; CI (security.yml) is the
+        # authoritative gate, so a dev without trivy isn't blocked.
+        entry: bash -c 'if command -v trivy >/dev/null 2>&1; then trivy fs . --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress; else echo "trivy no instalado — omitido en local (el CI lo exige)"; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

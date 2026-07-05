@@ -1,0 +1,142 @@
+# Security gate for the develop -> main promotion.
+#
+# Runs on pull requests targeting `main` (the develop->main PR), BEFORE the merge, so it
+# can be made a required check that blocks a merge introducing a vulnerability, a leaked
+# secret, or a vulnerable dependency. SAST (bandit, semgrep), SCA (pip-audit, trivy), and
+# secret scanning (gitleaks, trivy) run in parallel; each uploads its report as an
+# artifact. Validated green against the current tree before landing.
+name: security
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── SAST: Python ──────────────────────────────────────────
+  bandit:
+    name: Bandit (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+        with:
+          extras: security
+      - run: uv run bandit -r src --severity-level=medium
+
+  # ── SAST: multi-rule (OWASP / secrets) over the app source ──
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: semgrep scan
+        env:
+          SEMGREP_SEND_METRICS: "off"
+        run: >-
+          uvx semgrep scan
+          --config=p/python
+          --config=p/secrets
+          --config=p/owasp-top-ten
+          --error
+          --metrics=off
+          --sarif --output=semgrep.sarif
+          src/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          retention-days: 7
+
+  # ── SCA: dependency CVEs ──────────────────────────────────
+  pip-audit:
+    name: pip-audit (SCA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+        with:
+          extras: security
+      - run: uv run pip-audit --skip-editable
+      - name: pip-audit JSON report
+        if: always()
+        run: uv run pip-audit --skip-editable --format=json > pip-audit-report.json || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 7
+
+  # ── Secrets ───────────────────────────────────────────────
+  gitleaks:
+    name: Gitleaks (secrets)
+    runs-on: ubuntu-latest
+    # The gitleaks binary is free/unlicensed; the gitleaks-action wrapper needs a paid
+    # license for org-owned repos, so we run the pinned binary directly (checksum-verified).
+    env:
+      GITLEAKS_VERSION: "8.21.2"
+      GITLEAKS_SHA256: "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" version
+      - name: Scan for secrets
+        run: |
+          "$RUNNER_TEMP/gitleaks" dir . \
+            --redact --no-banner \
+            --report-format sarif \
+            --report-path "$RUNNER_TEMP/gitleaks.sarif"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-sarif
+          path: ${{ runner.temp }}/gitleaks.sarif
+          retention-days: 7
+
+  # ── SCA + misconfig + secrets: filesystem ─────────────────
+  trivy:
+    name: Trivy (fs)
+    runs-on: ubuntu-latest
+    # Install the pinned trivy binary from its release tarball (checksum-verified) rather
+    # than the trivy-action, whose setup step flakes and whose tags were once compromised
+    # (GHSA-69fq-xp46-6x23, 2026-03). 0.70.0 is a clean post-incident release.
+    env:
+      TRIVY_VERSION: "0.70.0"
+      TRIVY_SHA256: "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install trivy
+        run: |
+          curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o "$RUNNER_TEMP/trivy.tar.gz"
+          echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP" trivy
+          "$RUNNER_TEMP/trivy" --version
+      - name: Trivy fs (JSON report)
+        run: |
+          "$RUNNER_TEMP/trivy" fs . \
+            --scanners vuln,misconfig,secret \
+            --format json --output trivy-fs.json \
+            --no-progress --exit-code 0
+      - name: Trivy fs (gate — HIGH,CRITICAL)
+        run: |
+          "$RUNNER_TEMP/trivy" fs . \
+            --scanners vuln,misconfig,secret \
+            --severity HIGH,CRITICAL \
+            --no-progress --exit-code 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-fs
+          path: trivy-fs.json
+          retention-days: 7

@@ -1,0 +1,55 @@
+# Continuous integration — validates the code on the `develop` branch.
+#
+# Runs the project's quality gate (lint + type check + tests with coverage) on every
+# push to `develop` and on pull requests that target `develop`. Security scanning for
+# the develop->main promotion lives in `security.yml`; native packaging/release lives
+# in `build.yml`.
+name: ci
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - run: uv run ruff check .
+
+  mypy:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - run: uv run mypy src
+
+  test:
+    name: Tests (pytest + coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - run: >-
+          uv run pytest
+          --cov=vigia_eew
+          --cov-branch
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+          --junitxml=report.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            report.xml
+          retention-days: 7

@@ -221,6 +221,22 @@ uv run mypy src    # type check
 uv run vigia-eew --help  # console entry point
 ```
 
+### Pre-commit hooks
+
+The repo ships a `.pre-commit-config.yaml` that mirrors the CI gates locally. Enable it once
+per clone:
+
+```bash
+uv run pre-commit install     # registers the pre-commit and pre-push git hooks
+```
+
+- **On each commit** (fast): file hygiene, `ruff`, `mypy`, `bandit`, `gitleaks`.
+- **Before each push** (slower): `pytest`, `pip-audit`, `semgrep`, `trivy` (`trivy` is best-effort
+  locally — it runs only if the binary is installed; CI enforces it).
+
+Run everything on demand: `uv run pre-commit run --all-files` (add `--hook-stage pre-push` for
+the push-stage hooks). These match `.github/workflows/ci.yml` and `security.yml`.
+
 ---
 
 <div align="center">
