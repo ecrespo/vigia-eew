@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from vigia_eew.models import SeverityLevel
+from vigia_eew.subprocess_env import system_env
 
 _Player = Callable[[Path], None]
 _SleepFn = Callable[[float], None]
@@ -86,7 +87,13 @@ def _default_player(path: Path) -> None:
     if command is None:
         print("\a", end="", flush=True)  # terminal bell as a last resort
         return
-    subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        command,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=system_env(),
+    )
 
 
 class SoundPlayer:

@@ -23,6 +23,7 @@ from pystray import Icon, Menu, MenuItem
 
 from vigia_eew.agent_state import AgentState
 from vigia_eew.i18n import DEFAULT_LOCALE, t
+from vigia_eew.subprocess_env import system_env
 
 _ICON_FILE_NAME = "tray_icon.png"
 
@@ -56,7 +57,9 @@ def open_config(path: Path, *, logger: logging.Logger | None = None) -> None:
         if command is None:
             os.startfile(path)  # type: ignore[attr-defined]  # only exists on Windows
         else:
-            subprocess.Popen(command)
+            # env=system_env() strips the PyInstaller-injected library path so xdg-open
+            # (and whatever it launches) uses the system libraries, not the bundle's.
+            subprocess.Popen(command, env=system_env())
     except OSError as exc:
         log.warning("tray_could_not_open_config detail=%s", exc)
 

@@ -12,6 +12,8 @@ import logging
 import subprocess
 from collections.abc import Callable
 
+from vigia_eew.subprocess_env import system_env
+
 _Runner = Callable[[list[str]], int]
 
 TASK_NAME = "VigiaEEW"
@@ -45,7 +47,9 @@ def query_command(task_name: str) -> list[str]:
 
 
 def _subprocess_runner(cmd: list[str]) -> int:
-    return subprocess.run(cmd, check=False).returncode
+    # env=system_env() is a no-op off-Windows/unfrozen; kept for consistency with the
+    # other backends so a frozen build never leaks the bundle's library path.
+    return subprocess.run(cmd, check=False, env=system_env()).returncode
 
 
 class SchtasksInstaller:

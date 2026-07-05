@@ -14,6 +14,8 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+from vigia_eew.subprocess_env import system_env
+
 _Runner = Callable[[list[str]], int]
 
 LABEL = "com.vigia-eew.agent"
@@ -35,7 +37,9 @@ def _launchagents_dir() -> Path:
 
 
 def _subprocess_runner(cmd: list[str]) -> int:
-    return subprocess.run(cmd, check=False).returncode
+    # env=system_env() strips the PyInstaller-injected DYLD_LIBRARY_PATH so launchctl
+    # loads the system libraries, not the ones bundled in the onefile temp dir.
+    return subprocess.run(cmd, check=False, env=system_env()).returncode
 
 
 class LaunchAgentInstaller:
