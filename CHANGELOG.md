@@ -4,7 +4,7 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
-## [Unreleased]
+## [0.2.1] - 2026-07-05
 
 ### Added
 - Optional **country notification filter** (`[filter] country_filter`, RF-37): when
@@ -25,6 +25,9 @@ de publicación en `packaging/RELEASING.md`.
   bundled (older) OpenSSL instead of the system's. System subprocesses
   (`systemctl`/`launchctl`/`schtasks`/`xdg-open`/audio players) are now launched with a
   sanitized environment (`subprocess_env.py`) that restores/removes that injected path.
+- `--version` reported a stale `0.1.0` (the hardcoded `__version__` was never bumped past
+  the 0.1.0 release). It is now derived from the installed distribution metadata, so it
+  always matches the released version.
 
 ## [0.2.0] - 2026-07-04
 
