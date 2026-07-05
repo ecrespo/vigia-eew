@@ -97,6 +97,10 @@ jobs:
     needs: [pypi, windows, macos, linux]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    # PYPI_API_TOKEN lives as a secret of the `pypi` environment, so the job must
+    # declare it — otherwise secrets.PYPI_API_TOKEN resolves empty and publishing
+    # is silently skipped.
+    environment: pypi
     env:
       PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     steps:
