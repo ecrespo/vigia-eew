@@ -77,8 +77,9 @@ vigia-eew --help
 ## Configuration
 
 Vigía runs with **sensible defaults centered on Caracas** and needs **no configuration to
-start**. To customize it, create a `config.toml`. The quickest start is to copy the bundled
-[`config.toml.example`](./config.toml.example) and edit it.
+start**. To customize it, create a `config.toml`. On first run Vigía **auto-creates** one
+from the bundled template at the path below; you can also copy
+[`config.toml.example`](./src/vigia_eew/config.toml.example) there by hand and edit it.
 
 **Where the file lives** (the default location Vigía reads on startup):
 
@@ -89,7 +90,8 @@ start**. To customize it, create a `config.toml`. The quickest start is to copy 
 | **Windows** | `%LOCALAPPDATA%\vigia-eew\config.toml` |
 
 You can also point at any file explicitly with `--config <path>`. From the desktop tray icon,
-**"Edit configuration…"** opens the file currently in use (creating it if needed).
+**"Edit configuration…"** opens the file currently in use (creating it from the template if
+needed).
 
 **Most useful settings** (see `config.toml.example` for the full schema):
 

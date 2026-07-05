@@ -21,7 +21,6 @@ vigia-eew/
 ├── README.md
 ├── CHANGELOG.md                # Keep a Changelog + semantic versioning (RF-27)
 ├── ARCHITECTURE.md
-├── config.toml.example
 ├── docs/                       # SDD artifacts (this set)
 │   ├── PRD.md
 │   ├── API-SPEC.md
@@ -34,7 +33,8 @@ vigia-eew/
 │   ├── app.py                  # Application: run()/simulate()/run_tui() wiring (ADR-006/ADR-013)
 │   ├── tui.py                  # headless Textual dashboard + modal alert (--tui, RF-36)
 │   ├── simulation.py           # simulated_event (M6.1 La Guaira)
-│   ├── config.py               # Settings (pydantic) + config.toml loading
+│   ├── config.py               # Settings (pydantic) + config.toml loading + first-run seeding
+│   ├── config.toml.example     # bundled template; seeded to the OS config path on first run (RF-24)
 │   ├── models.py                # SeismicEvent, AppState, signatures
 │   ├── geo.py                  # haversine_km (shared by normalize and dedup)
 │   ├── geocode.py              # offline lat/lon -> country, point-in-polygon (RF-37)

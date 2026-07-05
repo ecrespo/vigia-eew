@@ -85,6 +85,14 @@ def main(
             print("Autostart uninstalled.")
         return 0
 
+    # First-run seeding (RF-24): with no explicit --config, create the per-OS
+    # config file from the bundled template if it doesn't exist yet. Best-effort;
+    # an explicit --config path is never auto-created (it keeps FileNotFoundError).
+    if args.config is None:
+        from vigia_eew.config import seed_config_if_missing
+
+        seed_config_if_missing()
+
     cfg = load_config(args.config)
     if create_app is None:
         from vigia_eew.app import Application

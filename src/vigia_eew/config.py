@@ -9,6 +9,8 @@ Config path resolution (DATA-MODEL §3.3):
 
 from __future__ import annotations
 
+import importlib.resources
+import logging
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,7 @@ from pydantic import BaseModel, Field
 
 APP_NAME = "vigia-eew"
 CONFIG_FILE_NAME = "config.toml"
+EXAMPLE_FILE_NAME = "config.toml.example"
 
 
 class ReferencePoint(BaseModel):
@@ -117,6 +120,55 @@ class Settings(BaseModel):
 def default_config_path() -> Path:
     """Path to `config.toml` in the user's config directory (cross-platform)."""
     return Path(user_config_dir(APP_NAME)) / CONFIG_FILE_NAME
+
+
+def bundled_example() -> str:
+    """Return the packaged `config.toml.example` template as text (RF-24).
+
+    Read as a package resource so it resolves identically in editable checkouts,
+    wheel/pipx installs, and the PyInstaller-frozen binary (bundled via the
+    `.spec` `datas`).
+    """
+    return (
+        importlib.resources.files("vigia_eew")
+        .joinpath(EXAMPLE_FILE_NAME)
+        .read_text(encoding="utf-8")
+    )
+
+
+def seed_config_if_missing(
+    path: Path | str | None = None,
+    *,
+    logger: logging.Logger | None = None,
+) -> Path | None:
+    """Seed a `config.toml` from the bundled template if none exists yet (RF-24).
+
+    On first run there is no config file, so we create the per-OS config directory
+    and write the documented template there, giving the user an editable starting
+    point. The template ships with `[reference]` commented out, so seeding does not
+    disable the IP-based location auto-detection (RF-33).
+
+    Args:
+        path: destination config path. Defaults to `default_config_path()`.
+        logger: optional logger for the best-effort warning.
+
+    Returns:
+        The seeded path, or `None` if a config already exists or seeding failed.
+
+    Best-effort: any `OSError` (read-only FS, permissions, …) is logged as a
+    warning and swallowed — startup must never fail because seeding did.
+    """
+    target = Path(path) if path is not None else default_config_path()
+    if target.exists():
+        return None
+    log = logger or logging.getLogger("vigia_eew.config")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(bundled_example(), encoding="utf-8")
+    except OSError as exc:
+        log.warning("config_seed_failed detail=%s", exc)
+        return None
+    return target
 
 
 def _map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
