@@ -4,7 +4,7 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
-## [Sin publicar]
+## [0.5.0] - 2026-07-06
 
 ### Added
 - **GEOFON as a fourth ingestion source** (`[sources.geofon]`, RF-39) — an independent
