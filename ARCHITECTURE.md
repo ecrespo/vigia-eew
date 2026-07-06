@@ -25,6 +25,8 @@ window + toast + sound). Critical state is **persisted** to survive restarts.
 |---|---|---|
 | **WSIngestor (EMSC)** | WebSocket connection, 15 s keepalive, backoff reconnection, emits raw messages | RF-01..RF-04 |
 | **RESTReconciler (USGS)** | 60 s polling with persisted cursor; safety net | RF-05, RF-06 |
+| **FUNVISISPoller** | 60 s polling of `maravilla.json`; Venezuela-only local coverage; in-memory seen-set (no cursor) | RF-38 |
+| **GEOFONPoller** | 60 s polling of `fdsnws-event` (text format); independent global-network redundancy; persisted cursor | RF-39 |
 | **Normalizer** | Raw→`SeismicEvent`; haversine; severity | RF-07, RF-08, RF-13 |
 | **GeoFilter** | Discards events outside radius or below minimum magnitude | RF-12 |
 | **Deduplicator** | Inter-source heuristic; persisted ids; handles `update` | RF-09..RF-11 |
@@ -45,11 +47,15 @@ flowchart LR
     subgraph Fuentes["External sources"]
         EMSC["EMSC WebSocket<br/>(primary push)"]
         USGS["USGS FDSN REST<br/>(60 s backup)"]
+        FUNVISIS["FUNVISIS maravilla.json<br/>(60 s, Venezuela-only)"]
+        GEOFON["GEOFON fdsnws-event<br/>(60 s, text format)"]
     end
 
     subgraph Ingesta["Ingestion layer (asyncio)"]
         WS["WSIngestor<br/>keepalive + reconnection"]
         REST["RESTReconciler<br/>persisted cursor"]
+        FUNV["FUNVISISPoller<br/>in-memory seen-set"]
+        GEO["GEOFONPoller<br/>persisted cursor"]
     end
 
     Q(["raw_queue<br/>(asyncio.Queue)"])
@@ -74,14 +80,19 @@ flowchart LR
 
     EMSC -->|create/update| WS
     USGS -->|GeoJSON| REST
+    FUNVISIS -->|GeoJSON| FUNV
+    GEOFON -->|text| GEO
     WS --> Q
     REST --> Q
+    FUNV --> Q
+    GEO --> Q
     Q --> NORM --> FILT --> DEDUP
     DEDUP -->|new + relevant| AQ
     AQ --> TOAST
     AQ --> WIN
     DEDUP <-->|alerted ids| STATE
     REST <-->|cursor| STATE
+    GEO <-->|cursor| STATE
     CFG -.config.-> NORM
     CFG -.config.-> FILT
     CFG -.config.-> DEDUP
@@ -147,6 +158,7 @@ stateDiagram-v2
 | **The WS goes down** | Close/ping_timeout is detected → `Down` state → exponential `Backoff` with jitter → perpetual reconnection. The process **does not die**. | RF-03, RNF-03; §5 |
 | **The WS silently stops receiving** | The **keepalive (15 s ping)** detects the loss via `ping_timeout` and forces reconnection. | RF-02 |
 | **REST fails (429/5xx/timeout)** | `Retry-After` is honored (429); the cycle is skipped and retried after 60 s; the **cursor is kept**; no abort. | RF-05; Technical Design §8 |
+| **FUNVISIS or GEOFON is unreachable/changes format** | That poller's cycle is skipped and retried after 60 s (own timeout/backoff); the other three sources are unaffected; the process **does not die**. | RF-38, RF-39 |
 | **An `update` arrives** | Same `unid` already seen → the displayed/queued event is **updated** (e.g. magnitude) **without** triggering a new alert. | RF-11, CU-3 |
 | **Two sources report the same earthquake** | The heuristic (≤100 km, ≤90 s, ≤0.5 mag) recognizes it as a duplicate → **a single** alert. | RF-09, CU-4 |
 | **The agent restarts with pending alerts** | `StateStore` remembers `alerted_ids` → already-acknowledged ones **are not re-alerted**; `usgs_cursor` avoids reprocessing history. | RF-06, RF-10, CU-10 |
@@ -169,6 +181,8 @@ flowchart TB
     end
     EMSC["EMSC WS"] --> A & B & C
     USGS["USGS FDSN"] --> A & B & C
+    FUNVISIS["FUNVISIS"] --> A & B & C
+    GEOFON["GEOFON"] --> A & B & C
 ```
 
 ## 8. Future evolution — central relay (not v1)

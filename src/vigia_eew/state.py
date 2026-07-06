@@ -104,6 +104,12 @@ class StateStore:
         if current is None or cursor_ms > current:
             self._state.cursor_usgs_ms = cursor_ms
 
+    def update_geofon_cursor(self, cursor_ms: int) -> None:
+        """Advances the GEOFON cursor to the highest value seen (RF-39, RF-06)."""
+        current = self._state.cursor_geofon_ms
+        if current is None or cursor_ms > current:
+            self._state.cursor_geofon_ms = cursor_ms
+
     def cached_location(self) -> ReferencePoint | None:
         """Last IP-detected and cached location, if any (RF-33)."""
         loc = self._state.detected_location

@@ -66,6 +66,23 @@ def test_funvisis_source_loaded_from_toml(tmp_path):
     assert cfg.sources_funvisis.poll_interval_s == 120
 
 
+def test_geofon_source_defaults():
+    cfg = Settings()
+    assert cfg.sources_geofon.enabled is True  # independent global source, on by default
+    assert "geofon" in cfg.sources_geofon.url
+    assert cfg.sources_geofon.poll_interval_s == 60
+
+
+def test_geofon_source_loaded_from_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "[sources.geofon]\nenabled = false\npoll_interval_s = 90\n", encoding="utf-8"
+    )
+    cfg = load_config(path)
+    assert cfg.sources_geofon.enabled is False
+    assert cfg.sources_geofon.poll_interval_s == 90
+
+
 def test_country_filter_loaded_from_toml(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text(

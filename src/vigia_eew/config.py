@@ -63,7 +63,7 @@ class USGSSource(BaseModel):
 
 
 class FUNVISISSource(BaseModel):
-    """FUNVISIS polling parameters — **Venezuela-only** local coverage (RF-05).
+    """FUNVISIS polling parameters — **Venezuela-only** local coverage (RF-38).
 
     FUNVISIS (the Venezuelan national seismic network) publishes the ~20 most recent
     earthquakes as a GeoJSON file that its web map polls; there is no push/streaming
@@ -73,6 +73,22 @@ class FUNVISISSource(BaseModel):
 
     enabled: bool = True
     url: str = "http://www.funvisis.gob.ve/maravilla.json"
+    poll_interval_s: int = Field(default=60, gt=0)
+    timeout_s: int = Field(default=15, gt=0)
+
+
+class GEOFONSource(BaseModel):
+    """GEOFON FDSN polling parameters — independent global-network source (RF-39).
+
+    GEOFON (operated by the GFZ German Research Centre for Geosciences, Potsdam) exposes a
+    standard `fdsnws-event` service, providing redundant global coverage from a different
+    network than EMSC/USGS, with no API key. Polled every `poll_interval_s`, analogous in
+    role to the USGS backup but from a distinct source. Unlike USGS, the response is parsed
+    as **pipe-delimited text** (`format=text`), not GeoJSON (API-SPEC §4).
+    """
+
+    enabled: bool = True
+    url: str = "http://geofon.gfz.de/fdsnws/event/1/query"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
 
@@ -127,6 +143,7 @@ class Settings(BaseModel):
     sources_emsc: EMSCSource = Field(default_factory=EMSCSource)
     sources_usgs: USGSSource = Field(default_factory=USGSSource)
     sources_funvisis: FUNVISISSource = Field(default_factory=FUNVISISSource)
+    sources_geofon: GEOFONSource = Field(default_factory=GEOFONSource)
     dedup: Dedup = Field(default_factory=Dedup)
     severity: Severity = Field(default_factory=Severity)
     notification: Notification = Field(default_factory=Notification)
@@ -203,6 +220,8 @@ def _map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
             result["sources_usgs"] = sources["usgs"]
         if "funvisis" in sources:
             result["sources_funvisis"] = sources["funvisis"]
+        if "geofon" in sources:
+            result["sources_geofon"] = sources["geofon"]
     return result
 
 

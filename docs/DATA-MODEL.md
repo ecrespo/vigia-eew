@@ -5,7 +5,7 @@
 | Document | Data model: normalized event, persisted state, and configuration |
 | Version | 1.0 (draft for review) |
 | Status | 🟡 Pending approval |
-| Related | `API-SPEC.md` (source mapping), `PRD.md` (RF-07, RF-06, RF-10, RF-24), `TECHNICAL-DESIGN.md` |
+| Related | `API-SPEC.md` (source mapping), `PRD.md` (RF-07, RF-06, RF-10, RF-24, RF-38, RF-39), `TECHNICAL-DESIGN.md` |
 
 > All structures are validated with **pydantic** (v2). The types here are the binding contract
 > for the code. Persistence in **JSON**; configuration in **`config.toml`**.
@@ -19,8 +19,8 @@ Internal contract that flows between layers (RF-07). Produced by `Normalizer`, c
 
 | Field | Type | Required | Description | Origin |
 |---|---|---|---|---|
-| `id` | `str` | yes | Stable per-source identifier (`unid` EMSC / `id` USGS) | source |
-| `source` | `Literal["EMSC","USGS","SIMULATED"]` | yes | Event origin | system |
+| `id` | `str` | yes | Stable per-source identifier (`unid` EMSC / `id` USGS / `id` FUNVISIS / `EventID` GEOFON) | source |
+| `source` | `Literal["EMSC","USGS","FUNVISIS","GEOFON","SIMULATED"]` | yes | Event origin | system |
 | `magnitude` | `float` | yes | Magnitude | source |
 | `mag_type` | `str` | yes | Magnitude type (`mw`,`mb`,`ml`…), normalized to lowercase | source |
 | `place` | `str \| None` | no | Textual description (USGS `place`) | source |
@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 
 class SeismicEvent(BaseModel):
     id: str
-    source: Literal["EMSC", "USGS", "SIMULATED"]
+    source: Literal["EMSC", "USGS", "FUNVISIS", "GEOFON", "SIMULATED"]
     magnitude: float
     mag_type: str
     place: str | None = None
@@ -157,6 +157,18 @@ url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 poll_interval_s = 60
 timeout_s = 15
 
+[sources.funvisis]
+enabled = true
+url = "http://www.funvisis.gob.ve/maravilla.json"
+poll_interval_s = 60
+timeout_s = 15
+
+[sources.geofon]
+enabled = true
+url = "http://geofon.gfz.de/fdsnws/event/1/query"
+poll_interval_s = 60
+timeout_s = 15
+
 [dedup]
 distance_km = 100.0
 window_s = 90
@@ -205,6 +217,18 @@ class USGSSource(BaseModel):
     poll_interval_s: int = 60
     timeout_s: int = 15
 
+class FUNVISISSource(BaseModel):
+    enabled: bool = True
+    url: str = "http://www.funvisis.gob.ve/maravilla.json"
+    poll_interval_s: int = 60
+    timeout_s: int = 15
+
+class GEOFONSource(BaseModel):
+    enabled: bool = True
+    url: str = "http://geofon.gfz.de/fdsnws/event/1/query"
+    poll_interval_s: int = 60
+    timeout_s: int = 15
+
 class Dedup(BaseModel):
     distance_km: float = 100.0
     window_s: int = 90
@@ -230,6 +254,8 @@ class Settings(BaseModel):
     filter: Filter = Filter()
     sources_emsc: EMSCSource = EMSCSource()
     sources_usgs: USGSSource = USGSSource()
+    sources_funvisis: FUNVISISSource = FUNVISISSource()
+    sources_geofon: GEOFONSource = GEOFONSource()
     dedup: Dedup = Dedup()
     severity: Severity = Severity()
     notification: Notification = Notification()
@@ -278,5 +304,5 @@ SeismicEvent(
 ## 6. Traceability
 
 `SeismicEvent` ⇄ RF-07/RF-08/RF-13 · `AppState` ⇄ RF-06/RF-10 · `Settings` ⇄ RF-24/RF-12 ·
-`DetectedLocation` ⇄ RF-33.
-Per-source field mapping in `API-SPEC.md §3.1`.
+`DetectedLocation` ⇄ RF-33 · `FUNVISISSource` ⇄ RF-38 · `GEOFONSource` ⇄ RF-39.
+Per-source field mapping in `API-SPEC.md §5.1`.

@@ -74,6 +74,8 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 - **RF-04** — Process EMSC messages with `action` ∈ {`create`, `update`} and `data` as a GeoJSON Feature.
 - **RF-05** — Query **USGS FDSN** over REST as a **low-frequency fallback (every 60 s)** solely to reconcile/recover events not delivered by the WS and to cover small local earthquakes.
 - **RF-06** — Maintain a **persisted cursor** ("since the last event seen") for the USGS query.
+- **RF-38** — Query **FUNVISIS**'s `maravilla.json` (the Venezuelan national seismic network, no real-time push available) via **low-frequency REST polling (every 60 s)** as a **Venezuela-only local coverage** source, catching the small local earthquakes (M2–3) that EMSC/USGS don't catalog. The endpoint is plain HTTP (FUNVISIS offers no valid HTTPS; the data is public). Only earthquakes appearing **after** the agent starts are alerted — the batch already published at startup seeds an in-memory seen-set instead of triggering alerts.
+- **RF-39** — Query **GEOFON** (GFZ Potsdam, Germany)'s `fdsnws-event` REST service as an **additional independent low-frequency polling source (global network)**, providing redundant coverage from a different seismic network than EMSC/USGS, with **no API key required**.
 
 ### 5.2 Normalization
 - **RF-07** — Normalize EMSC and USGS to a **common event schema**: `id`, `magnitude`, `magType`, `place/region`, `lat`, `lon`, `depth_km`, `time_utc`, `source`, `distance_km` to the reference point.
@@ -167,6 +169,8 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | CA-14 | With the OS locale set to Spanish, the alert window, toast, and tray menu appear in Spanish; overriding the language in `config.toml` forces the configured language; an unsupported locale (e.g. French) falls back to English. | RF-35 |
 | CA-15 | With `--tui` on a headless server, the dashboard shows the WS status and, on a relevant event, a **non-dismissable** modal that only ENTER closes (Escape does not); `--simulate --tui` shows the simulated modal without ingestion. | RF-36 |
 | CA-16 | With `country_filter = true` and the user in Venezuela, an earthquake in Colombia/Trinidad within the radius is **not** notified, while an onshore Venezuelan quake and an offshore one near the Venezuelan coast **are** notified; with `country_filter = false` (default) behavior is unchanged. | RF-37 |
+| CA-17 | A small (M2–3) Venezuelan earthquake reported only by **FUNVISIS** (not EMSC/USGS) is polled within ≤ 60 s and generates an alert; the batch already present at first startup does **not** trigger alerts. | RF-38, OBJ-3 |
+| CA-18 | An earthquake reported by **GEOFON** but not by EMSC/USGS is polled within ≤ 60 s and generates an alert; a GEOFON report of the **same** earthquake already alerted via EMSC/USGS/FUNVISIS produces **no** duplicate alert. | RF-39, RF-09, OBJ-3 |
 
 ## 8. Out of scope (v1)
 
@@ -187,6 +191,7 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | Aggressive backoff saturates the endpoint. | Blocking/ban. | Exponential backoff with a cap and *jitter* (Technical Design). |
 | Field differences between sources (`magtype` vs `magType`). | Poorly normalized data. | Normalizer with explicit per-source mapping (API Spec / Data Model). |
 | Gatekeeper/SmartScreen block unsigned installers. | Installation friction. | Document codesigning/notarization and the trust procedure. |
+| FUNVISIS/GEOFON endpoints change format or become unreachable (both are third-party, best-effort public services). | Loss of one redundant source; core EMSC/USGS coverage unaffected. | Each source polls independently with its own timeout/backoff; Supervisor restarts a failing poller without taking down the process (RF-38, RF-39). |
 
 ## 10. Traceability (summary)
 

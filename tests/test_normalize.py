@@ -1,4 +1,4 @@
-"""Tests for the normalizer (RF-07, RF-08, RF-13; mapping in API-SPEC §3.1)."""
+"""Tests for the normalizer (RF-07, RF-08, RF-13; mapping in API-SPEC §5.1)."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def test_normalizes_usgs():
 def test_distance_computed_via_haversine():
     ev = _normalizer().normalize(_USGS)
     assert ev is not None
-    # Caracas -> Morón ≈ 162 km (API-SPEC §3).
+    # Caracas -> Morón ≈ 162 km (API-SPEC §5).
     assert 158 < ev.distance_km < 166
 
 
@@ -148,7 +148,7 @@ def test_invalid_time_returns_none():
 
 def test_unknown_source_returns_none():
     msg = RawMessage(source="SIMULATED", action="create", feature=_EMSC.feature)
-    # The normalizer only maps EMSC/USGS/FUNVISIS; SIMULATED is built by the CLI (Phase 5).
+    # The normalizer maps EMSC/USGS/FUNVISIS/GEOFON; SIMULATED is built by the CLI (Phase 5).
     assert _normalizer().normalize(msg) is None
 
 
@@ -205,6 +205,44 @@ def test_funvisis_time_is_vet_converted_to_utc():
 
 def test_funvisis_malformed_depth_returns_none():
     assert _normalizer().normalize(_funvisis(phoneFormatted="")) is None
+
+
+# --- GEOFON (independent global network, FDSN text) ---
+
+
+def _geofon(**cols):
+    # A GEOFON row pre-split by the poller into a {column: value} dict (API-SPEC §4.3).
+    base = {
+        "EventID": "gfz2020smye",
+        "Time": "2020-01-15T12:00:00.0",
+        "Latitude": "10.60",
+        "Longitude": "-66.93",
+        "Depth/km": "12.0",
+        "MagType": "Mw",
+        "Magnitude": "6.1",
+        "EventLocationName": "NEAR COAST OF VENEZUELA",
+        "EventType": "earthquake",
+    }
+    return RawMessage(source="GEOFON", action="create", feature={**base, **cols})
+
+
+def test_normalizes_geofon():
+    ev = _normalizer().normalize(_geofon())
+    assert isinstance(ev, SeismicEvent)
+    assert ev.source == "GEOFON"
+    assert ev.id == "gfz2020smye"
+    assert ev.magnitude == 6.1
+    assert ev.mag_type == "mw"  # "Mw" normalized to lowercase like EMSC/USGS
+    assert ev.lat == 10.60 and ev.lon == -66.93
+    assert ev.depth_km == 12.0
+    assert ev.place == "NEAR COAST OF VENEZUELA"
+    assert ev.region is None
+    assert ev.time_utc.astimezone(UTC).hour == 12
+    assert ev.lastupdate_utc is None
+
+
+def test_geofon_malformed_magnitude_returns_none():
+    assert _normalizer().normalize(_geofon(Magnitude="")) is None
 
 
 def test_funvisis_malformed_date_returns_none():
