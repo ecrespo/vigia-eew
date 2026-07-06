@@ -30,6 +30,7 @@ from vigia_eew.config import ReferencePoint, Settings, default_config_path
 from vigia_eew.i18n import resolve_locale
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.rest_funvisis import FUNVISISPoller
+from vigia_eew.ingest.rest_geofon import GEOFONPoller
 from vigia_eew.ingest.rest_usgs import RESTReconciler
 from vigia_eew.ingest.ws_emsc import WSIngestor
 from vigia_eew.logging_conf import configure_logging
@@ -108,6 +109,17 @@ class Application:
             sup.add(
                 "funvisis",
                 lambda: FUNVISISPoller(self.cfg.sources_funvisis, raw_queue).run(),
+            )
+        if self.cfg.sources_geofon.enabled:
+            sup.add(
+                "geofon",
+                lambda: GEOFONPoller(
+                    self.cfg.sources_geofon,
+                    self.cfg.reference,
+                    self.cfg.filter,
+                    self.state,
+                    raw_queue,
+                ).run(),
             )
         sup.add("pipeline", lambda: processor.run())
         return sup

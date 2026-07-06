@@ -1,4 +1,4 @@
-"""FUNVISIS polling ingestor — **Venezuela-only** local coverage (RF-05, RNF-03).
+"""FUNVISIS polling ingestor — **Venezuela-only** local coverage (RF-38, RNF-03).
 
 `FUNVISISPoller` polls FUNVISIS's `maravilla.json` every `poll_interval_s`. FUNVISIS
 (the Venezuelan national seismic network) publishes only the ~20 most recent events as

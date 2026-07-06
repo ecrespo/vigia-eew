@@ -45,7 +45,8 @@ vigia-eew/
 │   │   ├── __init__.py         # RawMessage (raw wrapper, source→pipeline)
 │   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconnection)
 │   │   ├── rest_usgs.py        # RESTReconciler (60 s poll, cursor)
-│   │   └── rest_funvisis.py    # FUNVISISPoller (Venezuela-only local coverage, RF-05)
+│   │   ├── rest_funvisis.py    # FUNVISISPoller (Venezuela-only local coverage, RF-38)
+│   │   └── rest_geofon.py      # GEOFONPoller (GFZ Potsdam fdsnws-event, text format, cursor, RF-39)
 │   ├── pipeline/
 │   │   ├── __init__.py         # pipeline docstring
 │   │   ├── normalize.py        # Normalizer (per-source mapping, geo.haversine_km, severity)
@@ -230,6 +231,44 @@ dropped, offshore Venezuela kept. Gate green; ruff + mypy strict clean. No new p
 PyInstaller onefile `LD_LIBRARY_PATH` leak into `systemctl`/`launchctl`/`schtasks`/`xdg-open`/
 audio players.
 
+### Phase 13 — FUNVISIS local coverage source (RF-38, ADR-015)
+
+> Documented retroactively: shipped in v0.4.0 ahead of this table being updated, to bring the
+> SDD artifacts back in sync with the code (RNF-08). Marked ✅ to match `CHANGELOG.md`.
+
+| ID | Task | Depends on | RF | Status |
+|---|---|---|---|---|
+| F13-1 | `ingest/rest_funvisis.py`: `FUNVISISPoller` (poll `maravilla.json`, in-memory seen-set seeded on first poll) | F2-0b | RF-38 | ✅ |
+| F13-2 | `config.py`: `FUNVISISSource` + `[sources.funvisis]` in `config.toml.example` | F1-3 | RF-38 | ✅ |
+| F13-3 | `models.py`: `SeismicEvent.source` gains `"FUNVISIS"` | F1-2 | RF-38 | ✅ |
+| F13-4 | `supervisor.py`: wires the FUNVISIS polling task alongside `ws_task`/`rest_task` | F13-1, F2-3 | RF-38 | ✅ |
+
+Tests: unit coverage for `FUNVISISPoller` (seen-set seeding vs. later-poll novelty, HTTP error
+handling) plus config validation for `[sources.funvisis]`. Gate green: `pytest`, `ruff check .`,
+`mypy src` all pass with FUNVISIS wired in.
+
+### Phase 14 — GEOFON independent global-network source (RF-39, ADR-016)
+
+| ID | Task | Depends on | RF | Status |
+|---|---|---|---|---|
+| F14-1 | `ingest/rest_geofon.py`: `GEOFONPoller` (poll `fdsnws-event`, `format=text`, pipe-delimited parsing, persisted cursor) | F2-0b, F1-5 | RF-39 | ✅ |
+| F14-2 | `config.py`: `GEOFONSource` + `[sources.geofon]` in `config.toml.example` | F1-3 | RF-39 | ✅ |
+| F14-3 | `models.py`: `SeismicEvent.source` gains `"GEOFON"` (+ `AppState.cursor_geofon_ms`, `StateStore.update_geofon_cursor`) | F1-2 | RF-39 | ✅ |
+| F14-4 | `app.py`: wires the GEOFON polling task alongside the existing ones (supervisor stays source-agnostic) | F14-1, F2-3 | RF-39 | ✅ |
+| F14-5 | `pipeline/dedup.py`: cross-source heuristic covers a 4th source without changes (regression tests) | F14-3, F3-3 | RF-09 | ✅ |
+
+Tests: `tests/test_rest_geofon.py` covers the text-format parser (header/row split, non-earthquake
+rows skipped, malformed row discarded without aborting the batch, header-less body ignored), cursor
+advancement + persistence, and HTTP 204/429/5xx/timeout handling; `tests/test_normalize.py` gains a
+GEOFON mapping case (string coercion, `Mw`→lowercase, `Depth/km` column) plus a malformed-value
+discard; `tests/test_config.py` validates `[sources.geofon]`; `tests/test_dedup.py` gains the CA-18
+regression (a GEOFON report of an already-alerted EMSC/USGS/FUNVISIS event is a duplicate, while a
+GEOFON-first event is new); `tests/test_app.py` asserts the `geofon` task wiring. The text-parsing
+branch lives in the poller (which builds a `{column: value}` dict per row), so `RawMessage.feature`
+stays a dict and `Normalizer._map_geofon` mirrors the other sources' field mapping. Gate green:
+327 passed, 3 skipped; ruff + mypy strict clean. No new pip dependency (reuses `httpx`; RNF-06
+unaffected).
+
 ## 3. Traceability matrix: RF → component
 
 | RF | Component(s) | Phase |
@@ -256,6 +295,8 @@ audio players.
 | RF-35 | `i18n.py`, `config.py`, `notify/presentation.py`, `notify/alert_window.py`, `notify/toast.py`, `tray.py` | TBD (placeholder, wiring to be finalized) |
 | RF-36 | `tui.py`, `app.py` (`run_tui`/`_wire_tui`/`_controller_for_tui`), `cli.py` (`--tui`), `pyproject.toml` | F11 |
 | RF-37 | `geocode.py`, `assets/countries.geojson`, `pipeline/filter.py`, `config.py`, `app.py` (`_build_geo_filter`) | F12 |
+| RF-38 | `ingest/rest_funvisis.py`, `config.py`, `models.py`, `supervisor.py` | F13 |
+| RF-39 | `ingest/rest_geofon.py`, `config.py`, `models.py`, `state.py`, `pipeline/normalize.py`, `app.py`, `pipeline/dedup.py` | F14 |
 
 ## 4. Test strategy (summary)
 
@@ -273,7 +314,7 @@ audio players.
 | Dependency | Use | RF/ADR |
 |---|---|---|
 | `websockets` | EMSC WS (native keepalive) | RF-01/ADR-009 |
-| `httpx` | async USGS REST | RF-05/ADR-009 |
+| `httpx` | async USGS/FUNVISIS/GEOFON REST | RF-05/RF-38/RF-39/ADR-009 |
 | `pydantic` (v2) | model/config validation | RF-07/RF-24 |
 | `desktop-notifier` | cross-platform toast | RF-14 |
 | Tkinter (stdlib) | alert window | RF-15/ADR-003 |
@@ -296,3 +337,5 @@ audio players.
 7. **M6**: Phase 10 (system tray icon, RF-34).
 8. **M7**: Phase 11 (headless TUI dashboard `--tui`, RF-36).
 9. **M8**: Phase 12 (country notification filter, RF-37).
+10. **M9**: Phase 13 (FUNVISIS local coverage source, RF-38).
+11. **M10**: Phase 14 (GEOFON independent global-network source, RF-39).

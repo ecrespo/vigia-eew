@@ -17,7 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 # --- Domain type aliases ---
-Source = Literal["EMSC", "USGS", "FUNVISIS", "SIMULATED"]
+Source = Literal["EMSC", "USGS", "FUNVISIS", "GEOFON", "SIMULATED"]
 SeverityLevel = Literal["info", "warning", "critical"]
 Action = Literal["create", "update"]
 
@@ -135,6 +135,7 @@ class AppState(BaseModel):
 
     version: int = 1
     cursor_usgs_ms: int | None = None
+    cursor_geofon_ms: int | None = None
     alerted_ids: list[AlertedId] = Field(default_factory=list)
     recent_signatures: list[EventSignature] = Field(default_factory=list)
     detected_location: DetectedLocation | None = None

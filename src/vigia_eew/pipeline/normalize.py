@@ -1,7 +1,7 @@
-"""Event normalizer (RF-07, RF-08, RF-13; mapping in API-SPEC §3.1).
+"""Event normalizer (RF-07, RF-08, RF-13; mapping in API-SPEC §5.1).
 
-`Normalizer` translates a `RawMessage` (raw EMSC, USGS, or FUNVISIS payload) into the
-common `SeismicEvent` that flows through the rest of the pipeline. It resolves the
+`Normalizer` translates a `RawMessage` (raw EMSC, USGS, FUNVISIS, or GEOFON payload) into
+the common `SeismicEvent` that flows through the rest of the pipeline. It resolves the
 differences between sources:
 
   - EMSC: lowercase `magtype`, ISO-8601 timestamps, id in `properties.unid`,
@@ -11,6 +11,8 @@ differences between sources:
   - FUNVISIS (Venezuela-only): a repurposed GeoJSON schema (`phone`=magnitude,
     `phoneFormatted`=depth, `city`=local time, `postalCode`=local date), local
     Venezuela time (VET) converted to UTC, synthetic id injected by the poller.
+  - GEOFON: FDSN `format=text`, pre-split by the poller into a `{column: value}` dict
+    (all string values), ISO-8601 timestamps, id in `EventID`, `Depth/km` column.
 
 It computes the **derived** fields (`distance_km` via haversine, `severity` via
 thresholds) and requires timestamps to end up tz-aware in UTC (enforced by
@@ -56,6 +58,8 @@ class Normalizer:
                 fields = self._map_usgs(msg)
             elif msg.source == "FUNVISIS":
                 fields = self._map_funvisis(msg)
+            elif msg.source == "GEOFON":
+                fields = self._map_geofon(msg)
             else:
                 self._log.warning("normalize_unknown_source source=%s", msg.source)
                 return None
@@ -121,6 +125,25 @@ class Normalizer:
             "lon": float(coords[0]),
             "depth_km": _parse_km(p["phoneFormatted"]),
             "time_utc": _funvisis_time(p["postalCode"], p["city"]),
+            "lastupdate_utc": None,
+        }
+
+    def _map_geofon(self, msg: RawMessage) -> dict[str, Any]:
+        # GEOFON `format=text` rows are already split by the poller into a
+        # `{column: value}` dict keyed by the FDSN header names (API-SPEC §4.3);
+        # every value is a string, so magnitude/coordinates/depth are coerced here.
+        f = msg.feature
+        return {
+            "id": str(f["EventID"]),
+            "source": "GEOFON",
+            "magnitude": float(f["Magnitude"]),
+            "mag_type": str(f["MagType"]),
+            "place": _clean_text(f.get("EventLocationName")),
+            "region": None,  # GEOFON exposes no separate region; place carries the location.
+            "lat": float(f["Latitude"]),
+            "lon": float(f["Longitude"]),
+            "depth_km": float(f["Depth/km"]),
+            "time_utc": _parse_iso(f["Time"]),
             "lastupdate_utc": None,
         }
 

@@ -83,6 +83,26 @@ def test_cross_source_duplicate(tmp_path):
     assert dedup.classify(usgs) == "duplicate"
 
 
+def test_geofon_duplicate_of_prior_source(tmp_path):
+    # RF-39/CA-18 regression: a GEOFON report of an earthquake already alerted via
+    # EMSC/USGS/FUNVISIS must not re-alert. The heuristic is source-count-agnostic, so a
+    # fourth source needs no change — this guards that it keeps holding.
+    for prior in ("EMSC", "USGS", "FUNVISIS"):
+        dedup, _ = _dedup(tmp_path)
+        dedup.register(_ev(id=f"{prior}-1", source=prior, lat=10.50, lon=-66.90, mag=6.0))
+        geofon = _ev(
+            id="gfz-1", source="GEOFON", lat=10.55, lon=-66.93, mag=6.2,
+            time=_BASE + timedelta(seconds=30),
+        )
+        assert dedup.classify(geofon) == "duplicate", prior
+
+
+def test_geofon_only_new_event_is_not_suppressed(tmp_path):
+    # A GEOFON-first event no other source has reported is genuinely new.
+    dedup, _ = _dedup(tmp_path)
+    assert dedup.classify(_ev(id="gfz-1", source="GEOFON")) == "new"
+
+
 def test_cross_source_far_away_is_new(tmp_path):
     dedup, _ = _dedup(tmp_path)
     dedup.register(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0))

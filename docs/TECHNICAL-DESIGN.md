@@ -33,6 +33,8 @@ External sources ──▶ Ingestion ──▶ Asyncio queue ──▶ Normaliza
 |---|---|---|---|
 | Ingestion | `WSIngestor` (EMSC) | WS connection, keepalive, reconnection, emit raw messages | RF-01..RF-04 |
 | Ingestion | `RESTReconciler` (USGS) | 60 s polling, cursor, emit raw messages | RF-05, RF-06 |
+| Ingestion | `FUNVISISPoller` (FUNVISIS) | 60 s polling of `maravilla.json`, seen-set seeding, emit raw messages | RF-38 |
+| Ingestion | `GEOFONPoller` (GEOFON) | 60 s polling of `fdsnws-event` (text format), cursor, emit raw messages | RF-39 |
 | Normalization | `Normalizer` | Raw→normalized event, distance, severity | RF-07, RF-08, RF-13 |
 | Filter | `GeoFilter` | Radius + minimum magnitude + (opt-in) country | RF-12, RF-37 |
 | Geocoding | `geocode` | Offline lat/lon → country (point-in-polygon) | RF-37 |
@@ -239,7 +241,7 @@ def is_duplicate(ev, recent, alerted_ids):
 ### ADR-008 — No central relay in v1 (one agent per machine)
 - **Context**: avoiding a single point of failure (RNF-02); simplicity for v1.
 - **Decision**: each machine runs its own agent. The migration path to a central relay
-  (FastAPI) with WS *fan-out* reusing the internal contract is **documented** (API Spec §4).
+  (FastAPI) with WS *fan-out* reusing the internal contract is **documented** (API Spec §7).
 - **Alternatives considered and rejected**: a central relay in v1 (SPOF, more ops overhead).
 - **Consequences**: N connections to EMSC (acceptable); the future evolution doesn't break the
   data model.
@@ -302,13 +304,13 @@ def is_duplicate(ev, recent, alerted_ids):
 
 | Member | Type | Direction | Payload | Internal equivalent |
 |---|---|---|---|---|
-| signal `NewAlert` | `(s)` | agent → frontend(s) | `SeismicEvent` as JSON (same schema as API-SPEC §3) | `AlertController._show` |
+| signal `NewAlert` | `(s)` | agent → frontend(s) | `SeismicEvent` as JSON (same schema as API-SPEC §5) | `AlertController._show` |
 | signal `AlertUpdated` | `(s)` | agent → frontend(s) | `SeismicEvent` JSON, `action="update"` (RF-11) | `AlertController._update` |
 | method `Acknowledge` | `(s) -> (b)` | frontend → agent | event `id` | `AlertQueue.acknowledge` → `AlertController._acknowledged` |
 | method `GetActive` | `() -> (s)` | frontend → agent | `""` if there is no active alert, or the current `SeismicEvent` JSON | `AlertController`'s internal state |
 | method `Ping` | `() -> (s)` | frontend → agent | agent version (`"1.0"`) | agent-availability detection |
 
-The internal contract (`SeismicEvent`, API-SPEC §3) is reused verbatim, serialized with
+The internal contract (`SeismicEvent`, API-SPEC §5) is reused verbatim, serialized with
 `model_dump_json()`: a single `string` argument avoids defining a parallel D-Bus *struct* and
 keeps a single source of truth for the schema (the same approach as the ADR-008 relay).
 
@@ -366,7 +368,7 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   **100% manual** (`config.toml`, defaulting to Caracas). A new user who configures nothing ends
   up with a geographic filter centered on a point that isn't theirs, without realizing it.
 - **Decision**: if the user does **not** define `[reference]` in `config.toml`, `Application`
-  detects the location by IP (`geoloc.py`, endpoint documented in `API-SPEC.md` §4) **exactly
+  detects the location by IP (`geoloc.py`, endpoint documented in `API-SPEC.md` §6) **exactly
   once**, before starting the pipeline, and persists it in `state.json` (`detected_location`) so
   the lookup isn't repeated on subsequent startups. If a manual `[reference]` already exists, or
   a location is already cached, the API is **never** called. If detection fails (no network,
@@ -503,6 +505,63 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   and `_build_geo_filter`, used by `execute()`/`run_tui()` (not `--simulate`).
 - **Trade-off**: 1:110m boundaries are coarse near borders (±tens of km); upgrade path to
   1:50m if needed. Acceptable for a best-effort, off-by-default filter.
+
+### ADR-015 — FUNVISIS as a third, Venezuela-only local-coverage source (RF-38)
+
+> Documented retroactively: this decision was implemented and shipped (v0.4.0) ahead of being
+> recorded here; recorded now, together with ADR-016 (GEOFON), to bring the SDD artifacts back
+> in sync with the code (RNF-08).
+
+- **Context**: EMSC and USGS both under-catalog small local Venezuelan earthquakes (M2–3) — they
+  focus on regionally/globally significant events. FUNVISIS, the Venezuelan national seismic
+  network, is the authoritative source for these, but offers no real-time push channel, only the
+  `maravilla.json` file its own web map polls.
+- **Decision**: a third ingestor, `FUNVISISPoller` (`rest_funvisis.py`), polls
+  `http://www.funvisis.gob.ve/maravilla.json` every 60 s (RF-38), mirroring the shape of
+  `RESTReconciler` (ADR-002) but simpler: FUNVISIS has no `create`/`update` distinction and no
+  persisted cursor — each poll returns the current top-N batch, and an **in-memory seen-set**,
+  seeded from the very first poll without alerting, distinguishes "already seen" from "new since
+  the agent started." This avoids replaying FUNVISIS's published history as an alert burst on
+  every restart.
+- **Plain HTTP**: FUNVISIS offers no valid HTTPS for this endpoint; accepted as-is since the data
+  is public and read-only (RNF-09 unaffected — no credentials or user data cross this channel).
+- **Alternatives considered and rejected**: (a) scraping FUNVISIS's web map HTML — more fragile
+  than its own JSON data file; (b) skipping Venezuela-local coverage entirely — rejected because
+  it directly serves OBJ-3 ("zero missed events") for the project's primary geography.
+- **Consequences**: a new ingestion task in the `Supervisor` (alongside `ws_task`/`rest_task`); a
+  new `[sources.funvisis]` config section (`FUNVISISSource`, `config.py`); the `SeismicEvent.source`
+  literal gains `"FUNVISIS"` (`DATA-MODEL.md`); FUNVISIS events, being Venezuela-only, naturally
+  fall outside `radius_km` for non-Venezuelan users and are filtered out like any other distant
+  event, requiring no special-casing in `GeoFilter`.
+
+### ADR-016 — GEOFON as a fourth, independent global-network polling source (RF-39)
+
+- **Context**: EMSC and USGS are both authoritative but can occasionally miss or delay the same
+  event (shared blind spots, e.g. a WS message drop coinciding with a USGS reporting lag). A
+  fully independent global network, polled the same low-frequency way as USGS, adds redundancy
+  without a new class of failure mode.
+- **Decision**: a fourth ingestor, `GEOFONPoller` (`rest_geofon.py`), polls GEOFON's (GFZ Potsdam)
+  standard **`fdsnws-event`** REST service every 60 s (RF-39), with a persisted cursor the same
+  way as `RESTReconciler` (ADR-002) — architecturally GEOFON is "USGS's sibling," not FUNVISIS's:
+  a global, cursor-based, `starttime`-driven polling loop, not a seen-set batch poll.
+- **Format choice — text, not GeoJSON**: unlike USGS's fdsnws-event implementation, GEOFON's
+  GeoJSON support was **not confirmed** during verification (2026-07-05); its documented and
+  confirmed `format=text` response is a pipe-delimited table (`API-SPEC.md` §4.3). `GEOFONPoller`
+  therefore parses this text format directly — it does **not** reuse `RESTReconciler`'s
+  GeoJSON-parsing code path, even though both sources are FDSN-family and structurally similar.
+  QuakeML (XML) is available from the same endpoint but is deliberately not used, to avoid adding
+  an XML-parsing dependency (RNF-06).
+- **Alternatives considered and rejected**: (a) requesting `format=geojson` from GEOFON on the
+  assumption it mirrors USGS — rejected because it was not confirmed live, and a silent format
+  mismatch would be worse than an explicit text-parsing path; (b) sharing a single generic
+  "FDSN poller" class parametrized by format between USGS and GEOFON — deferred: the two formats
+  (GeoJSON vs. pipe-text) differ enough that a shared abstraction would add indirection without
+  clear benefit yet; revisit if a third FDSN-family source is added.
+- **Consequences**: a new ingestion task in the `Supervisor`; a new `[sources.geofon]` config
+  section (`GEOFONSource`, `config.py`); the `SeismicEvent.source` literal gains `"GEOFON"`
+  (`DATA-MODEL.md`); cross-source dedup (ADR-004) now compares across **four** sources instead of
+  three — the heuristic itself (≤100 km, ≤90 s, ≤0.5 mag) is unchanged, since it was already
+  source-count-agnostic.
 
 ## 12. Traceability
 

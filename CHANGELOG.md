@@ -4,6 +4,20 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [0.5.0] - 2026-07-06
+
+### Added
+- **GEOFON as a fourth ingestion source** (`[sources.geofon]`, RF-39) — an independent
+  global seismic network operated by GFZ Potsdam. It adds redundant global coverage from a
+  **different network** than EMSC/USGS, so an outage or missed catalog entry at one provider
+  no longer leaves the agent blind. Polled every 60 s via its standard FDSN `fdsnws-event`
+  service (same family as USGS) with **no API key**; the response is parsed as pipe-delimited
+  text (`format=text`), not GeoJSON. Uses a persisted `starttime` cursor like the USGS backup,
+  participates fully in cross-source deduplication (a GEOFON report of an already-alerted event
+  does not re-alert), and runs as its own supervised, fault-isolated task. Enabled by default;
+  turn it off with `[sources.geofon] enabled = false`. New module `ingest/rest_geofon.py`; no
+  new dependency (reuses `httpx`).
+
 ## [0.4.1] - 2026-07-05
 
 ### Fixed
