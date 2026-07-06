@@ -88,7 +88,7 @@ class GEOFONSource(BaseModel):
     """
 
     enabled: bool = True
-    url: str = "http://geofon.gfz.de/fdsnws/event/1/query"
+    url: str = "https://geofon.gfz.de/fdsnws/event/1/query"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
 

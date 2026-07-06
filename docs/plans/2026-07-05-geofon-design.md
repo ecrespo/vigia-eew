@@ -56,7 +56,7 @@ code exists yet. This document, together with the updated `PRD.md` (RF-39), `API
 ## Components (planned — Phase 14)
 
 - `ingest/rest_geofon.py` — `GEOFONPoller`: `httpx`-based polling of
-  `http://geofon.gfz.de/fdsnws/event/1/query?format=text&...`, parses the pipe-delimited
+  `https://geofon.gfz.de/fdsnws/event/1/query?format=text&...`, parses the pipe-delimited
   response, emits `RawMessage`s onto `raw_queue`; persisted cursor via `StateStore`.
 - `pipeline/normalize.py` — new text-format parsing branch for GEOFON payloads, mapping
   into `SeismicEvent` (source=`"GEOFON"`); reuses `geo.py::haversine_km` and severity

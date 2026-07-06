@@ -165,7 +165,7 @@ timeout_s = 15
 
 [sources.geofon]
 enabled = true
-url = "http://geofon.gfz.de/fdsnws/event/1/query"
+url = "https://geofon.gfz.de/fdsnws/event/1/query"
 poll_interval_s = 60
 timeout_s = 15
 
@@ -225,7 +225,7 @@ class FUNVISISSource(BaseModel):
 
 class GEOFONSource(BaseModel):
     enabled: bool = True
-    url: str = "http://geofon.gfz.de/fdsnws/event/1/query"
+    url: str = "https://geofon.gfz.de/fdsnws/event/1/query"
     poll_interval_s: int = 60
     timeout_s: int = 15
 

@@ -252,7 +252,7 @@ be discarded, not the whole batch):
 
 ### 4.1 Endpoint
 ```
-GET http://geofon.gfz.de/fdsnws/event/1/query
+GET https://geofon.gfz.de/fdsnws/event/1/query
 ```
 GEOFON is the global seismic network operated by the GFZ German Research Centre for Geosciences
 (Potsdam). It exposes a standard **FDSN `fdsnws-event`** web service (the same family of service
@@ -274,7 +274,7 @@ catch events either EMSC or USGS might miss or classify differently.
 
 Example (verified live):
 ```
-http://geofon.gfz.de/fdsnws/event/1/query?eventid=gfz2020smye&format=text
+https://geofon.gfz.de/fdsnws/event/1/query?eventid=gfz2020smye&format=text
 ```
 
 ### 4.3 Response format (FDSN pipe-delimited text)
