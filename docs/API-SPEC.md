@@ -5,7 +5,7 @@
 | Document | Contract of the sources consumed by Vigía + internal normalized schema |
 | Version | 1.0 (draft for review) |
 | Status | 🟡 Pending approval |
-| Related | `PRD.md` (RF-01..RF-11, RF-38, RF-39), `DATA-MODEL.md`, `ARCHITECTURE.md` |
+| Related | `PRD.md` (RF-01..RF-11, RF-38, RF-39, RF-41), `DATA-MODEL.md`, `ARCHITECTURE.md` |
 
 > Vigía **consumes** four external contracts (input) — EMSC, USGS, FUNVISIS, GEOFON — and
 > defines **one** internal contract (the normalized event) that the rest of the system produces
@@ -123,6 +123,12 @@ https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=10.4806
 - The `time` (epoch ms) of the **most recently processed event** is persisted.
 - Each poll queries with `starttime` = cursor (or `updatedafter` to capture revisions).
 - After processing, the cursor advances to the maximum `time` seen. The cursor survives restarts (see `DATA-MODEL.md`).
+- **Bounded backlog on first/stale use (RF-41, ADR-017)**: if the persisted cursor is `None`
+  (fresh install) or older than **00:00 local time today** (`[notification] timezone`), the
+  effective `starttime` sent is floored at that local midnight instead of being omitted or left
+  at a stale multi-day-old value. This does not replace the freshness filter (RF-40, applied
+  downstream on every event regardless of source) — it only bounds how much history this
+  particular query fetches.
 
 ### 2.4 Response format (GeoJSON `FeatureCollection`)
 Confirmed live (trimmed to relevant fields):
@@ -270,7 +276,7 @@ catch events either EMSC or USGS might miss or classify differently.
 | `maxradius` | derived from `maxradiuskm` (config) | fdsnws-event expresses radius in **degrees**, not km; converted at query time |
 | `minmagnitude` | `2.5` | Minimum magnitude — from config (RF-12) |
 | `orderby` | `time` | Most recent first |
-| `starttime` | **persisted cursor** | "since the last event seen", same strategy as USGS (§2.3) |
+| `starttime` | **persisted cursor** | "since the last event seen", same strategy as USGS (§2.3), including the local-midnight floor on a `None`/stale cursor (RF-41) |
 
 Example (verified live):
 ```

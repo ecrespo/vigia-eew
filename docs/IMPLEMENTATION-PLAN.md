@@ -269,6 +269,27 @@ stays a dict and `Normalizer._map_geofon` mirrors the other sources' field mappi
 327 passed, 3 skipped; ruff + mypy strict clean. No new pip dependency (reuses `httpx`; RNF-06
 unaffected).
 
+### Phase 15 — Event freshness & state hygiene (RF-40, RF-41, RF-42, ADR-017, ADR-018)
+
+> Closes 3 gaps found auditing the 4-source implementation against the requirement "show only
+> today's earthquakes, first source to report a given quake wins, and don't leak state forever":
+> (1) no day-of-event filter existed at all; (2) USGS/GEOFON's first poll (or a poll after a
+> stale cursor) could fetch a multi-day backlog; (3) `StateStore.prune()` was dead code — written,
+> unit-tested, never called.
+
+| ID | Task | Depends on | RF | Status |
+|---|---|---|---|---|
+| F15-1 | `config.py`: `Filter.today_only: bool = True`; `config.toml.example` documents `[filter] today_only` | F1-3 | RF-40 | ⏳ |
+| F15-2 | `pipeline/filter.py`: `GeoFilter` gains a freshness check — event's `time_utc` converted to `[notification] timezone`'s local day must equal "today" at an **injected clock**'s current time; fail-safe (inert) if the timezone string is invalid | F15-1, F3-2 | RF-40 | ⏳ |
+| F15-3 | `app.py`: `_build_geo_filter` passes `self.cfg.notification.timezone` (and the real clock) into `GeoFilter`, mirroring how it already wires the country filter | F15-2 | RF-40 | ⏳ |
+| F15-4 | `ingest/rest_usgs.py` + `ingest/rest_geofon.py`: `_build_params` floors the effective `starttime` at 00:00 local time (`[notification] timezone`) whenever the persisted cursor is `None` **or** older than that floor | F15-1, F2-2, F14-1 | RF-41 | ⏳ |
+| F15-5 | `pipeline/dedup.py`: `Deduplicator.register()` calls `self._state.prune()` immediately before `save()` | F1-5, F3-3 | RF-42 | ⏳ |
+| F15-6 | Tests: `test_filter.py` (freshness pass/discard, injected clock, invalid-timezone fail-safe), `test_rest_usgs.py`/`test_rest_geofon.py` (starttime floored on `None`/stale cursor, untouched when fresh), `test_dedup.py` (`register()` prunes stale entries before persisting), `test_config.py` (`today_only` default/override) | F15-2, F15-4, F15-5 | RF-40, RF-41, RF-42 | ⏳ |
+
+> Design rationale for all 3 items lives in `TECHNICAL-DESIGN.md` ADR-017 (RF-40/RF-41) and
+> ADR-018 (RF-42) — including why "local day" and not "UTC day", why the query floor doesn't
+> replace the pipeline filter, and why pruning is hooked into `register()` rather than a timer.
+
 ## 3. Traceability matrix: RF → component
 
 | RF | Component(s) | Phase |
@@ -297,6 +318,9 @@ unaffected).
 | RF-37 | `geocode.py`, `assets/countries.geojson`, `pipeline/filter.py`, `config.py`, `app.py` (`_build_geo_filter`) | F12 |
 | RF-38 | `ingest/rest_funvisis.py`, `config.py`, `models.py`, `supervisor.py` | F13 |
 | RF-39 | `ingest/rest_geofon.py`, `config.py`, `models.py`, `state.py`, `pipeline/normalize.py`, `app.py`, `pipeline/dedup.py` | F14 |
+| RF-40 | `pipeline/filter.py`, `config.py`, `app.py` | F15 |
+| RF-41 | `ingest/rest_usgs.py`, `ingest/rest_geofon.py`, `config.py` | F15 |
+| RF-42 | `pipeline/dedup.py`, `state.py` | F15 |
 
 ## 4. Test strategy (summary)
 
@@ -305,6 +329,7 @@ unaffected).
 | Unit | normalization (EMSC/USGS mapping), haversine, severity, dedup heuristic | RF-07..RF-13 |
 | Integration | ingestion with a fake WS server + recorded USGS responses (fixtures) | RF-01..RF-06 |
 | Resilience | fault injection: WS shutdown, 429/5xx, invalid JSON, restart | RNF-03, CA-02..CA-07 |
+| Unit | freshness filter with an injected clock (today/yesterday/tomorrow, invalid timezone fail-safe), REST `starttime` floor on `None`/stale cursor, `Deduplicator.register()` pruning | RF-40, RF-41, RF-42, CA-19..CA-21 |
 | Manual/E2E | `--simulate` on all 3 OSes (undismissable alert, focus, sound) | CA-01 |
 
 > Fixtures: use the real verified events (M4.3 Morón, M4.5 Boca de Aroa) and the simulated M6.1.
@@ -339,3 +364,4 @@ unaffected).
 9. **M8**: Phase 12 (country notification filter, RF-37).
 10. **M9**: Phase 13 (FUNVISIS local coverage source, RF-38).
 11. **M10**: Phase 14 (GEOFON independent global-network source, RF-39).
+12. **M11**: Phase 15 (event freshness filter, bounded REST backlog, `prune()` wiring — RF-40, RF-41, RF-42).

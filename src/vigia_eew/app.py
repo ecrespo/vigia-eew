@@ -103,6 +103,7 @@ class Application:
                     self.cfg.filter,
                     self.state,
                     raw_queue,
+                    timezone=self.cfg.notification.timezone,
                 ).run(),
             )
         if self.cfg.sources_funvisis.enabled:
@@ -119,6 +120,7 @@ class Application:
                     self.cfg.filter,
                     self.state,
                     raw_queue,
+                    timezone=self.cfg.notification.timezone,
                 ).run(),
             )
         sup.add("pipeline", lambda: processor.run())
@@ -138,15 +140,19 @@ class Application:
         Fail-safe: if the filter is enabled but the user's country can't be determined,
         the filter stays inert (never suppresses alerts on a detection gap).
         """
+        timezone = self.cfg.notification.timezone
         if not self.cfg.filter.country_filter:
-            return GeoFilter(self.cfg.filter)
+            return GeoFilter(self.cfg.filter, timezone=timezone)
         user_country = self._resolve_user_country()
         if user_country is None:
             self._log.warning("country_filter_no_country_using_none")
-            return GeoFilter(self.cfg.filter)
+            return GeoFilter(self.cfg.filter, timezone=timezone)
         self._log.info("country_filter_active country=%s", user_country)
         return GeoFilter(
-            self.cfg.filter, user_country=user_country, country_of=geocode.country_of
+            self.cfg.filter,
+            user_country=user_country,
+            country_of=geocode.country_of,
+            timezone=timezone,
         )
 
     def _build_controller(

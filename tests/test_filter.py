@@ -27,6 +27,9 @@ def _event(
 
 
 def _filter(**kw):
+    # today_only defaults off here: these radius/magnitude/country tests use a fixed
+    # 2026-06-28 event date unrelated to freshness, which has its own tests below.
+    kw.setdefault("today_only", False)
     return GeoFilter(Filter(**kw))
 
 
@@ -57,6 +60,7 @@ def _country_filter(user_country, country_of, **kw):
     kw.setdefault("radius_km", 300)
     kw.setdefault("min_magnitude", 2.5)
     kw.setdefault("country_filter", True)
+    kw.setdefault("today_only", False)
     return GeoFilter(Filter(**kw), user_country=user_country, country_of=country_of)
 
 
@@ -90,3 +94,80 @@ def test_country_filter_without_user_country_is_inactive():
 def test_country_filter_never_overrides_radius():
     f = _country_filter("VE", lambda lat, lon: "VE")
     assert f.accepts(_event(400.0, 6.0)) is False  # still rejected by radius
+
+
+# --- Freshness filter (RF-40): only alert on the current local calendar day ---
+
+
+def _fresh_event(time_utc, *, distance_km=50.0, magnitude=4.0):
+    return SeismicEvent(
+        id="x",
+        source="USGS",
+        magnitude=magnitude,
+        mag_type="mb",
+        lat=10.0,
+        lon=-66.0,
+        depth_km=10.0,
+        time_utc=time_utc,
+        distance_km=distance_km,
+        severity="info",
+    )
+
+
+def _freshness_filter(*, now, timezone="UTC", today_only=True):
+    return GeoFilter(Filter(today_only=today_only), timezone=timezone, now=now)
+
+
+def test_freshness_accepts_event_from_today():
+    now = lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC)  # noqa: E731
+    f = _freshness_filter(now=now)
+    event = _fresh_event(datetime(2026, 7, 17, 9, 0, tzinfo=UTC))
+    assert f.accepts(event) is True
+
+
+def test_freshness_rejects_event_from_yesterday():
+    now = lambda: datetime(2026, 7, 17, 1, 0, tzinfo=UTC)  # noqa: E731
+    f = _freshness_filter(now=now)
+    event = _fresh_event(datetime(2026, 7, 16, 23, 0, tzinfo=UTC))
+    assert f.accepts(event) is False
+
+
+def test_freshness_rejects_event_from_tomorrow():
+    # A clock-skew/edge case, not expected in practice, but the rule is symmetric:
+    # only "today" passes, not "today or later".
+    now = lambda: datetime(2026, 7, 17, 23, 0, tzinfo=UTC)  # noqa: E731
+    f = _freshness_filter(now=now)
+    event = _fresh_event(datetime(2026, 7, 18, 1, 0, tzinfo=UTC))
+    assert f.accepts(event) is False
+
+
+def test_freshness_uses_local_day_not_utc_day():
+    # 21:00 local (America/Caracas, UTC-4) on the 17th is 01:00 UTC on the 18th.
+    # Using the local day (not UTC) must still treat this as "today" if `now` is the
+    # same local evening.
+    now = lambda: datetime(2026, 7, 18, 0, 30, tzinfo=UTC)  # 2026-07-17 20:30 VET  # noqa: E731
+    f = _freshness_filter(now=now, timezone="America/Caracas")
+    event = _fresh_event(datetime(2026, 7, 18, 1, 0, tzinfo=UTC))  # 2026-07-17 21:00 VET
+    assert f.accepts(event) is True
+
+
+def test_freshness_disabled_keeps_old_event():
+    now = lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC)  # noqa: E731
+    f = _freshness_filter(now=now, today_only=False)
+    event = _fresh_event(datetime(2020, 1, 1, tzinfo=UTC))
+    assert f.accepts(event) is True
+
+
+def test_freshness_invalid_timezone_is_inert_failsafe():
+    now = lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC)  # noqa: E731
+    f = _freshness_filter(now=now, timezone="Not/AZone")
+    event = _fresh_event(datetime(2020, 1, 1, tzinfo=UTC))  # would otherwise be rejected
+    assert f.accepts(event) is True  # inert: never silently suppresses
+
+
+def test_freshness_never_overrides_radius_or_magnitude():
+    now = lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC)  # noqa: E731
+    f = _freshness_filter(now=now)
+    today = datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    assert f.accepts(_fresh_event(today, distance_km=400.0)) is False  # still rejected
+    assert f.accepts(_fresh_event(today, magnitude=1.0)) is False  # still rejected

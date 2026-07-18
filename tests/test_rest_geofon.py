@@ -64,9 +64,12 @@ class _FakeClient:
         return self._resp
 
 
-def _poller(tmp_path, client, *, sleep=None):
+def _poller(tmp_path, client, *, sleep=None, now=None, timezone="UTC"):
     state = StateStore(tmp_path / "state.json")
     state.load()
+    kwargs = {"timezone": timezone}
+    if now is not None:
+        kwargs["now"] = now
     poller = GEOFONPoller(
         GEOFONSource(),
         ReferencePoint(),
@@ -75,6 +78,7 @@ def _poller(tmp_path, client, *, sleep=None):
         asyncio.Queue(),
         client=client,
         sleep=sleep or asyncio.sleep,
+        **kwargs,
     )
     return poller, state
 
@@ -82,9 +86,11 @@ def _poller(tmp_path, client, *, sleep=None):
 # --- Query construction (API-SPEC §4.2) ---
 
 
-async def test_fixed_params_and_no_cursor(tmp_path):
+async def test_fixed_params(tmp_path):
     client = _FakeClient(_FakeResp(text=_body()))
-    poller, _ = _poller(tmp_path, client)
+    poller, _ = _poller(
+        tmp_path, client, now=lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC)
+    )
     await poller.poll_once()
 
     params = client.calls[0]["params"]
@@ -95,17 +101,62 @@ async def test_fixed_params_and_no_cursor(tmp_path):
     assert params["maxradius"] == pytest.approx(Filter().radius_km / _KM_PER_DEGREE)
     assert params["minmagnitude"] == Filter().min_magnitude
     assert params["orderby"] == "time"
-    assert "starttime" not in params  # no previous cursor
 
 
-async def test_params_include_starttime_with_cursor(tmp_path):
+# --- Bounded backlog floor (RF-41, ADR-017) ---
+
+
+async def test_no_cursor_uses_local_midnight_floor(tmp_path):
     client = _FakeClient(_FakeResp(text=_body()))
-    poller, state = _poller(tmp_path, client)
+    poller, _ = _poller(
+        tmp_path, client, now=lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC)
+    )
+    await poller.poll_once()
+
+    params = client.calls[0]["params"]
+    assert params["starttime"] == "2026-07-17T00:00:00"
+
+
+async def test_fresh_cursor_is_honored_unchanged(tmp_path):
+    client = _FakeClient(_FakeResp(text=_body()))
+    poller, state = _poller(
+        tmp_path, client, now=lambda: datetime(2020, 1, 15, 20, 0, tzinfo=UTC)
+    )
+    state.update_geofon_cursor(_ms("2020-01-15T12:00:00"))  # same local day as `now`
+    await poller.poll_once()
+
+    params = client.calls[0]["params"]
+    assert params["starttime"].startswith("2020-01-15T12:00:00")
+
+
+async def test_stale_cursor_is_floored_to_local_midnight(tmp_path):
+    client = _FakeClient(_FakeResp(text=_body()))
+    poller, state = _poller(
+        tmp_path, client, now=lambda: datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    )
+    state.update_geofon_cursor(_ms("2020-01-15T12:00:00"))  # years before `now`
+    await poller.poll_once()
+
+    params = client.calls[0]["params"]
+    assert params["starttime"] == "2026-07-17T00:00:00"
+
+
+async def test_invalid_timezone_falls_back_to_raw_cursor(tmp_path):
+    client = _FakeClient(_FakeResp(text=_body()))
+    poller, state = _poller(tmp_path, client, timezone="Not/AZone")
     state.update_geofon_cursor(_ms("2020-01-15T12:00:00"))
     await poller.poll_once()
 
     params = client.calls[0]["params"]
     assert params["starttime"].startswith("2020-01-15T12:00:00")
+
+
+async def test_invalid_timezone_with_no_cursor_omits_starttime(tmp_path):
+    client = _FakeClient(_FakeResp(text=_body()))
+    poller, _ = _poller(tmp_path, client, timezone="Not/AZone")
+    await poller.poll_once()
+
+    assert "starttime" not in client.calls[0]["params"]
 
 
 # --- Text parsing and emission (API-SPEC §4.3) ---

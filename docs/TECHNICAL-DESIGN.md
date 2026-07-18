@@ -36,7 +36,7 @@ External sources ──▶ Ingestion ──▶ Asyncio queue ──▶ Normaliza
 | Ingestion | `FUNVISISPoller` (FUNVISIS) | 60 s polling of `maravilla.json`, seen-set seeding, emit raw messages | RF-38 |
 | Ingestion | `GEOFONPoller` (GEOFON) | 60 s polling of `fdsnws-event` (text format), cursor, emit raw messages | RF-39 |
 | Normalization | `Normalizer` | Raw→normalized event, distance, severity | RF-07, RF-08, RF-13 |
-| Filter | `GeoFilter` | Radius + minimum magnitude + (opt-in) country | RF-12, RF-37 |
+| Filter | `GeoFilter` | Radius + minimum magnitude + (opt-in) country + (default-on) today-only freshness | RF-12, RF-37, RF-40 |
 | Geocoding | `geocode` | Offline lat/lon → country (point-in-polygon) | RF-37 |
 | Dedup | `Deduplicator` | Cross-source heuristic; updates; persisted ids | RF-09..RF-11 |
 | Notification | `Notifier` (toast) + `AlertWindow` (overlay) + `AlertQueue` | Toast + window + queue + sound | RF-14..RF-21 |
@@ -120,6 +120,10 @@ def is_duplicate(ev, recent, alerted_ids):
 - **Country filter** (RF-37, opt-in, ADR-014): additionally discard an event that falls
   **positively inside another country** (offshore/ocean/unknown events are kept). Off by
   default.
+- **Freshness filter** (RF-40, opt-out, ADR-017): additionally discard an event whose local
+  calendar day (per `[notification] timezone`) isn't **today**. On by default
+  (`[filter] today_only = true`); fail-safe like the country filter — inert if "today" can't
+  be computed.
 - **Severity** (RF-13): configurable thresholds; by default `<4 info`, `4–5.5 warning`,
   `5.5+ critical`. Each level defines the alert's **color** and **sound profile**.
 - **Reference point** (RF-12/RF-33): if the user doesn't define `[reference]`, `Application`
@@ -130,9 +134,13 @@ def is_duplicate(ev, recent, alerted_ids):
 - Format: **JSON** in the user's data directory (`platformdirs`): e.g.
   `~/.local/share/vigia-eew/state.json` (Linux), `%LOCALAPPDATA%` (Windows),
   `~/Library/Application Support` (macOS).
-- Content: `usgs_cursor` (epoch ms), `alerted_ids` (pruned by age), `recent_signatures`,
-  `detected_location` (cache of the IP geolocation, RF-33).
+- Content: `cursor_usgs_ms`/`cursor_geofon_ms` (epoch ms), `alerted_ids` (pruned by age),
+  `recent_signatures`, `detected_location` (cache of the IP geolocation, RF-33).
 - **Atomic** writes (write to temp + `os.replace`) to avoid corruption on crash.
+- **Pruning is wired into the write path** (RF-42, ADR-018): `Deduplicator.register()` calls
+  `StateStore.prune()` immediately before `save()`, so `alerted_ids`/`recent_signatures` older
+  than `MAX_AGE` (24 h) are dropped on every alert. Previously `prune()` existed with unit
+  coverage but was never invoked from any run path — the state file grew unbounded.
 - Schema in `DATA-MODEL.md`.
 
 ## 8. Error handling and reconnection — RNF-03
@@ -562,6 +570,94 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   (`DATA-MODEL.md`); cross-source dedup (ADR-004) now compares across **four** sources instead of
   three — the heuristic itself (≤100 km, ≤90 s, ≤0.5 mag) is unchanged, since it was already
   source-count-agnostic.
+
+### ADR-017 — Local-day freshness filter, with a bounded REST polling floor (RF-40, RF-41)
+
+- **Context**: none of the 4 ingestors filter by *when* an event occurred, only by distance and
+  magnitude (RF-12). Two gaps follow from this: (a) a REST reconciler's first poll after a fresh
+  install, or after a persisted cursor goes stale (agent off for days), queries USGS/GEOFON with
+  no lower time bound or a multi-day-old one, potentially surfacing a backlog of earthquakes from
+  previous days; (b) even without a stale cursor, nothing stops an old event from being alerted if
+  it's merely "new" to `Deduplicator` (never alerted before) — `alerted_ids`/`recent_signatures`
+  say nothing about *when* the earthquake happened, only whether it was already alerted.
+- **Decision**: add a **freshness check** to `GeoFilter` (RF-40): an event is discarded unless its
+  `time_utc`, converted to the **local calendar day** of `[notification] timezone` (default
+  `America/Caracas`), equals "today" at evaluation time. This is the authoritative rule — it
+  applies uniformly to all 4 sources, regardless of when/how the event reaches the pipeline, and
+  runs **before** `Deduplicator.classify()` (same ordering as the existing radius/magnitude/country
+  checks), so a stale event never reaches — and therefore never pollutes — the "first reporter
+  wins" dedup state.
+  - Config: `[filter] today_only` (default **`true`**, distinct from RF-37's default-`false`
+    because this is an explicit, always-desired product requirement, not an opt-in narrowing).
+  - **Fail-safe** (same philosophy as RF-33/RF-37): if the local day can't be computed — an
+    invalid/unsupported IANA timezone string in config — the filter logs a warning once and stays
+    **inert** (never suppresses) rather than risking a silently dropped real alert.
+  - The clock is **injected** (`now: Callable[[], datetime] = lambda: datetime.now(UTC)`), the
+    same DI pattern the project already uses for `sleep`/`connect`/`client` — required for
+    deterministic tests (freeze "today" without mocking the system clock).
+  - Additionally (RF-41), `RESTReconciler` (`rest_usgs.py`) and `GEOFONPoller`
+    (`rest_geofon.py`) floor the query's effective `starttime` at **00:00 local time** (converted
+    to UTC) whenever the persisted cursor is `None` **or** older than that floor. This does not
+    change what gets *alerted* (RF-40 already guarantees that) — it bounds how much irrelevant
+    history is fetched and parsed on catch-up, keeping the query itself proportionate: a fresh
+    install or a week-long outage shouldn't make the very first poll pull days of backlog just to
+    have it discarded downstream.
+- **Alternatives considered and rejected**:
+  - *Only implement the query-side floor (RF-41) without the pipeline filter (RF-40)*: rejected —
+    it doesn't cover EMSC (a push channel with no `starttime` concept) or FUNVISIS (a seen-set
+    poller, not cursor-based), and a bug in the floor computation would have no downstream
+    safety net.
+  - *Only implement the pipeline filter (RF-40) without the query floor (RF-41)*: considered
+    sufficient for **correctness** (no old-day alert would ever fire), but rejected on its own
+    because a stale cursor after a long outage would still make USGS/GEOFON fetch and parse a
+    multi-day backlog every restart, just to discard all of it — wasteful and noisier logs.
+  - *Use UTC calendar day instead of local day*: rejected — Venezuela is UTC-4, so a UTC-day
+    boundary falls at 8:00 pm local time; an earthquake at 9:00 pm local (still "today" to the
+    user, matching the local clock shown per RF-18) would be wrongly treated as "yesterday" (UTC)
+    for four hours. Local day, consistent with the presentation layer, avoids this mismatch.
+  - *Hardcode `today_only = true` with no config knob*: rejected for consistency with the rest of
+    the filter stack (RF-12, RF-37 are both configurable) and to leave an escape hatch if a
+    future use case needs historical catch-up (e.g. a demo/backfill run).
+- **Consequences**: `Filter` (`config.py`) gains `today_only: bool = True`; `GeoFilter.accepts`
+  gains a freshness check with an injectable clock and the configured timezone; `RESTReconciler`
+  and `GEOFONPoller` gain a "floor `starttime` at local midnight" step in `_build_params`, reading
+  `[notification] timezone` (a small new coupling from `ingest/` to `Notification` config, mirrors
+  the existing coupling to `Filter`/`ReferencePoint`); no new pip dependency (`zoneinfo` is
+  stdlib, already used by `pipeline/normalize.py` for FUNVISIS's local-time conversion).
+
+### ADR-018 — Wire the dead `StateStore.prune()` into the alert-registration path (RF-42)
+
+- **Context**: `state.py::StateStore.prune()` and the `MAX_AGE = timedelta(hours=24)` constant
+  have existed since the original state-persistence phase (F1-5) and have their own unit test
+  (`test_state.py::test_prune_by_age`), but **no run path ever calls `prune()`** — not
+  `Deduplicator`, not `Processor`, not `Application`. `alerted_ids` and `recent_signatures` grow
+  for the entire lifetime of the process, unbounded. This was found while investigating a report
+  of the agent only ever alerting on FUNVISIS events; it turned out to be a separate, real bug
+  (unbounded state growth) discovered alongside the actual freshness gap (RF-40/RF-41).
+- **Decision**: `Deduplicator.register()` calls `self._state.prune()` **immediately before**
+  `save()`, in addition to (not instead of) the existing `register_alerted()`/`add_signature()`
+  calls. This is the natural hook: pruning only needs to happen at the points where the state
+  actually grows (a new alert being registered), and `register()` is already the sole call site
+  for that growth plus the following `save()`.
+- **Alternatives considered and rejected**:
+  - *A separate periodic pruning task in the `Supervisor`* (e.g. once an hour): more moving parts
+    (a fifth long-lived task, its own backoff/guard) for no behavioral gain — pruning has no
+    externally visible effect until the next `save()` anyway, so tying it to `register()` is
+    equivalent in practice and far simpler.
+  - *Prune on every `Processor.process_one()` call, not just on `register()`*: rejected —
+    `already_alerted()`/cross-source matching read `self._state` in memory on every event
+    regardless of pruning; pruning more often only matters for *disk* growth, which only happens
+    on `save()`, itself only called from `register()`.
+  - *Leave `MAX_AGE` unconfigurable*: kept as-is (not exposed in `config.toml`) — it's an
+    internal dedup/state-hygiene knob, not a user-facing behavior like `[filter]` or `[dedup]`;
+    no requirement asked for it to be tunable.
+- **Consequences**: `Deduplicator.register()` gains one line (`self._state.prune()`); no schema
+  change (`AppState`/`StateStore` are unchanged, only newly *used* as designed); `state.json` size
+  is now bounded in normal operation. Known limitation, accepted as a trade-off: if the agent runs
+  for a long stretch with **zero** new alerts, `alerted_ids` from more than 24 h ago are not
+  pruned until the next `register()` — harmless (no unbounded growth risk in that scenario, since
+  nothing is being added either) but worth noting for anyone tempted to rely on `state.json` being
+  tightly pruned at all times rather than "pruned whenever it grows."
 
 ## 12. Traceability
 
