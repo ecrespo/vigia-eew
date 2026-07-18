@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -67,9 +68,12 @@ class _FakeClient:
         return self._resp
 
 
-def _reconciler(tmp_path, client, *, sleep=None):
+def _reconciler(tmp_path, client, *, sleep=None, now=None, timezone="UTC"):
     state = StateStore(tmp_path / "state.json")
     state.load()
+    kwargs = {"timezone": timezone}
+    if now is not None:
+        kwargs["now"] = now
     rec = RESTReconciler(
         USGSSource(),
         ReferencePoint(),
@@ -78,6 +82,7 @@ def _reconciler(tmp_path, client, *, sleep=None):
         asyncio.Queue(),
         client=client,
         sleep=sleep or asyncio.sleep,
+        **kwargs,
     )
     return rec, state
 
@@ -85,9 +90,9 @@ def _reconciler(tmp_path, client, *, sleep=None):
 # --- Query construction ---
 
 
-async def test_fixed_params_and_no_cursor(tmp_path):
+async def test_fixed_params(tmp_path):
     client = _FakeClient(_FakeResp(payload=_collection()))
-    rec, _ = _reconciler(tmp_path, client)
+    rec, _ = _reconciler(tmp_path, client, now=lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC))
     await rec.poll_once()
 
     params = client.calls[0]["params"]
@@ -98,18 +103,66 @@ async def test_fixed_params_and_no_cursor(tmp_path):
     assert params["minmagnitude"] == Filter().min_magnitude
     assert params["orderby"] == "time"
     assert params["eventtype"] == "earthquake"
-    assert "starttime" not in params  # no previous cursor
 
 
-async def test_params_include_starttime_with_cursor(tmp_path):
+# --- Bounded backlog floor (RF-41, ADR-017) ---
+
+
+async def test_no_cursor_uses_local_midnight_floor(tmp_path):
+    """A fresh install (no cursor yet) queries no further back than today's local midnight."""
     client = _FakeClient(_FakeResp(payload=_collection()))
-    rec, state = _reconciler(tmp_path, client)
-    state.update_usgs_cursor(1782639238852)
+    rec, _ = _reconciler(tmp_path, client, now=lambda: datetime(2026, 7, 17, 15, 0, tzinfo=UTC))
+    await rec.poll_once()
+
+    params = client.calls[0]["params"]
+    assert params["starttime"] == "2026-07-17T00:00:00"
+
+
+async def test_fresh_cursor_is_honored_unchanged(tmp_path):
+    """A cursor from earlier the same local day is used as-is, not overridden."""
+    client = _FakeClient(_FakeResp(payload=_collection()))
+    rec, state = _reconciler(
+        tmp_path, client, now=lambda: datetime(2026, 6, 28, 20, 0, tzinfo=UTC)
+    )
+    state.update_usgs_cursor(1782639238852)  # 2026-06-28T13:33:58Z, same local day as `now`
     await rec.poll_once()
 
     params = client.calls[0]["params"]
     assert "starttime" in params
-    assert params["starttime"].startswith("2026-")  # ISO-8601 derived from the cursor
+    assert params["starttime"].startswith("2026-06-28")
+
+
+async def test_stale_cursor_is_floored_to_local_midnight(tmp_path):
+    """A cursor from a previous local day (e.g. after a multi-day outage) is floored,
+    not used as-is — bounding how much backlog is fetched (RF-41)."""
+    client = _FakeClient(_FakeResp(payload=_collection()))
+    rec, state = _reconciler(
+        tmp_path, client, now=lambda: datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
+    )
+    state.update_usgs_cursor(1782639238852)  # 2026-06-28, weeks before `now`
+    await rec.poll_once()
+
+    params = client.calls[0]["params"]
+    assert params["starttime"] == "2026-07-17T00:00:00"
+
+
+async def test_invalid_timezone_falls_back_to_raw_cursor(tmp_path):
+    """Fail-safe: an unresolvable timezone leaves the cursor untouched (pre-RF-41 behavior)."""
+    client = _FakeClient(_FakeResp(payload=_collection()))
+    rec, state = _reconciler(tmp_path, client, timezone="Not/AZone")
+    state.update_usgs_cursor(1782639238852)
+    await rec.poll_once()
+
+    params = client.calls[0]["params"]
+    assert params["starttime"].startswith("2026-06-28")  # the raw cursor, unfloored
+
+
+async def test_invalid_timezone_with_no_cursor_omits_starttime(tmp_path):
+    client = _FakeClient(_FakeResp(payload=_collection()))
+    rec, _ = _reconciler(tmp_path, client, timezone="Not/AZone")
+    await rec.poll_once()
+
+    assert "starttime" not in client.calls[0]["params"]
 
 
 # --- Emission and cursor ---

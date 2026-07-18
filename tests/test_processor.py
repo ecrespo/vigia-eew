@@ -50,7 +50,9 @@ def _processor(tmp_path, capture, *, radius=300.0):
     proc = Processor(
         input_queue,
         Normalizer(ReferencePoint(), Severity()),
-        GeoFilter(Filter(radius_km=radius)),
+        # today_only=False: this fixture uses a fixed 2026-06-28 date unrelated to the
+        # freshness filter (RF-40), which has its own dedicated tests in test_filter.py.
+        GeoFilter(Filter(radius_km=radius, today_only=False)),
         Deduplicator(Dedup(), state),
         on_alert=capture.alerted.append,
         on_update=capture.updated.append,

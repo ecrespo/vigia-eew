@@ -5,7 +5,7 @@
 | Document | Data model: normalized event, persisted state, and configuration |
 | Version | 1.0 (draft for review) |
 | Status | 🟡 Pending approval |
-| Related | `API-SPEC.md` (source mapping), `PRD.md` (RF-07, RF-06, RF-10, RF-24, RF-38, RF-39), `TECHNICAL-DESIGN.md` |
+| Related | `API-SPEC.md` (source mapping), `PRD.md` (RF-07, RF-06, RF-10, RF-24, RF-38, RF-39, RF-40, RF-41, RF-42), `TECHNICAL-DESIGN.md` |
 
 > All structures are validated with **pydantic** (v2). The types here are the binding contract
 > for the code. Persistence in **JSON**; configuration in **`config.toml`**.
@@ -83,9 +83,10 @@ with atomic writes.
 | Field | Type | Description |
 |---|---|---|
 | `version` | `int` | State schema version (future migrations) |
-| `cursor_usgs_ms` | `int \| None` | Epoch ms of the most recent processed USGS event (cursor RF-06) |
-| `alerted_ids` | `list[AlertedId]` | Already-alerted ids (with age-based pruning) |
-| `recent_signatures` | `list[EventSignature]` | Signatures for cross-source dedup (time window) |
+| `cursor_usgs_ms` | `int \| None` | Epoch ms of the most recent processed USGS event (cursor RF-06); floored at local midnight on stale/first use (RF-41) |
+| `cursor_geofon_ms` | `int \| None` | Epoch ms of the most recent processed GEOFON event (cursor RF-39/RF-06); floored at local midnight on stale/first use (RF-41) |
+| `alerted_ids` | `list[AlertedId]` | Already-alerted ids (pruned by age on every `register()`, RF-42) |
+| `recent_signatures` | `list[EventSignature]` | Signatures for cross-source dedup (pruned by age on every `register()`, RF-42) |
 | `detected_location` | `DetectedLocation \| None` | Location detected via IP, cached after the first successful detection (RF-33); `None` if never detected or if the user configures a manual `[reference]` |
 
 ```python
@@ -110,6 +111,7 @@ class DetectedLocation(BaseModel):
 class AppState(BaseModel):
     version: int = 1
     cursor_usgs_ms: int | None = None
+    cursor_geofon_ms: int | None = None
     alerted_ids: list[AlertedId] = []
     recent_signatures: list[EventSignature] = []
     detected_location: DetectedLocation | None = None
@@ -123,7 +125,12 @@ class AppState(BaseModel):
 | macOS | `~/Library/Application Support/vigia-eew/state.json` |
 
 ### 2.2 Pruning policy
-- `alerted_ids` and `recent_signatures` are pruned by age (e.g. > 24 h) to bound size.
+- `alerted_ids` and `recent_signatures` are pruned by age (`MAX_AGE` = 24 h, `StateStore.prune()`)
+  to bound size. **Invoked from `Deduplicator.register()`**, immediately before `save()` (RF-42,
+  ADR-018) — every time a new alert is registered, entries older than `MAX_AGE` are dropped first.
+  Not invoked on a fixed timer: if no new alert is registered for a long stretch, pruning of
+  already-old entries is deferred to the next registration (harmless, since nothing is being added
+  either in that scenario).
 - **Atomic** write: temporary file + `os.replace` (avoids corruption on crash).
 
 ---
@@ -143,6 +150,9 @@ lon = -66.9036
 [filter]
 radius_km = 300.0
 min_magnitude = 2.5
+# Only alert on earthquakes from the current local calendar day (RF-40). Fail-safe:
+# inert if the configured timezone is invalid. Default true.
+today_only = true
 
 [sources.emsc]
 enabled = true
@@ -203,6 +213,7 @@ class ReferencePoint(BaseModel):
 class Filter(BaseModel):
     radius_km: float = Field(300.0, gt=0)
     min_magnitude: float = Field(2.5, ge=0)
+    today_only: bool = True   # RF-40: only alert on the current local calendar day
 
 class EMSCSource(BaseModel):
     enabled: bool = True
@@ -304,5 +315,7 @@ SeismicEvent(
 ## 6. Traceability
 
 `SeismicEvent` ⇄ RF-07/RF-08/RF-13 · `AppState` ⇄ RF-06/RF-10 · `Settings` ⇄ RF-24/RF-12 ·
-`DetectedLocation` ⇄ RF-33 · `FUNVISISSource` ⇄ RF-38 · `GEOFONSource` ⇄ RF-39.
+`DetectedLocation` ⇄ RF-33 · `FUNVISISSource` ⇄ RF-38 · `GEOFONSource` ⇄ RF-39 ·
+`Filter.today_only` ⇄ RF-40 · `AppState.cursor_usgs_ms`/`cursor_geofon_ms` floor ⇄ RF-41 ·
+`StateStore.prune()` wiring ⇄ RF-42.
 Per-source field mapping in `API-SPEC.md §5.1`.

@@ -78,7 +78,9 @@ def _processor(tmp_path, capture, state=None):
     proc = Processor(
         input_queue,
         Normalizer(ReferencePoint(), Severity()),
-        GeoFilter(Filter()),
+        # today_only=False: these fixtures use a fixed 2026-06-28 date unrelated to the
+        # freshness filter (RF-40), which has its own dedicated tests in test_filter.py.
+        GeoFilter(Filter(today_only=False)),
         Deduplicator(Dedup(), state),
         on_alert=capture.alerted.append,
         on_update=capture.updated.append,

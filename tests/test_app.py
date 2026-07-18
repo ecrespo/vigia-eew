@@ -321,7 +321,9 @@ def test_resolve_user_country_auto_from_reference_point():
 
 
 def test_build_geo_filter_disabled_keeps_other_country():
-    app = _app(filter=Filter(country_filter=False))
+    # today_only=False: these fixtures use a fixed 2026-06-28 date, unrelated to the
+    # freshness filter (RF-40), which has its own dedicated tests in test_filter.py.
+    app = _app(filter=Filter(country_filter=False, today_only=False))
     geo = app._build_geo_filter()
     assert geo.accepts(_country_event(4.71, -74.07)) is True  # Bogotá, kept (filter off)
 
@@ -329,7 +331,7 @@ def test_build_geo_filter_disabled_keeps_other_country():
 def test_build_geo_filter_enabled_drops_other_country():
     app = _app(
         reference=ReferencePoint(name="Caracas", lat=10.48, lon=-66.90),
-        filter=Filter(country_filter=True, country="auto", radius_km=2000),
+        filter=Filter(country_filter=True, country="auto", radius_km=2000, today_only=False),
     )
     geo = app._build_geo_filter()
     assert geo.accepts(_country_event(4.71, -74.07)) is False  # Bogotá (CO) dropped
@@ -341,7 +343,15 @@ def test_build_geo_filter_inactive_when_country_unresolved():
     # country="auto" but reference is mid-ocean -> no country -> fail-safe (inert).
     app = _app(
         reference=ReferencePoint(name="Ocean", lat=0.0, lon=-30.0),
-        filter=Filter(country_filter=True, country="auto"),
+        filter=Filter(country_filter=True, country="auto", today_only=False),
     )
     geo = app._build_geo_filter()
     assert geo.accepts(_country_event(4.71, -74.07)) is True  # not suppressed
+
+
+def test_build_geo_filter_wires_configured_timezone():
+    # RF-40/RF-41: _build_geo_filter must pass the configured timezone through to
+    # GeoFilter so the freshness check uses the user's local day, not UTC.
+    app = _app(notification=Notification(timezone="America/Caracas"))
+    geo = app._build_geo_filter()
+    assert geo._timezone == "America/Caracas"

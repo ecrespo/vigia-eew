@@ -4,6 +4,33 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [0.6.0] - 2026-07-17
+
+### Added
+- **Event freshness filter** (`[filter] today_only`, RF-40) — the agent now alerts only on
+  earthquakes whose origin time falls on the **current local calendar day** (per
+  `[notification] timezone`), regardless of which of the 4 sources reports them or when. This
+  stops alerts on stale REST backlog or a replayed old signature. On by default; fail-safe
+  (inert, never suppresses) if the configured timezone is invalid. Turn it off with
+  `today_only = false`.
+- **Bounded REST backlog floor** (RF-41) — the USGS and GEOFON pollers now floor their
+  effective `starttime` at 00:00 local time today whenever the persisted cursor is `None`
+  (fresh install) or older than that floor (a stale cursor after a long outage). This bounds
+  how much history a single poll fetches and parses without changing what gets alerted (the
+  freshness filter above stays authoritative).
+
+### Fixed
+- **Unbounded state growth** (RF-42) — `Deduplicator.register()` now prunes `alerted_ids` /
+  `recent_signatures` entries older than 24 h before persisting, so `state.json` no longer
+  grows without limit over the agent's lifetime. `StateStore.prune()` already existed and was
+  unit-tested but was never invoked from any run path.
+
+### Changed
+- New shared module `timeutil.py` centralizes the "local calendar day" / local-midnight
+  boundary computation and the `ZoneInfo` fail-safe handling used by both the freshness filter
+  and the REST backlog floor. Design rationale in `TECHNICAL-DESIGN.md` ADR-017 (RF-40/RF-41)
+  and ADR-018 (RF-42). No new dependency.
+
 ## [0.5.0] - 2026-07-06
 
 ### Added

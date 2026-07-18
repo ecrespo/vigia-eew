@@ -14,10 +14,12 @@
 ## 1. Overview
 
 Vigía is a **single asyncio process per machine** with no single point of failure (RNF-02). It
-receives earthquakes via **push** (WebSocket EMSC, primary channel) and reconciles them with a
-**low-frequency backup** (USGS polling every 60 s). A *pipeline* normalizes, filters by zone, and
-deduplicates them; new and relevant events trigger an **undismissable desktop alert** (overlay
-window + toast + sound). Critical state is **persisted** to survive restarts.
+receives earthquakes via **push** (WebSocket EMSC, primary channel) and reconciles them with
+**three low-frequency REST backups**: USGS and GEOFON (independent global networks, each
+polling every 60 s with a persisted cursor) and FUNVISIS (Venezuela-only local coverage,
+60 s polling, in-memory seen-set). A *pipeline* normalizes, filters by zone, and deduplicates
+them across all four sources; new and relevant events trigger an **undismissable desktop
+alert** (overlay window + toast + sound). Critical state is **persisted** to survive restarts.
 
 ## 2. Components
 
@@ -28,7 +30,7 @@ window + toast + sound). Critical state is **persisted** to survive restarts.
 | **FUNVISISPoller** | 60 s polling of `maravilla.json`; Venezuela-only local coverage; in-memory seen-set (no cursor) | RF-38 |
 | **GEOFONPoller** | 60 s polling of `fdsnws-event` (text format); independent global-network redundancy; persisted cursor | RF-39 |
 | **Normalizer** | Raw→`SeismicEvent`; haversine; severity | RF-07, RF-08, RF-13 |
-| **GeoFilter** | Discards events outside radius or below minimum magnitude | RF-12 |
+| **GeoFilter** | Discards events outside radius, below minimum magnitude, or from a previous local day (RF-40, default-on) | RF-12, RF-40 |
 | **Deduplicator** | Inter-source heuristic; persisted ids; handles `update` | RF-09..RF-11 |
 | **Notifier (toast)** | Native informational toast (`desktop-notifier`) | RF-14 |
 | **AlertWindow (overlay)** | Topmost Tkinter window, with focus, undismissable | RF-15..RF-19 |
@@ -161,11 +163,14 @@ stateDiagram-v2
 | **FUNVISIS or GEOFON is unreachable/changes format** | That poller's cycle is skipped and retried after 60 s (own timeout/backoff); the other three sources are unaffected; the process **does not die**. | RF-38, RF-39 |
 | **An `update` arrives** | Same `unid` already seen → the displayed/queued event is **updated** (e.g. magnitude) **without** triggering a new alert. | RF-11, CU-3 |
 | **Two sources report the same earthquake** | The heuristic (≤100 km, ≤90 s, ≤0.5 mag) recognizes it as a duplicate → **a single** alert. | RF-09, CU-4 |
-| **The agent restarts with pending alerts** | `StateStore` remembers `alerted_ids` → already-acknowledged ones **are not re-alerted**; `usgs_cursor` avoids reprocessing history. | RF-06, RF-10, CU-10 |
+| **The agent restarts with pending alerts** | `StateStore` remembers `alerted_ids` → already-acknowledged ones **are not re-alerted**; `usgs_cursor`/`geofon_cursor` avoid reprocessing history. | RF-06, RF-10, CU-10 |
+| **A source reports an earthquake from a previous day** (stale REST backlog, replayed signature, clock skew) | `GeoFilter`'s freshness check discards it before it reaches `Deduplicator` — no alert, regardless of source. | RF-40 |
+| **The agent was off for days; the persisted USGS/GEOFON cursor is stale** | The first poll after restart floors `starttime` at local midnight instead of the stale cursor's date, bounding the backlog fetched (the freshness filter above still guarantees nothing old gets alerted even without this). | RF-41 |
 | **Invalid JSON / unexpected schema** | pydantic validation discards the item and logs it; the flow continues. | RNF-03 |
 | **Total network loss** | Both ingestion paths keep retrying; once the network returns, USGS **reconciles** what was missed during the outage. | RF-05, OBJ-3 |
 | **OS "do not disturb"** | The toast may be silenced, but the **topmost, focused overlay window** guarantees the alert. | RF-15, RF-16, RNF-05 |
 | **UI fails** | Isolated from the pipeline (decoupled bridge); ingestion keeps running; showing the alert is retried. | ADR-006 |
+| **The agent runs for a long time with many alerts** | `Deduplicator.register()` prunes `alerted_ids`/`recent_signatures` older than 24 h before every `save()`, so `state.json` stays bounded instead of growing forever. | RF-42 |
 
 ## 7. Deployment
 

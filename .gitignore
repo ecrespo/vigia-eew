@@ -36,3 +36,5 @@ uv.lock
 *.log
 state.json
 config.toml
+.venv_sandbox/
+.claude/settings.local.json

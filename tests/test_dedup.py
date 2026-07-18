@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from vigia_eew.config import Dedup
-from vigia_eew.models import SeismicEvent
+from vigia_eew.models import AlertedId, EventSignature, SeismicEvent
 from vigia_eew.pipeline.dedup import Deduplicator
 from vigia_eew.state import StateStore
 
@@ -149,3 +149,26 @@ def test_survives_restart(tmp_path):
     state2.load()
     dedup2 = Deduplicator(Dedup(), state2)
     assert dedup2.classify(_ev(id="abc")) == "duplicate"
+
+
+# --- Pruning wired into register() (RF-42, ADR-018) ---
+
+
+def test_register_prunes_stale_entries_before_saving(tmp_path):
+    dedup, state = _dedup(tmp_path)
+    old_time = datetime.now(UTC) - timedelta(hours=48)  # older than StateStore.MAX_AGE (24h)
+    state.register_alerted(AlertedId(id="ancient", source="EMSC", time_utc=old_time))
+    state.add_signature(EventSignature(lat=10, lon=-66, time_utc=old_time, magnitude=4.0))
+    state.save()
+
+    dedup.register(_ev(id="fresh-1"))
+
+    assert not state.already_alerted("ancient")
+    assert all(sig.time_utc != old_time for sig in state.state.recent_signatures)
+    assert state.already_alerted("fresh-1")  # the new registration itself is kept
+
+    # And it's persisted, not just in memory.
+    reloaded = StateStore(tmp_path / "state.json")
+    reloaded.load()
+    assert not reloaded.already_alerted("ancient")
+    assert reloaded.already_alerted("fresh-1")

@@ -18,6 +18,11 @@ Two things set it apart from the USGS reconciler:
     time seen (`cursor_geofon_ms`) and queries `starttime=<cursor>` so history isn't
     re-fetched every cycle. The cursor survives restarts (re-alerting is prevented
     downstream by the persisted `alerted_ids`).
+  - **Bounded backlog floor** (RF-41, ADR-017): the effective `starttime` sent is never
+    older than 00:00 local time today — when the persisted cursor is `None` or older
+    than that floor (a stale cursor after a long outage), the floor is used instead.
+    Mirrors `rest_usgs.RESTReconciler`'s floor; the downstream freshness filter (RF-40)
+    remains the authoritative rule for what gets alerted.
 
 The HTTP client (`httpx`) and `sleep` are injected so it's testable without network.
 """
@@ -35,6 +40,7 @@ import httpx
 from vigia_eew.config import Filter, GEOFONSource, ReferencePoint
 from vigia_eew.ingest import RawMessage
 from vigia_eew.state import StateStore
+from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
 
 _SleepFn = Callable[[float], Any]
 
@@ -56,6 +62,8 @@ class GEOFONPoller:
         *,
         client: httpx.AsyncClient | None = None,
         sleep: _SleepFn = asyncio.sleep,
+        timezone: str = "UTC",
+        now: Clock = default_clock,
         logger: logging.Logger | None = None,
     ) -> None:
         self._cfg = cfg
@@ -65,6 +73,8 @@ class GEOFONPoller:
         self._output = output
         self._client = client
         self._sleep = sleep
+        self._timezone = timezone
+        self._now = now
         self._log = logger or logging.getLogger("vigia_eew.ingest.geofon")
 
     def _build_params(self, cursor_ms: int | None) -> dict[str, Any]:
@@ -77,8 +87,9 @@ class GEOFONPoller:
             "minmagnitude": self._filter.min_magnitude,
             "orderby": "time",
         }
-        if cursor_ms is not None:
-            moment = datetime.fromtimestamp(cursor_ms / 1000, tz=UTC)
+        effective_cursor = floor_starttime_ms(cursor_ms, self._timezone, self._now)
+        if effective_cursor is not None:
+            moment = datetime.fromtimestamp(effective_cursor / 1000, tz=UTC)
             params["starttime"] = moment.strftime("%Y-%m-%dT%H:%M:%S")
         return params
 

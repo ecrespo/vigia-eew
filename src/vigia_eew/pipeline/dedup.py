@@ -1,4 +1,4 @@
-"""Deduplication and `update` handling (RF-09, RF-10, RF-11; TECHNICAL-DESIGN §5).
+"""Deduplication and `update` handling (RF-09, RF-10, RF-11, RF-42; TECHNICAL-DESIGN §5).
 
 `Deduplicator` classifies each already-filtered `SeismicEvent` into one of three
 outcomes:
@@ -11,7 +11,8 @@ outcomes:
 
 The state (`alerted_ids` + `recent_signatures`) is persisted so alerts are not
 repeated across restarts (RF-10). Id decisions use exact equality; cross-source
-matches use the configurable heuristic (`Dedup`).
+matches use the configurable heuristic (`Dedup`). `register()` also prunes entries
+older than 24 h before persisting (RF-42), so the state file doesn't grow unbounded.
 """
 
 from __future__ import annotations
@@ -53,7 +54,13 @@ class Deduplicator:
         return "new"
 
     def register(self, ev: SeismicEvent) -> None:
-        """Marks an event as alerted (id + signature) and persists the state (RF-10)."""
+        """Marks an event as alerted (id + signature) and persists the state (RF-10).
+
+        Prunes entries older than `StateStore.MAX_AGE` first (RF-42, ADR-018), so
+        `alerted_ids`/`recent_signatures` don't grow unbounded across the agent's
+        lifetime. `prune()` previously existed but was never invoked from any run path.
+        """
+        self._state.prune()
         self._state.register_alerted(
             AlertedId(id=ev.id, source=ev.source, time_utc=ev.time_utc)
         )

@@ -132,6 +132,11 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 ### 5.13 Country notification filter
 - **RF-37** — Optionally restrict notifications to the user's **own country**: do not notify earthquakes located in a **different** country. To avoid dropping the offshore/coastal earthquakes that matter most (often the most dangerous), the rule is a **block-list**: an event is suppressed only when it falls **positively inside another country**; events over the sea / offshore / of undetermined country are **kept** (still subject to the radius and minimum magnitude of RF-12). The country of each earthquake is determined **offline** from a bundled boundary dataset (no per-event network calls, no new pip dependency). The user's country is derived from the reference point, or set explicitly (`[filter] country`). The feature is **opt-in and off by default** (`[filter] country_filter = false`): being a safety tool, it must never silence a real alert due to a country-detection gap (fail-safe — if the country can't be determined, the filter stays inert).
 
+### 5.14 Event freshness and state hygiene
+- **RF-40** — Alert only on earthquakes whose origin time (`time_utc`) falls on the **current local calendar day**, per `[notification] timezone` (default `America/Caracas`) — **not** on earthquakes from a previous day, regardless of which of the 4 sources reports them or when they are reported. Configurable via `[filter] today_only` (default `true`). **Fail-safe** like RF-33/RF-37: if the local day can't be computed (e.g. an invalid/unsupported timezone), the filter stays **inert** rather than silently suppressing a real alert.
+- **RF-41** — On the first REST poll after startup, or after the persisted cursor (`cursor_usgs_ms`/`cursor_geofon_ms`) is found to be **older than the start of the current local day**, USGS (`RESTReconciler`) and GEOFON (`GEOFONPoller`) must query with an effective `starttime` **floored at 00:00 local time** (converted to UTC) instead of omitting `starttime` (unbounded history) or reusing a stale multi-day-old cursor. This bounds how much historical backlog is fetched/parsed on catch-up after a long gap or a fresh install; it complements RF-40 (the authoritative alerting decision) as a query-efficiency and hygiene measure — RF-40 alone already prevents alerting on old events even if this bound weren't in place.
+- **RF-42** — The persisted deduplication state (`alerted_ids`, `recent_signatures` in `state.json`) must be **pruned by age** (`StateStore.prune()`, `MAX_AGE` = 24 h) every time a new alert is registered, so the state file does not grow unbounded over the agent's lifetime. (`prune()` already existed with unit coverage but was never invoked from the alerting path — a dead-code gap this closes.)
+
 ## 6. Non-functional requirements (RNF)
 
 | ID | Category | Requirement |
@@ -171,6 +176,9 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | CA-16 | With `country_filter = true` and the user in Venezuela, an earthquake in Colombia/Trinidad within the radius is **not** notified, while an onshore Venezuelan quake and an offshore one near the Venezuelan coast **are** notified; with `country_filter = false` (default) behavior is unchanged. | RF-37 |
 | CA-17 | A small (M2–3) Venezuelan earthquake reported only by **FUNVISIS** (not EMSC/USGS) is polled within ≤ 60 s and generates an alert; the batch already present at first startup does **not** trigger alerts. | RF-38, OBJ-3 |
 | CA-18 | An earthquake reported by **GEOFON** but not by EMSC/USGS is polled within ≤ 60 s and generates an alert; a GEOFON report of the **same** earthquake already alerted via EMSC/USGS/FUNVISIS produces **no** duplicate alert. | RF-39, RF-09, OBJ-3 |
+| CA-19 | An earthquake whose origin time is from a **previous local day** (e.g. a stale REST backlog entry, or a replayed old signature) is normalized and passes the radius/magnitude filter but is **not** alerted, regardless of source. | RF-40 |
+| CA-20 | After a multi-day gap since the last successful poll (a stale `cursor_usgs_ms`/`cursor_geofon_ms`), the first USGS/GEOFON query on restart requests events starting from **00:00 local time today**, not from the stale cursor's original date. | RF-41 |
+| CA-21 | After the agent registers a new alert, `state.json`'s `alerted_ids`/`recent_signatures` contain **no entries older than `MAX_AGE`** (24 h). | RF-42 |
 
 ## 8. Out of scope (v1)
 
@@ -192,6 +200,7 @@ The primary user for the alert's UX design is **P1 (humanitarian operator)**.
 | Field differences between sources (`magtype` vs `magType`). | Poorly normalized data. | Normalizer with explicit per-source mapping (API Spec / Data Model). |
 | Gatekeeper/SmartScreen block unsigned installers. | Installation friction. | Document codesigning/notarization and the trust procedure. |
 | FUNVISIS/GEOFON endpoints change format or become unreachable (both are third-party, best-effort public services). | Loss of one redundant source; core EMSC/USGS coverage unaffected. | Each source polls independently with its own timeout/backoff; Supervisor restarts a failing poller without taking down the process (RF-38, RF-39). |
+| A misconfigured or unsupported `[notification] timezone` value makes "today" impossible to compute. | A legitimate same-day alert near midnight could be wrongly suppressed. | Fail-safe (RF-40): an invalid timezone leaves the freshness filter **inert** instead of silently dropping alerts; the boundary is computed in local time (not UTC) to match the user-facing clock (RF-18), so day rollover matches what the user sees on screen. |
 
 ## 10. Traceability (summary)
 

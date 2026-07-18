@@ -41,6 +41,10 @@ class Filter(BaseModel):
     country_filter: bool = False
     # ISO-A2 code of the user's country, or "auto" to derive it from the reference point.
     country: str = "auto"
+    # Freshness filter (RF-40): only alert on earthquakes from the current local calendar
+    # day (per [notification] timezone). On by default; fail-safe (inert) if the local day
+    # can't be computed (e.g. an invalid timezone).
+    today_only: bool = True
 
 
 class EMSCSource(BaseModel):

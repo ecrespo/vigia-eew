@@ -8,6 +8,12 @@ It doesn't compete with the push channel: low frequency, low weight
   - **Persisted cursor** (RF-06): queries with `starttime` = last processed `time`;
     after processing, advances the cursor to the maximum seen and saves it (survives
     restarts).
+  - **Bounded backlog floor** (RF-41, ADR-017): the effective `starttime` sent is never
+    older than **00:00 local time today** — when the persisted cursor is `None` (fresh
+    install) or older than that floor (a stale cursor after a long outage), the floor is
+    used instead. This doesn't change what gets *alerted* (the downstream freshness
+    filter, RF-40, is authoritative for that); it only bounds how much history this
+    query fetches and parses.
   - **Resilience** (RNF-03, API-SPEC §2.5): 429 honors `Retry-After`; 5xx/timeout/
     invalid JSON are logged and retried on the next cycle, without aborting or
     losing the cursor.
@@ -28,6 +34,7 @@ import httpx
 from vigia_eew.config import Filter, ReferencePoint, USGSSource
 from vigia_eew.ingest import RawMessage
 from vigia_eew.state import StateStore
+from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
 
 _SleepFn = Callable[[float], Any]
 
@@ -45,6 +52,8 @@ class RESTReconciler:
         *,
         client: httpx.AsyncClient | None = None,
         sleep: _SleepFn = asyncio.sleep,
+        timezone: str = "UTC",
+        now: Clock = default_clock,
         logger: logging.Logger | None = None,
     ) -> None:
         self._cfg = cfg
@@ -54,10 +63,12 @@ class RESTReconciler:
         self._output = output
         self._client = client
         self._sleep = sleep
+        self._timezone = timezone
+        self._now = now
         self._log = logger or logging.getLogger("vigia_eew.ingest.rest")
 
     def _build_params(self, cursor_ms: int | None) -> dict[str, Any]:
-        """Builds the FDSN query parameters (API-SPEC §2.2)."""
+        """Builds the FDSN query parameters (API-SPEC §2.2, §2.3)."""
         params: dict[str, Any] = {
             "format": "geojson",
             "latitude": self._reference.lat,
@@ -67,8 +78,9 @@ class RESTReconciler:
             "orderby": "time",
             "eventtype": "earthquake",
         }
-        if cursor_ms is not None:
-            moment = datetime.fromtimestamp(cursor_ms / 1000, tz=UTC)
+        effective_cursor = floor_starttime_ms(cursor_ms, self._timezone, self._now)
+        if effective_cursor is not None:
+            moment = datetime.fromtimestamp(effective_cursor / 1000, tz=UTC)
             params["starttime"] = moment.strftime("%Y-%m-%dT%H:%M:%S")
         return params
 

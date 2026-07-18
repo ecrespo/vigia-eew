@@ -28,6 +28,11 @@ country_filter = false
 # The user's country as an ISO-A2 code (e.g. "VE"), or "auto" to derive it from the
 # reference point above. Only used when country_filter = true.
 country = "auto"
+# Freshness filter (RF-40): only alert on earthquakes whose origin time falls on the
+# current local calendar day (per [notification] timezone below) -- not on earthquakes
+# from a previous day, regardless of which source reports them or when. On by default.
+# Fail-safe: if the configured timezone is invalid, this filter is inert (never suppresses).
+today_only = true
 
 [sources.emsc]
 enabled = true

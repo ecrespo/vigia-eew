@@ -46,6 +46,8 @@ def test_defaults_without_file(tmp_path):
     # Country filter is opt-in, off by default (RF-37).
     assert cfg.filter.country_filter is False
     assert cfg.filter.country == "auto"
+    # Freshness filter is on by default (RF-40).
+    assert cfg.filter.today_only is True
 
 
 def test_funvisis_source_defaults():
@@ -91,6 +93,13 @@ def test_country_filter_loaded_from_toml(tmp_path):
     cfg = load_config(path)
     assert cfg.filter.country_filter is True
     assert cfg.filter.country == "VE"
+
+
+def test_today_only_loaded_from_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("[filter]\ntoday_only = false\n", encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.filter.today_only is False
 
 
 def test_load_from_toml(tmp_path):

@@ -5,10 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Vigía-eew (`vigia-eew`) is a desktop agent (Python 3.11+, `src/` layout) that monitors
-earthquakes in real time (EMSC WebSocket as the primary channel, USGS REST polling as a
-backup) and shows a **non-dismissable** desktop alert when an event falls within the
-configured radius/magnitude. Single process per machine, no single point of failure
-(each machine runs its own agent).
+earthquakes in real time (EMSC WebSocket as the primary channel, plus USGS/FUNVISIS/GEOFON
+REST polling as backups — global redundancy and Venezuela-only local coverage) and shows a
+**non-dismissable** desktop alert when an event falls within the configured
+radius/magnitude. Single process per machine, no single point of failure (each machine runs
+its own agent).
 
 ## Commands
 
@@ -40,12 +41,21 @@ semgrep, trivy) pre-push. `build.yml` builds/publishes releases on a `vX.Y.Z` ta
 
 ## Architecture
 
-**A single asyncio process** per machine. Two ingestors feed a common `raw_queue`:
+**A single asyncio process** per machine. Four ingestors feed a common `raw_queue`:
 
 - `ingest/ws_emsc.py` (`WSIngestor`): EMSC WebSocket, **primary channel**, 15 s keepalive,
   reconnection with exponential backoff + jitter (`backoff.py`, shared with the supervisor).
 - `ingest/rest_usgs.py` (`RESTReconciler`): USGS polling every 60 s with a **persisted
   cursor**, only reconciles what the WS may have missed; doesn't compete with the push.
+- `ingest/rest_geofon.py` (`GEOFONPoller`, RF-39): GFZ Potsdam `fdsnws-event` polling every
+  60 s, **text format** (pipe-delimited, not GeoJSON) with its own **persisted cursor**;
+  independent global network so an EMSC/USGS outage or catalog gap doesn't leave the agent
+  blind.
+- `ingest/rest_funvisis.py` (`FUNVISISPoller`, RF-38): polls FUNVISIS's `maravilla.json`
+  (Venezuela-only, ~20 most recent events, no push channel) every 60 s; catches small local
+  earthquakes (M2-3) the international networks don't catalog. Tracks novelty with an
+  **in-memory seen-set** (no cursor — the endpoint has no `starttime` param), seeded on the
+  first poll so startup doesn't re-alert on already-published events.
 
 A `pipeline/processor.py` (`Processor`) consumes `raw_queue` and chains
 `pipeline/normalize.py` → `pipeline/filter.py` → `pipeline/dedup.py`:
@@ -58,9 +68,9 @@ A `pipeline/processor.py` (`Processor`) consumes `raw_queue` and chains
   Recent ids/signatures are persisted in `state.py` (`StateStore`, atomic JSON via
   `platformdirs`).
 
-`supervisor.py` (`Supervisor`) orchestrates the asyncio tasks (`ws`, `rest`, `pipeline`)
-and **restarts each one with backoff on failure**, without taking down the process — it
-must never die from a transient network or parsing failure.
+`supervisor.py` (`Supervisor`) orchestrates the asyncio tasks (`ws`, `rest`, `geofon`,
+`funvisis`, `pipeline`) and **restarts each one with backoff on failure**, without taking
+down the process — it must never die from a transient network or parsing failure.
 
 New/relevant events reach `notify/` (`AlertController` in `controller.py`), which
 orchestrates three effects as **injectable callbacks** (so they can be tested without
@@ -99,8 +109,9 @@ tests are marked `skipif` unless `VIGIA_GUI_TESTS=1`; the default suite runs hea
 ## Spec-driven development (SDD)
 
 The project is built **phase by phase** following `docs/IMPLEMENTATION-PLAN.md`, which
-links `docs/PRD.md` (requirements RF-xx/RNF-xx), `docs/API-SPEC.md` (EMSC/USGS/internal
-contracts), `docs/TECHNICAL-DESIGN.md` (numbered ADRs), and `docs/DATA-MODEL.md`.
+links `docs/PRD.md` (requirements RF-xx/RNF-xx), `docs/API-SPEC.md`
+(EMSC/USGS/FUNVISIS/GEOFON/internal contracts), `docs/TECHNICAL-DESIGN.md` (numbered
+ADRs), and `docs/DATA-MODEL.md`.
 `ARCHITECTURE.md` has the Mermaid diagrams (data flow, sequence, states, deployment). If
 a module not listed in `IMPLEMENTATION-PLAN.md` is added, that section (structure +
 phase table + RF→module matrix) is updated along with the code.
@@ -118,5 +129,5 @@ model that generated it (see `git log`).
   rejects *naive* values); conversion to local time (`America/Caracas`) happens only in
   `notify/presentation.py`.
 - The internal contract (`SeismicEvent`) is the only payload that crosses layers — see
-  `API-SPEC.md` §3 for the EMSC/USGS field mapping and invariants (distance and severity
-  are always derived).
+  `API-SPEC.md` §3 for the EMSC/USGS/FUNVISIS/GEOFON field mapping and invariants (distance
+  and severity are always derived).
