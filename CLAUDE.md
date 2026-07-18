@@ -47,6 +47,9 @@ semgrep, trivy) pre-push. `build.yml` builds/publishes releases on a `vX.Y.Z` ta
   reconnection with exponential backoff + jitter (`backoff.py`, shared with the supervisor).
 - `ingest/rest_usgs.py` (`RESTReconciler`): USGS polling every 60 s with a **persisted
   cursor**, only reconciles what the WS may have missed; doesn't compete with the push.
+  Its `starttime` (and GEOFON's) is floored at **local midnight today** (RF-41, shared
+  `timeutil.py`) so a fresh install or a stale cursor after an outage can't pull a
+  multi-day backlog.
 - `ingest/rest_geofon.py` (`GEOFONPoller`, RF-39): GFZ Potsdam `fdsnws-event` polling every
   60 s, **text format** (pipe-delimited, not GeoJSON) with its own **persisted cursor**;
   independent global network so an EMSC/USGS outage or catalog gap doesn't leave the agent
@@ -62,11 +65,16 @@ A `pipeline/processor.py` (`Processor`) consumes `raw_queue` and chains
 
 - **Normalize**: maps each source's raw payload to the single internal contract
   `SeismicEvent` (`models.py`), computes distance (`geo.py::haversine_km`) and severity.
-- **Filter**: discards by radius or minimum magnitude (config).
+- **Filter** (`GeoFilter`): discards by radius, minimum magnitude, country (RF-37 — reject
+  only events positively inside *another* country; inert/fail-safe if the country can't be
+  determined) and **event freshness** (RF-40, `[filter] today_only`, on by default — keep
+  only events on the current **local calendar day** per `[notification] timezone`;
+  fail-safe/inert on an invalid tz). The clock is injected for deterministic tests.
 - **Dedup**: intra-source dedup by id, cross-source heuristic (≤100 km, ≤90 s, ≤0.5 mag)
   and handling of EMSC `update`s (updates the in-flight event instead of re-alerting).
   Recent ids/signatures are persisted in `state.py` (`StateStore`, atomic JSON via
-  `platformdirs`).
+  `platformdirs`); `register()` prunes entries older than 24 h before saving (RF-42) so the
+  state file doesn't grow unbounded.
 
 `supervisor.py` (`Supervisor`) orchestrates the asyncio tasks (`ws`, `rest`, `geofon`,
 `funvisis`, `pipeline`) and **restarts each one with backoff on failure**, without taking
@@ -126,8 +134,9 @@ model that generated it (see `git log`).
   User-facing text is internationalized (see `i18n.py`, RF-35) — the source-of-truth
   strings in the codebase are English, with a Spanish translation shipped alongside.
 - Every internal `datetime` is **tz-aware in UTC** (`models.py` validates this and
-  rejects *naive* values); conversion to local time (`America/Caracas`) happens only in
-  `notify/presentation.py`.
+  rejects *naive* values); conversion to local time happens in `notify/presentation.py`
+  (for display) and `timeutil.py` (the shared local-day/local-midnight boundary behind
+  RF-40/RF-41, with the `ZoneInfo` fail-safe both callers rely on).
 - The internal contract (`SeismicEvent`) is the only payload that crosses layers — see
   `API-SPEC.md` §3 for the EMSC/USGS/FUNVISIS/GEOFON field mapping and invariants (distance
   and severity are always derived).
