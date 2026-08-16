@@ -1,0 +1,1438 @@
+{
+  "repo": "/home/user/vigia-eew",
+  "total_commits_analyzed": 47,
+  "date_range": [
+    "2026-06-28",
+    "2026-08-16"
+  ],
+  "conventional_commit_pct": 97.9,
+  "authors": [
+    [
+      "Ernesto Crespo",
+      46
+    ],
+    [
+      "Claude",
+      1
+    ]
+  ],
+  "tags": [],
+  "eras": [
+    {
+      "label": "2026-Q2",
+      "from": "2026-06-28",
+      "to": "2026-06-28",
+      "commits": 7,
+      "types": {
+        "feat": 5,
+        "docs": 1,
+        "other": 1
+      },
+      "top_subjects": [
+        "docs: artefactos SDD, scaffolding y ARCHITECTURE (Fase 0)",
+        "feat: capa de notificación (Fase 4)",
+        "feat: ingestión EMSC/USGS y supervisor asyncio (Fase 2)",
+        "feat: CLI, ensamblaje del agente y modo --simulate (Fase 5)",
+        "feat: estructura, modelos, config, estado y logging (Fase 1)"
+      ],
+      "hash_range": [
+        "4fb49d0",
+        "406cde0"
+      ]
+    },
+    {
+      "label": "2026-Q3",
+      "from": "2026-07-03",
+      "to": "2026-08-16",
+      "commits": 40,
+      "types": {
+        "fix": 8,
+        "chore": 10,
+        "feat": 11,
+        "test": 1,
+        "docs": 3,
+        "refactor": 1,
+        "ci": 6
+      },
+      "top_subjects": [
+        "feat!: translate entire codebase to English, add i18n (RF-35)",
+        "feat: GEOFON independent global-network source (RF-39, Phase 14)",
+        "feat: headless TUI dashboard (--tui, RF-36, Phase 11)",
+        "feat: ícono de bandeja del sistema (RF-34, Fase 10)",
+        "feat: autoarranque multiplataforma y flags de CLI (Fase 6)"
+      ],
+      "hash_range": [
+        "c38d9f6",
+        "6e0f133"
+      ]
+    }
+  ],
+  "clusters": [
+    {
+      "cluster": "dir:(raiz)",
+      "commits": 20,
+      "first": "2026-06-28",
+      "last": "2026-07-17",
+      "churn": 3743,
+      "types": {
+        "docs": 2,
+        "other": 1,
+        "fix": 5,
+        "chore": 10,
+        "feat": 1,
+        "ci": 1
+      },
+      "probable_noise": false,
+      "hashes": [
+        "737d7fa",
+        "406cde0",
+        "c38d9f6",
+        "7b1c71c",
+        "92c65e5",
+        "8e7b223",
+        "70480a3",
+        "69a6a7e",
+        "7f98980",
+        "f0960ac",
+        "f90c796",
+        "cee6f8e",
+        "bdc2a9d",
+        "2edb1d1",
+        "97b2a8e",
+        "a724bf5",
+        "583eafe",
+        "97161ba",
+        "d4a6ab0",
+        "bd4a555"
+      ],
+      "subjects_sample": [
+        "docs: artefactos SDD, scaffolding y ARCHITECTURE (Fase 0)",
+        "Initial commit",
+        "fix: ícono placeholder de resolución inválida rompía linuxdeploy (v0.1.2)",
+        "fix: icono placeholder inválido rompía el build de AppImage (v0.1.1)",
+        "chore: release v0.1.0",
+        "docs: agrega CLAUDE.md con guía de desarrollo para el repo",
+        "chore: release v0.2.1",
+        "chore: release v0.2.0"
+      ]
+    },
+    {
+      "cluster": "dir:src/vigia_eew",
+      "commits": 17,
+      "first": "2026-06-28",
+      "last": "2026-08-16",
+      "churn": 20364,
+      "types": {
+        "feat": 14,
+        "fix": 1,
+        "refactor": 1,
+        "docs": 1
+      },
+      "probable_noise": false,
+      "hashes": [
+        "4fb49d0",
+        "fb50326",
+        "b40c20b",
+        "fc0ca99",
+        "b5c5371",
+        "5b79ff1",
+        "a3a4a1a",
+        "a02607f",
+        "e49404d",
+        "7f9132e",
+        "fb3fe14",
+        "c20a59b",
+        "10bb72d",
+        "a06f7a1",
+        "ade1199",
+        "b0f832c",
+        "6e0f133"
+      ],
+      "subjects_sample": [
+        "feat: CLI, ensamblaje del agente y modo --simulate (Fase 5)",
+        "feat: capa de notificación (Fase 4)",
+        "feat: pipeline de normalización, filtro y dedup (Fase 3)",
+        "feat: ingestión EMSC/USGS y supervisor asyncio (Fase 2)",
+        "feat: estructura, modelos, config, estado y logging (Fase 1)",
+        "feat: autoarranque multiplataforma y flags de CLI (Fase 6)",
+        "feat: country notification filter (RF-37, Phase 12)",
+        "fix: sanitize LD_LIBRARY_PATH when spawning system binaries (PyInstaller onefile)"
+      ]
+    },
+    {
+      "cluster": "dir:.github",
+      "commits": 6,
+      "first": "2026-07-05",
+      "last": "2026-07-05",
+      "churn": 110,
+      "types": {
+        "ci": 5,
+        "fix": 1
+      },
+      "probable_noise": false,
+      "hashes": [
+        "559f077",
+        "651c024",
+        "0e707a1",
+        "27e4b45",
+        "f51da9c",
+        "5ee3b1d"
+      ],
+      "subjects_sample": [
+        "ci: run ci on PRs to main; document PR-based release flow",
+        "fix: make the agent import-safe on a headless host (RF-36)",
+        "ci: use uv-managed Python so tkinter is available",
+        "ci: key uv cache on pyproject.toml (uv.lock is gitignored)",
+        "ci: bind publish-pypi to the pypi environment so the token resolves",
+        "ci: publish to PyPI after all packages build"
+      ]
+    },
+    {
+      "cluster": "dir:docs",
+      "commits": 3,
+      "first": "2026-07-03",
+      "last": "2026-07-06",
+      "churn": 348,
+      "types": {
+        "test": 1,
+        "docs": 1,
+        "fix": 1
+      },
+      "probable_noise": false,
+      "hashes": [
+        "f49d139",
+        "230b0b8",
+        "8e0064a"
+      ],
+      "subjects_sample": [
+        "test: resiliencia end-to-end del pipeline y verificación --simulate (Fase 7)",
+        "docs: profundiza el contrato D-Bus del ADR-010 (Opción 3, solo diseño)",
+        "fix: use HTTPS for the GEOFON fdsnws-event endpoint"
+      ]
+    },
+    {
+      "cluster": "dir:packaging",
+      "commits": 1,
+      "first": "2026-07-03",
+      "last": "2026-07-03",
+      "churn": 499,
+      "types": {
+        "feat": 1
+      },
+      "probable_noise": false,
+      "hashes": [
+        "b6413e3"
+      ],
+      "subjects_sample": [
+        "feat: empaquetado multiplataforma y CI de release (Fase 8)"
+      ]
+    }
+  ],
+  "hotspots": [
+    [
+      "CHANGELOG.md",
+      22
+    ],
+    [
+      "pyproject.toml",
+      17
+    ],
+    [
+      "docs/IMPLEMENTATION-PLAN.md",
+      14
+    ],
+    [
+      "src/vigia_eew/app.py",
+      11
+    ],
+    [
+      "src/vigia_eew/config.py",
+      10
+    ],
+    [
+      "docs/TECHNICAL-DESIGN.md",
+      10
+    ],
+    [
+      "src/vigia_eew/cli.py",
+      9
+    ],
+    [
+      "tests/test_app.py",
+      9
+    ],
+    [
+      "tests/test_config.py",
+      9
+    ],
+    [
+      "README.md",
+      9
+    ],
+    [
+      "docs/PRD.md",
+      9
+    ],
+    [
+      "tests/test_cli.py",
+      7
+    ],
+    [
+      "docs/API-SPEC.md",
+      7
+    ],
+    [
+      "src/vigia_eew/notify/alert_window.py",
+      6
+    ],
+    [
+      "docs/DATA-MODEL.md",
+      6
+    ],
+    [
+      "src/vigia_eew/tray.py",
+      6
+    ],
+    [
+      "src/vigia_eew/supervisor.py",
+      5
+    ],
+    [
+      "src/vigia_eew/notify/queue.py",
+      5
+    ],
+    [
+      "src/vigia_eew/pipeline/dedup.py",
+      5
+    ],
+    [
+      "src/vigia_eew/pipeline/normalize.py",
+      5
+    ]
+  ],
+  "fix_prone_files": [
+    [
+      "CHANGELOG.md",
+      5
+    ],
+    [
+      "packaging/build_linux.sh",
+      2
+    ],
+    [
+      "pyproject.toml",
+      2
+    ],
+    [
+      "src/vigia_eew/tray.py",
+      2
+    ],
+    [
+      "tests/test_tray.py",
+      2
+    ],
+    [
+      "src/vigia_eew/notify/alert_window.py",
+      2
+    ],
+    [
+      "tests/test_alert_window.py",
+      2
+    ]
+  ],
+  "commits": [
+    {
+      "hash": "4fb49d0f9ef1748058f6edf10fdb6381a6427df5",
+      "short": "4fb49d0",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "feat: CLI, ensamblaje del agente y modo --simulate (Fase 5)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "docs/IMPLEMENTATION-PLAN.md",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/notify/controlador.py",
+        "src/vigia_eew/pipeline/procesador.py",
+        "src/vigia_eew/simulacion.py",
+        "src/vigia_eew/supervisor.py",
+        "tests/test_app.py",
+        "tests/test_cli.py",
+        "tests/test_controlador.py",
+        "tests/test_procesador.py",
+        "tests/test_simulacion.py"
+      ],
+      "added": 853,
+      "deleted": 18
+    },
+    {
+      "hash": "fb50326c0c3fe794d2fa094e24e718676e8ba34b",
+      "short": "fb50326",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "feat: capa de notificación (Fase 4)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "src/vigia_eew/assets/atencion.wav",
+        "src/vigia_eew/assets/critico.wav",
+        "src/vigia_eew/assets/info.wav",
+        "src/vigia_eew/notify/__init__.py",
+        "src/vigia_eew/notify/alert_window.py",
+        "src/vigia_eew/notify/presentacion.py",
+        "src/vigia_eew/notify/queue.py",
+        "src/vigia_eew/notify/sound.py",
+        "src/vigia_eew/notify/toast.py",
+        "tests/test_alert_queue.py",
+        "tests/test_alert_window.py",
+        "tests/test_presentacion.py",
+        "tests/test_sound.py",
+        "tests/test_toast.py"
+      ],
+      "added": 1084,
+      "deleted": 0
+    },
+    {
+      "hash": "b40c20bbc63e06e6ac2c5420bdf92822f747a687",
+      "short": "b40c20b",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "feat: pipeline de normalización, filtro y dedup (Fase 3)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "src/vigia_eew/pipeline/__init__.py",
+        "src/vigia_eew/pipeline/dedup.py",
+        "src/vigia_eew/pipeline/filtro.py",
+        "src/vigia_eew/pipeline/normalize.py",
+        "tests/test_dedup.py",
+        "tests/test_filtro.py",
+        "tests/test_normalize.py"
+      ],
+      "added": 570,
+      "deleted": 0
+    },
+    {
+      "hash": "fc0ca997d8304f29073b2ed56166a8035e42e7c6",
+      "short": "fc0ca99",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "feat: ingestión EMSC/USGS y supervisor asyncio (Fase 2)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "src/vigia_eew/backoff.py",
+        "src/vigia_eew/ingest/__init__.py",
+        "src/vigia_eew/ingest/rest_usgs.py",
+        "src/vigia_eew/ingest/ws_emsc.py",
+        "src/vigia_eew/supervisor.py",
+        "tests/test_backoff.py",
+        "tests/test_rest_usgs.py",
+        "tests/test_supervisor.py",
+        "tests/test_ws_emsc.py"
+      ],
+      "added": 1011,
+      "deleted": 0
+    },
+    {
+      "hash": "b5c5371fb4b03664058ca5e4a643d6ee243ff8a3",
+      "short": "b5c5371",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "feat: estructura, modelos, config, estado y logging (Fase 1)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "src/vigia_eew/__init__.py",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/geo.py",
+        "src/vigia_eew/logging_conf.py",
+        "src/vigia_eew/models.py",
+        "src/vigia_eew/state.py",
+        "tests/__init__.py",
+        "tests/test_config.py",
+        "tests/test_geo.py",
+        "tests/test_models.py",
+        "tests/test_state.py"
+      ],
+      "added": 841,
+      "deleted": 0
+    },
+    {
+      "hash": "737d7fa1a43b8c67cbe3c20a8e75fc64ab5177c7",
+      "short": "737d7fa",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "docs: artefactos SDD, scaffolding y ARCHITECTURE (Fase 0)",
+      "type": "docs",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".gitignore",
+        "ARCHITECTURE.md",
+        "README.md",
+        "config.toml.example",
+        "docs/API-SPEC.md",
+        "docs/DATA-MODEL.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "pyproject.toml"
+      ],
+      "added": 1495,
+      "deleted": 2
+    },
+    {
+      "hash": "406cde053e19c9cdccfcb113ca6989e408a3fda6",
+      "short": "406cde0",
+      "date": "2026-06-28",
+      "author": "Ernesto Crespo",
+      "subject": "Initial commit",
+      "type": "other",
+      "scope": null,
+      "conventional": false,
+      "files": [
+        "LICENSE",
+        "README.md"
+      ],
+      "added": 676,
+      "deleted": 0
+    },
+    {
+      "hash": "c38d9f6eb8b77a475007742201ee40775c4e1e9e",
+      "short": "c38d9f6",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "fix: ícono placeholder de resolución inválida rompía linuxdeploy (v0.1.2)",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "packaging/build_linux.sh",
+        "pyproject.toml"
+      ],
+      "added": 26,
+      "deleted": 7
+    },
+    {
+      "hash": "7b1c71c9402767aa73f7a68737f8cd1946aa437a",
+      "short": "7b1c71c",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "fix: icono placeholder inválido rompía el build de AppImage (v0.1.1)",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "packaging/build_linux.sh",
+        "pyproject.toml"
+      ],
+      "added": 17,
+      "deleted": 4
+    },
+    {
+      "hash": "92c65e5cae7270e67ce39e1b4211717253725019",
+      "short": "92c65e5",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.1.0",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md"
+      ],
+      "added": 4,
+      "deleted": 1
+    },
+    {
+      "hash": "b6413e3f5c152abd686819ca5d3b6ff7a96282b9",
+      "short": "b6413e3",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "feat: empaquetado multiplataforma y CI de release (Fase 8)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/workflows/build.yml",
+        "CHANGELOG.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "packaging/RELEASING.md",
+        "packaging/apt-r2/README.md",
+        "packaging/build_linux.sh",
+        "packaging/build_macos.sh",
+        "packaging/build_windows.ps1",
+        "packaging/entrypoint.py",
+        "packaging/vigia-eew.spec",
+        "pyproject.toml",
+        "src/vigia_eew/autostart/__init__.py",
+        "tests/test_autostart.py"
+      ],
+      "added": 484,
+      "deleted": 15
+    },
+    {
+      "hash": "f49d13991fccb8138141f7eeaa297ee5268abf79",
+      "short": "f49d139",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "test: resiliencia end-to-end del pipeline y verificación --simulate (Fase 7)",
+      "type": "test",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "docs/IMPLEMENTATION-PLAN.md",
+        "tests/test_resiliencia.py"
+      ],
+      "added": 233,
+      "deleted": 6
+    },
+    {
+      "hash": "8e7b22373a26315b819f37e5663c9fda6efe27de",
+      "short": "8e7b223",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "docs: agrega CLAUDE.md con guía de desarrollo para el repo",
+      "type": "docs",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CLAUDE.md"
+      ],
+      "added": 100,
+      "deleted": 0
+    },
+    {
+      "hash": "230b0b874a1a83b1653c3bbdcb4615830b4594f7",
+      "short": "230b0b8",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "docs: profundiza el contrato D-Bus del ADR-010 (Opción 3, solo diseño)",
+      "type": "docs",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "docs/API-SPEC.md",
+        "docs/TECHNICAL-DESIGN.md"
+      ],
+      "added": 95,
+      "deleted": 0
+    },
+    {
+      "hash": "5b79ff18ff95da7e32f0077ae1a251ff7991859d",
+      "short": "5b79ff1",
+      "date": "2026-07-03",
+      "author": "Ernesto Crespo",
+      "subject": "feat: autoarranque multiplataforma y flags de CLI (Fase 6)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "src/vigia_eew/autostart/__init__.py",
+        "src/vigia_eew/autostart/linux_systemd.py",
+        "src/vigia_eew/autostart/macos_launchagent.py",
+        "src/vigia_eew/autostart/windows_task.py",
+        "src/vigia_eew/cli.py",
+        "tests/test_autostart.py",
+        "tests/test_autostart_linux.py",
+        "tests/test_autostart_macos.py",
+        "tests/test_autostart_windows.py",
+        "tests/test_cli.py"
+      ],
+      "added": 680,
+      "deleted": 5
+    },
+    {
+      "hash": "70480a3f53b33c1e5d94aff1d10ffedd53f3d533",
+      "short": "70480a3",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.2.1",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml",
+        "src/vigia_eew/__init__.py"
+      ],
+      "added": 13,
+      "deleted": 3
+    },
+    {
+      "hash": "a3a4a1a2d4aacb08737b36a71ea1d99c67aa2b71",
+      "short": "a3a4a1a",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "feat: country notification filter (RF-37, Phase 12)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "README.md",
+        "config.toml.example",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "docs/plans/2026-07-05-country-filter-design.md",
+        "packaging/build_countries_geojson.py",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/assets/countries.geojson",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/geocode.py",
+        "src/vigia_eew/pipeline/filter.py",
+        "tests/test_app.py",
+        "tests/test_config.py",
+        "tests/test_filter.py",
+        "tests/test_geocode.py"
+      ],
+      "added": 613,
+      "deleted": 15
+    },
+    {
+      "hash": "a02607f030f0ad3180abaaa44a86f0a02236a0bd",
+      "short": "a02607f",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "fix: sanitize LD_LIBRARY_PATH when spawning system binaries (PyInstaller onefile)",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "src/vigia_eew/autostart/linux_systemd.py",
+        "src/vigia_eew/autostart/macos_launchagent.py",
+        "src/vigia_eew/autostart/windows_task.py",
+        "src/vigia_eew/notify/sound.py",
+        "src/vigia_eew/subprocess_env.py",
+        "src/vigia_eew/tray.py",
+        "tests/test_subprocess_env.py",
+        "tests/test_tray.py"
+      ],
+      "added": 163,
+      "deleted": 9
+    },
+    {
+      "hash": "69a6a7e7c518378dbc164aef6ff2ca6525094a69",
+      "short": "69a6a7e",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.2.0",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md"
+      ],
+      "added": 20,
+      "deleted": 26
+    },
+    {
+      "hash": "7f989801d3772ec0768a91bfe319c545a9dcda64",
+      "short": "7f98980",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "feat: headless TUI dashboard (--tui, RF-36, Phase 11)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "README.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "pyproject.toml",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/tui.py",
+        "tests/test_app.py",
+        "tests/test_cli.py",
+        "tests/test_tui.py"
+      ],
+      "added": 774,
+      "deleted": 9
+    },
+    {
+      "hash": "e49404d045b9489c209d6f82286bb88aefba6ff4",
+      "short": "e49404d",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "refactor: use absolute imports across the package",
+      "type": "refactor",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/autostart/__init__.py",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/geoloc.py",
+        "src/vigia_eew/ingest/__init__.py",
+        "src/vigia_eew/ingest/rest_usgs.py",
+        "src/vigia_eew/ingest/ws_emsc.py",
+        "src/vigia_eew/logging_conf.py",
+        "src/vigia_eew/notify/alert_window.py",
+        "src/vigia_eew/notify/controller.py",
+        "src/vigia_eew/notify/presentation.py",
+        "src/vigia_eew/notify/queue.py",
+        "src/vigia_eew/notify/sound.py",
+        "src/vigia_eew/notify/toast.py",
+        "src/vigia_eew/pipeline/dedup.py",
+        "src/vigia_eew/pipeline/filter.py",
+        "src/vigia_eew/pipeline/normalize.py",
+        "src/vigia_eew/pipeline/processor.py",
+        "src/vigia_eew/simulation.py",
+        "src/vigia_eew/state.py",
+        "src/vigia_eew/supervisor.py",
+        "src/vigia_eew/tray.py"
+      ],
+      "added": 76,
+      "deleted": 76
+    },
+    {
+      "hash": "7f9132e5f0e1d60e38a0e3583603ad91700360fb",
+      "short": "7f9132e",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "feat!: translate entire codebase to English, add i18n (RF-35)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "ARCHITECTURE.md",
+        "CHANGELOG.md",
+        "CLAUDE.md",
+        "config.toml.example",
+        "docs/API-SPEC.md",
+        "docs/DATA-MODEL.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "pyproject.toml",
+        "src/vigia_eew/__init__.py",
+        "src/vigia_eew/agent_state.py",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/assets/{critico.wav => critical.wav}",
+        "src/vigia_eew/assets/{atencion.wav => warning.wav}",
+        "src/vigia_eew/autostart/__init__.py",
+        "src/vigia_eew/autostart/linux_systemd.py",
+        "src/vigia_eew/autostart/macos_launchagent.py",
+        "src/vigia_eew/autostart/windows_task.py",
+        "src/vigia_eew/backoff.py",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/estado_agente.py",
+        "src/vigia_eew/geo.py",
+        "src/vigia_eew/geoloc.py",
+        "src/vigia_eew/i18n.py",
+        "src/vigia_eew/ingest/__init__.py",
+        "src/vigia_eew/ingest/rest_usgs.py",
+        "src/vigia_eew/ingest/ws_emsc.py",
+        "src/vigia_eew/logging_conf.py",
+        "src/vigia_eew/models.py",
+        "src/vigia_eew/notify/__init__.py",
+        "src/vigia_eew/notify/alert_window.py",
+        "src/vigia_eew/notify/controlador.py",
+        "src/vigia_eew/notify/controller.py",
+        "src/vigia_eew/notify/presentacion.py",
+        "src/vigia_eew/notify/presentation.py",
+        "src/vigia_eew/notify/queue.py",
+        "src/vigia_eew/notify/sound.py",
+        "src/vigia_eew/notify/toast.py",
+        "src/vigia_eew/pipeline/__init__.py",
+        "src/vigia_eew/pipeline/dedup.py",
+        "src/vigia_eew/pipeline/filter.py",
+        "src/vigia_eew/pipeline/filtro.py",
+        "src/vigia_eew/pipeline/normalize.py",
+        "src/vigia_eew/pipeline/procesador.py",
+        "src/vigia_eew/pipeline/processor.py",
+        "src/vigia_eew/simulacion.py",
+        "src/vigia_eew/simulation.py",
+        "src/vigia_eew/state.py",
+        "src/vigia_eew/supervisor.py",
+        "src/vigia_eew/tray.py",
+        "tests/test_agent_state.py",
+        "tests/test_alert_queue.py",
+        "tests/test_alert_window.py",
+        "tests/test_app.py",
+        "tests/test_autostart.py",
+        "tests/test_autostart_linux.py",
+        "tests/test_autostart_macos.py",
+        "tests/test_autostart_windows.py",
+        "tests/test_backoff.py",
+        "tests/test_cli.py",
+        "tests/test_config.py",
+        "tests/test_controlador.py",
+        "tests/test_controller.py",
+        "tests/test_dedup.py",
+        "tests/test_estado_agente.py",
+        "tests/test_filter.py",
+        "tests/test_filtro.py",
+        "tests/test_geo.py",
+        "tests/test_geoloc.py",
+        "tests/test_i18n.py",
+        "tests/test_models.py",
+        "tests/test_normalize.py",
+        "tests/test_presentacion.py",
+        "tests/test_presentation.py",
+        "tests/test_procesador.py",
+        "tests/test_processor.py",
+        "tests/test_resilience.py",
+        "tests/test_resiliencia.py",
+        "tests/test_rest_usgs.py",
+        "tests/test_simulacion.py",
+        "tests/test_simulation.py",
+        "tests/test_sound.py",
+        "tests/test_state.py",
+        "tests/test_supervisor.py",
+        "tests/test_toast.py",
+        "tests/test_tray.py",
+        "tests/test_ws_emsc.py"
+      ],
+      "added": 5079,
+      "deleted": 4826
+    },
+    {
+      "hash": "fb3fe14e1032667d736a5cea163bc8f4879f3da6",
+      "short": "fb3fe14",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "feat: ícono de bandeja del sistema (RF-34, Fase 10)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "README.md",
+        "config.toml.example",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "pyproject.toml",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/assets/tray_icon.png",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/estado_agente.py",
+        "src/vigia_eew/ingest/ws_emsc.py",
+        "src/vigia_eew/notify/controlador.py",
+        "src/vigia_eew/notify/queue.py",
+        "src/vigia_eew/tray.py",
+        "tests/test_alert_queue.py",
+        "tests/test_app.py",
+        "tests/test_cli.py",
+        "tests/test_config.py",
+        "tests/test_controlador.py",
+        "tests/test_estado_agente.py",
+        "tests/test_tray.py",
+        "tests/test_ws_emsc.py"
+      ],
+      "added": 720,
+      "deleted": 14
+    },
+    {
+      "hash": "f0960acc90762bc44d2e6495f85244176e494d83",
+      "short": "f0960ac",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "fix: la ventana de alerta recortaba el contenido contra el borde inferior",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "src/vigia_eew/notify/alert_window.py",
+        "tests/test_alert_window.py"
+      ],
+      "added": 35,
+      "deleted": 1
+    },
+    {
+      "hash": "f90c79696abbc7411f25dbdc99eff7c6c47b71a2",
+      "short": "f90c796",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "fix: la hora se recortaba en la ventana de alerta (sin wraplength)",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "src/vigia_eew/notify/alert_window.py",
+        "tests/test_alert_window.py"
+      ],
+      "added": 39,
+      "deleted": 2
+    },
+    {
+      "hash": "cee6f8e2b4ec2e3eba0afee57f82f0fe67c6036b",
+      "short": "cee6f8e",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.1.3",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 5,
+      "deleted": 2
+    },
+    {
+      "hash": "bdc2a9d5631e51a76687a0d02bbd2eea67125565",
+      "short": "bdc2a9d",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "fix: desktop_notifier.resources faltaba en el binario PyInstaller",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "packaging/vigia-eew.spec"
+      ],
+      "added": 24,
+      "deleted": 2
+    },
+    {
+      "hash": "c20a59b980015893373a7af830f2b276e6517f71",
+      "short": "c20a59b",
+      "date": "2026-07-04",
+      "author": "Ernesto Crespo",
+      "subject": "feat: detección automática de ubicación por IP (RF-33, Fase 9)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "README.md",
+        "config.toml.example",
+        "docs/API-SPEC.md",
+        "docs/DATA-MODEL.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/geoloc.py",
+        "src/vigia_eew/models.py",
+        "src/vigia_eew/state.py",
+        "tests/test_app.py",
+        "tests/test_cli.py",
+        "tests/test_config.py",
+        "tests/test_geoloc.py",
+        "tests/test_state.py"
+      ],
+      "added": 507,
+      "deleted": 29
+    },
+    {
+      "hash": "2edb1d1711a5b94d6f8dad4271ff88f387c7093a",
+      "short": "2edb1d1",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.4.1",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 18,
+      "deleted": 1
+    },
+    {
+      "hash": "559f0778ccb0621567c846f0ea40adb88002a6e8",
+      "short": "559f077",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "ci: run ci on PRs to main; document PR-based release flow",
+      "type": "ci",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/workflows/ci.yml",
+        "packaging/RELEASING.md"
+      ],
+      "added": 15,
+      "deleted": 5
+    },
+    {
+      "hash": "651c024d0a9532898f6f6b4b0816f48d51dceee9",
+      "short": "651c024",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "fix: make the agent import-safe on a headless host (RF-36)",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/workflows/ci.yml",
+        "src/vigia_eew/tray.py",
+        "tests/test_tray.py"
+      ],
+      "added": 31,
+      "deleted": 1
+    },
+    {
+      "hash": "0e707a110f1f47a258e1583354a88d3587fc8bb0",
+      "short": "0e707a1",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "ci: use uv-managed Python so tkinter is available",
+      "type": "ci",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml"
+      ],
+      "added": 9,
+      "deleted": 0
+    },
+    {
+      "hash": "27e4b45ac8d68e1ed3dd5a410773dd9b92d64d67",
+      "short": "27e4b45",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "ci: key uv cache on pyproject.toml (uv.lock is gitignored)",
+      "type": "ci",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/actions/setup-python-env/action.yml",
+        ".github/workflows/security.yml"
+      ],
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "hash": "97b2a8e65c517aae7e6b75f4b3197deee3bd60ca",
+      "short": "97b2a8e",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "ci: add CI + security workflows and pre-commit hooks",
+      "type": "ci",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/actions/setup-python-env/action.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml",
+        ".gitignore",
+        ".pre-commit-config.yaml",
+        "CLAUDE.md",
+        "README.md",
+        "pyproject.toml",
+        "src/vigia_eew/tui.py",
+        "tests/test_tui.py"
+      ],
+      "added": 354,
+      "deleted": 3
+    },
+    {
+      "hash": "a724bf57dcaa3caca6850e8d29edf3901dd67231",
+      "short": "a724bf5",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.4.0",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 15,
+      "deleted": 1
+    },
+    {
+      "hash": "10bb72dcefb428be93ed5781db2383dbd98f877c",
+      "short": "10bb72d",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "feat: add FUNVISIS as a Venezuela-only local coverage source (RF-05)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "README.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/config.toml.example",
+        "src/vigia_eew/ingest/__init__.py",
+        "src/vigia_eew/ingest/rest_funvisis.py",
+        "src/vigia_eew/models.py",
+        "src/vigia_eew/pipeline/normalize.py",
+        "tests/test_app.py",
+        "tests/test_config.py",
+        "tests/test_normalize.py",
+        "tests/test_rest_funvisis.py"
+      ],
+      "added": 518,
+      "deleted": 17
+    },
+    {
+      "hash": "f51da9ca0fd69658f6a92aaaef2ec96137ff1283",
+      "short": "f51da9c",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "ci: bind publish-pypi to the pypi environment so the token resolves",
+      "type": "ci",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/workflows/build.yml"
+      ],
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "hash": "583eafe6b4cb542e80643162609d140a7dbb0f3f",
+      "short": "583eafe",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.3.1",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 10,
+      "deleted": 1
+    },
+    {
+      "hash": "5ee3b1d0707585d12d5e79f59b2a5b46013beff1",
+      "short": "5ee3b1d",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "ci: publish to PyPI after all packages build",
+      "type": "ci",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".github/workflows/build.yml",
+        "packaging/RELEASING.md"
+      ],
+      "added": 31,
+      "deleted": 10
+    },
+    {
+      "hash": "97161babe31776460b1e3eb89125120b48bf3444",
+      "short": "97161ba",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.3.0",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 19,
+      "deleted": 1
+    },
+    {
+      "hash": "a06f7a1f618330828fca3ddfa03113394ed47f26",
+      "short": "a06f7a1",
+      "date": "2026-07-05",
+      "author": "Ernesto Crespo",
+      "subject": "feat: seed config.toml from bundled template on first run (RF-24)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "README.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "packaging/vigia-eew.spec",
+        "pyproject.toml",
+        "src/vigia_eew/cli.py",
+        "src/vigia_eew/config.py",
+        "config.toml.example => src/vigia_eew/config.toml.example",
+        "src/vigia_eew/tray.py",
+        "tests/conftest.py",
+        "tests/test_cli.py",
+        "tests/test_config.py"
+      ],
+      "added": 199,
+      "deleted": 32
+    },
+    {
+      "hash": "d4a6ab006a0ee632a0b53c80b1b91ae41c899655",
+      "short": "d4a6ab0",
+      "date": "2026-07-06",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.5.0",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "hash": "8e0064a9613f320bcdd3eef805c893a4b02a1149",
+      "short": "8e0064a",
+      "date": "2026-07-06",
+      "author": "Ernesto Crespo",
+      "subject": "fix: use HTTPS for the GEOFON fdsnws-event endpoint",
+      "type": "fix",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "docs/API-SPEC.md",
+        "docs/DATA-MODEL.md",
+        "docs/plans/2026-07-05-geofon-design.md",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/config.toml.example"
+      ],
+      "added": 7,
+      "deleted": 7
+    },
+    {
+      "hash": "ade1199f1ee98b6e5a2a3eb96d37b3917ef9c14d",
+      "short": "ade1199",
+      "date": "2026-07-06",
+      "author": "Ernesto Crespo",
+      "subject": "feat: GEOFON independent global-network source (RF-39, Phase 14)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "ARCHITECTURE.md",
+        "CHANGELOG.md",
+        "docs/API-SPEC.md",
+        "docs/DATA-MODEL.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "docs/plans/2026-07-05-geofon-design.md",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/config.toml.example",
+        "src/vigia_eew/ingest/__init__.py",
+        "src/vigia_eew/ingest/rest_funvisis.py",
+        "src/vigia_eew/ingest/rest_geofon.py",
+        "src/vigia_eew/models.py",
+        "src/vigia_eew/pipeline/normalize.py",
+        "src/vigia_eew/state.py",
+        "tests/test_app.py",
+        "tests/test_config.py",
+        "tests/test_dedup.py",
+        "tests/test_normalize.py",
+        "tests/test_rest_geofon.py"
+      ],
+      "added": 1058,
+      "deleted": 70
+    },
+    {
+      "hash": "bd4a5559b01f649715fe3791e7ea6cff72102482",
+      "short": "bd4a555",
+      "date": "2026-07-17",
+      "author": "Ernesto Crespo",
+      "subject": "chore: release v0.6.0",
+      "type": "chore",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CHANGELOG.md",
+        "pyproject.toml"
+      ],
+      "added": 28,
+      "deleted": 1
+    },
+    {
+      "hash": "b0f832c6d659b10241f79cd8fbf98a6a6cd8988e",
+      "short": "b0f832c",
+      "date": "2026-07-17",
+      "author": "Ernesto Crespo",
+      "subject": "feat: event freshness filter, bounded REST backlog, prune() wiring (RF-40/RF-41/RF-42, Phase 15)",
+      "type": "feat",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".gitignore",
+        "ARCHITECTURE.md",
+        "CLAUDE.md",
+        "docs/API-SPEC.md",
+        "docs/DATA-MODEL.md",
+        "docs/IMPLEMENTATION-PLAN.md",
+        "docs/PRD.md",
+        "docs/TECHNICAL-DESIGN.md",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/config.py",
+        "src/vigia_eew/config.toml.example",
+        "src/vigia_eew/ingest/rest_geofon.py",
+        "src/vigia_eew/ingest/rest_usgs.py",
+        "src/vigia_eew/pipeline/dedup.py",
+        "src/vigia_eew/pipeline/filter.py",
+        "src/vigia_eew/timeutil.py",
+        "tests/test_app.py",
+        "tests/test_config.py",
+        "tests/test_dedup.py",
+        "tests/test_filter.py",
+        "tests/test_processor.py",
+        "tests/test_resilience.py",
+        "tests/test_rest_geofon.py",
+        "tests/test_rest_usgs.py"
+      ],
+      "added": 600,
+      "deleted": 64
+    },
+    {
+      "hash": "6e0f1331b7995c575c672c0f75f84df796221156",
+      "short": "6e0f133",
+      "date": "2026-08-16",
+      "author": "Claude",
+      "subject": "docs: add graph-first knowledge layers (intent, structure, meaning)",
+      "type": "docs",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        ".codegraph/.gitignore",
+        ".gitignore",
+        "CLAUDE.md",
+        "lat.md/architecture.md",
+        "lat.md/configuration.md",
+        "lat.md/ingestion.md",
+        "lat.md/lat.md",
+        "lat.md/notification.md",
+        "lat.md/pipeline.md",
+        "src/vigia_eew/app.py",
+        "src/vigia_eew/ingest/rest_funvisis.py",
+        "src/vigia_eew/ingest/rest_geofon.py",
+        "src/vigia_eew/notify/alert_window.py",
+        "src/vigia_eew/notify/queue.py",
+        "src/vigia_eew/pipeline/dedup.py",
+        "src/vigia_eew/pipeline/filter.py",
+        "src/vigia_eew/supervisor.py"
+      ],
+      "added": 617,
+      "deleted": 0
+    }
+  ]
+}
