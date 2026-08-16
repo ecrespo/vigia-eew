@@ -82,6 +82,7 @@ class FUNVISISPoller:
         await self._process_features(features)
         return interval
 
+    # @lat: [[ingestion#FUNVISIS uses a seen-set because it has no cursor]]
     async def _process_features(self, features: Any) -> None:
         """Emits features whose id is new; the first poll only seeds the seen-set."""
         if not isinstance(features, list):

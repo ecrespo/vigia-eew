@@ -248,6 +248,7 @@ class Application:
         if resolve_location and not self._manual_reference:
             self._resolve_automatic_reference()
 
+    # @lat: [[configuration#The reference point is manual, with a one-time IP fallback]]
     def _resolve_automatic_reference(self) -> None:
         """Resolves the reference point by IP when there's no manual `[reference]` (RF-33)."""
         cached = self.state.cached_location()

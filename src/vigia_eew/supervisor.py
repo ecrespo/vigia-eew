@@ -24,6 +24,7 @@ Factory = Callable[[], Awaitable[Any]]
 _SleepFn = Callable[[float], Any]
 
 
+# @lat: [[architecture#The supervisor must outlive every failure]]
 class Supervisor:
     """Supervises asyncio tasks, restarting them on failure; coordinated shutdown."""
 

@@ -130,6 +130,7 @@ class GEOFONPoller:
             self._state.save()
         return interval
 
+    # @lat: [[ingestion#GEOFON is USGS's sibling, and parses text on purpose]]
     async def _process_text(self, text: Any) -> int | None:
         """Parses the pipe-delimited body, enqueues events; returns the max origin time (ms)."""
         if not isinstance(text, str):

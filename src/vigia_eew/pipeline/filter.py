@@ -57,6 +57,7 @@ class GeoFilter:
             return False
         return self._passes_freshness(ev)
 
+    # @lat: [[pipeline#The country filter is a block-list, not an allow-list]]
     def _passes_country(self, ev: SeismicEvent) -> bool:
         """Reject only if the event is positively inside another country (RF-37)."""
         if (
@@ -68,6 +69,7 @@ class GeoFilter:
         event_country = self._country_of(ev.lat, ev.lon)
         return event_country is None or event_country == self._user_country
 
+    # @lat: [[pipeline#Only today's earthquakes are alerted]]
     def _passes_freshness(self, ev: SeismicEvent) -> bool:
         """Reject events that didn't originate on the current local day (RF-40).
 

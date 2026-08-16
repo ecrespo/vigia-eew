@@ -32,6 +32,10 @@ uv.lock
 .idea/
 .vscode/
 
+# Knowledge layers — derived artifacts, rebuilt locally at zero cost.
+# `lat.md/` is NOT here: it is hand-authored intent and belongs in the repo.
+graphify-out/
+
 # Runtime
 *.log
 state.json
