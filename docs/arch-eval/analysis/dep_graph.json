@@ -1,0 +1,187 @@
+{
+  "repo": "/home/user/vigia-eew",
+  "scanned_root": "/home/user/vigia-eew",
+  "files_analyzed": 79,
+  "parse_errors": [],
+  "modules": [
+    {
+      "module": "src/vigia_eew",
+      "files": 19,
+      "loc": 1773,
+      "fan_in": 6,
+      "fan_out": 4,
+      "instability": 0.4,
+      "coupling_score": 24
+    },
+    {
+      "module": "src/vigia_eew/pipeline",
+      "files": 5,
+      "loc": 402,
+      "fan_in": 2,
+      "fan_out": 2,
+      "instability": 0.5,
+      "coupling_score": 4
+    },
+    {
+      "module": "src/vigia_eew/ingest",
+      "files": 5,
+      "loc": 568,
+      "fan_in": 3,
+      "fan_out": 1,
+      "instability": 0.25,
+      "coupling_score": 3
+    },
+    {
+      "module": "src/vigia_eew/notify",
+      "files": 7,
+      "loc": 586,
+      "fan_in": 2,
+      "fan_out": 1,
+      "instability": 0.33,
+      "coupling_score": 2
+    },
+    {
+      "module": "src/vigia_eew/autostart",
+      "files": 4,
+      "loc": 271,
+      "fan_in": 2,
+      "fan_out": 1,
+      "instability": 0.33,
+      "coupling_score": 2
+    },
+    {
+      "module": "tests",
+      "files": 37,
+      "loc": 3433,
+      "fan_in": 0,
+      "fan_out": 5,
+      "instability": 1.0,
+      "coupling_score": 0
+    },
+    {
+      "module": "packaging",
+      "files": 2,
+      "loc": 64,
+      "fan_in": 0,
+      "fan_out": 1,
+      "instability": 1.0,
+      "coupling_score": 0
+    }
+  ],
+  "edges": [
+    {
+      "from": "tests",
+      "to": "src/vigia_eew",
+      "imports": 57
+    },
+    {
+      "from": "tests",
+      "to": "src/vigia_eew/ingest",
+      "imports": 12
+    },
+    {
+      "from": "tests",
+      "to": "src/vigia_eew/pipeline",
+      "imports": 11
+    },
+    {
+      "from": "src/vigia_eew/pipeline",
+      "to": "src/vigia_eew",
+      "imports": 11
+    },
+    {
+      "from": "src/vigia_eew/ingest",
+      "to": "src/vigia_eew",
+      "imports": 11
+    },
+    {
+      "from": "src/vigia_eew/notify",
+      "to": "src/vigia_eew",
+      "imports": 11
+    },
+    {
+      "from": "tests",
+      "to": "src/vigia_eew/notify",
+      "imports": 8
+    },
+    {
+      "from": "tests",
+      "to": "src/vigia_eew/autostart",
+      "imports": 8
+    },
+    {
+      "from": "src/vigia_eew",
+      "to": "src/vigia_eew/notify",
+      "imports": 7
+    },
+    {
+      "from": "src/vigia_eew",
+      "to": "src/vigia_eew/ingest",
+      "imports": 5
+    },
+    {
+      "from": "src/vigia_eew",
+      "to": "src/vigia_eew/pipeline",
+      "imports": 4
+    },
+    {
+      "from": "src/vigia_eew/autostart",
+      "to": "src/vigia_eew",
+      "imports": 3
+    },
+    {
+      "from": "src/vigia_eew/pipeline",
+      "to": "src/vigia_eew/ingest",
+      "imports": 2
+    },
+    {
+      "from": "src/vigia_eew",
+      "to": "src/vigia_eew/autostart",
+      "imports": 1
+    },
+    {
+      "from": "packaging",
+      "to": "src/vigia_eew",
+      "imports": 1
+    }
+  ],
+  "cycles_scc": [
+    [
+      "src/vigia_eew",
+      "src/vigia_eew/autostart",
+      "src/vigia_eew/ingest",
+      "src/vigia_eew/notify",
+      "src/vigia_eew/pipeline"
+    ]
+  ],
+  "cycles_pairs": [
+    [
+      "src/vigia_eew",
+      "src/vigia_eew/autostart"
+    ],
+    [
+      "src/vigia_eew",
+      "src/vigia_eew/ingest"
+    ],
+    [
+      "src/vigia_eew",
+      "src/vigia_eew/notify"
+    ],
+    [
+      "src/vigia_eew",
+      "src/vigia_eew/pipeline"
+    ]
+  ],
+  "god_module_candidates": [
+    {
+      "module": "src/vigia_eew",
+      "files": 19,
+      "loc": 1773,
+      "fan_in": 6,
+      "fan_out": 4,
+      "instability": 0.4,
+      "coupling_score": 24
+    }
+  ],
+  "orphan_modules": []
+}

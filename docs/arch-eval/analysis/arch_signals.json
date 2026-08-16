@@ -1,0 +1,547 @@
+{
+  "repo": "/home/user/vigia-eew",
+  "commits_analyzed": 49,
+  "date_range": [
+    "2026-06-28",
+    "2026-08-16"
+  ],
+  "hotspots": [
+    {
+      "file": "CHANGELOG.md",
+      "touches": 22,
+      "fixes": 5,
+      "churn": 295,
+      "score": 132
+    },
+    {
+      "file": "pyproject.toml",
+      "touches": 17,
+      "fixes": 2,
+      "churn": 164,
+      "score": 51
+    },
+    {
+      "file": "src/vigia_eew/config.py",
+      "touches": 10,
+      "fixes": 1,
+      "churn": 505,
+      "score": 20
+    },
+    {
+      "file": "src/vigia_eew/notify/alert_window.py",
+      "touches": 6,
+      "fixes": 2,
+      "churn": 399,
+      "score": 18
+    },
+    {
+      "file": "src/vigia_eew/tray.py",
+      "touches": 6,
+      "fixes": 2,
+      "churn": 307,
+      "score": 18
+    },
+    {
+      "file": "docs/API-SPEC.md",
+      "touches": 7,
+      "fixes": 1,
+      "churn": 809,
+      "score": 14
+    },
+    {
+      "file": "docs/IMPLEMENTATION-PLAN.md",
+      "touches": 14,
+      "fixes": 0,
+      "churn": 815,
+      "score": 14
+    },
+    {
+      "file": "docs/DATA-MODEL.md",
+      "touches": 6,
+      "fixes": 1,
+      "churn": 651,
+      "score": 12
+    },
+    {
+      "file": "tests/test_tray.py",
+      "touches": 4,
+      "fixes": 2,
+      "churn": 307,
+      "score": 12
+    },
+    {
+      "file": "tests/test_alert_window.py",
+      "touches": 4,
+      "fixes": 2,
+      "churn": 365,
+      "score": 12
+    },
+    {
+      "file": "src/vigia_eew/app.py",
+      "touches": 11,
+      "fixes": 0,
+      "churn": 879,
+      "score": 11
+    },
+    {
+      "file": "docs/TECHNICAL-DESIGN.md",
+      "touches": 10,
+      "fixes": 0,
+      "churn": 1378,
+      "score": 10
+    },
+    {
+      "file": "docs/PRD.md",
+      "touches": 9,
+      "fixes": 0,
+      "churn": 539,
+      "score": 9
+    },
+    {
+      "file": "tests/test_app.py",
+      "touches": 9,
+      "fixes": 0,
+      "churn": 623,
+      "score": 9
+    },
+    {
+      "file": "tests/test_config.py",
+      "touches": 9,
+      "fixes": 0,
+      "churn": 320,
+      "score": 9
+    },
+    {
+      "file": "README.md",
+      "touches": 9,
+      "fixes": 0,
+      "churn": 266,
+      "score": 9
+    },
+    {
+      "file": "src/vigia_eew/cli.py",
+      "touches": 9,
+      "fixes": 0,
+      "churn": 229,
+      "score": 9
+    },
+    {
+      "file": "packaging/build_linux.sh",
+      "touches": 3,
+      "fixes": 2,
+      "churn": 102,
+      "score": 9
+    },
+    {
+      "file": "src/vigia_eew/config.toml.example",
+      "touches": 4,
+      "fixes": 1,
+      "churn": 34,
+      "score": 8
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "touches": 4,
+      "fixes": 1,
+      "churn": 68,
+      "score": 8
+    },
+    {
+      "file": "src/vigia_eew/notify/sound.py",
+      "touches": 4,
+      "fixes": 1,
+      "churn": 257,
+      "score": 8
+    },
+    {
+      "file": "tests/test_cli.py",
+      "touches": 7,
+      "fixes": 0,
+      "churn": 289,
+      "score": 7
+    },
+    {
+      "file": "packaging/vigia-eew.spec",
+      "touches": 3,
+      "fixes": 1,
+      "churn": 104,
+      "score": 6
+    },
+    {
+      "file": "src/vigia_eew/autostart/linux_systemd.py",
+      "touches": 3,
+      "fixes": 1,
+      "churn": 180,
+      "score": 6
+    },
+    {
+      "file": "src/vigia_eew/autostart/macos_launchagent.py",
+      "touches": 3,
+      "fixes": 1,
+      "churn": 150,
+      "score": 6
+    }
+  ],
+  "fix_prone_files": [
+    {
+      "file": "CHANGELOG.md",
+      "fixes": 5
+    },
+    {
+      "file": "src/vigia_eew/tray.py",
+      "fixes": 2
+    },
+    {
+      "file": "tests/test_tray.py",
+      "fixes": 2
+    },
+    {
+      "file": "src/vigia_eew/notify/alert_window.py",
+      "fixes": 2
+    },
+    {
+      "file": "tests/test_alert_window.py",
+      "fixes": 2
+    },
+    {
+      "file": "packaging/build_linux.sh",
+      "fixes": 2
+    },
+    {
+      "file": "pyproject.toml",
+      "fixes": 2
+    }
+  ],
+  "temporal_coupling_pairs": [
+    {
+      "file_a": "README.md",
+      "file_b": "docs/IMPLEMENTATION-PLAN.md",
+      "cochanges": 6,
+      "confidence": 0.67,
+      "cross_module": true,
+      "module_a": "(raiz)",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "docs/IMPLEMENTATION-PLAN.md",
+      "file_b": "tests/test_cli.py",
+      "cochanges": 5,
+      "confidence": 0.71,
+      "cross_module": true,
+      "module_a": "docs",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "src/vigia_eew/cli.py",
+      "file_b": "tests/test_cli.py",
+      "cochanges": 5,
+      "confidence": 0.71,
+      "cross_module": true,
+      "module_a": "src/vigia_eew",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "docs/IMPLEMENTATION-PLAN.md",
+      "file_b": "tests/test_app.py",
+      "cochanges": 5,
+      "confidence": 0.56,
+      "cross_module": true,
+      "module_a": "docs",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "src/vigia_eew/app.py",
+      "file_b": "tests/test_app.py",
+      "cochanges": 5,
+      "confidence": 0.56,
+      "cross_module": true,
+      "module_a": "src/vigia_eew",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "src/vigia_eew/config.py",
+      "file_b": "tests/test_config.py",
+      "cochanges": 5,
+      "confidence": 0.56,
+      "cross_module": true,
+      "module_a": "src/vigia_eew",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "docs/IMPLEMENTATION-PLAN.md",
+      "file_b": "src/vigia_eew/cli.py",
+      "cochanges": 5,
+      "confidence": 0.56,
+      "cross_module": true,
+      "module_a": "docs",
+      "module_b": "src/vigia_eew"
+    },
+    {
+      "file_a": "CHANGELOG.md",
+      "file_b": "packaging/build_linux.sh",
+      "cochanges": 3,
+      "confidence": 1.0,
+      "cross_module": true,
+      "module_a": "(raiz)",
+      "module_b": "packaging"
+    },
+    {
+      "file_a": "packaging/build_linux.sh",
+      "file_b": "pyproject.toml",
+      "cochanges": 3,
+      "confidence": 1.0,
+      "cross_module": true,
+      "module_a": "packaging",
+      "module_b": "(raiz)"
+    },
+    {
+      "file_a": "src/vigia_eew/notify/alert_window.py",
+      "file_b": "tests/test_alert_window.py",
+      "cochanges": 3,
+      "confidence": 0.75,
+      "cross_module": true,
+      "module_a": "src/vigia_eew/notify",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "src/vigia_eew/models.py",
+      "file_b": "tests/test_config.py",
+      "cochanges": 3,
+      "confidence": 0.6,
+      "cross_module": true,
+      "module_a": "src/vigia_eew",
+      "module_b": "tests"
+    },
+    {
+      "file_a": "config.toml.example",
+      "file_b": "docs/IMPLEMENTATION-PLAN.md",
+      "cochanges": 3,
+      "confidence": 0.6,
+      "cross_module": true,
+      "module_a": "(raiz)",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "config.toml.example",
+      "file_b": "docs/PRD.md",
+      "cochanges": 3,
+      "confidence": 0.6,
+      "cross_module": true,
+      "module_a": "(raiz)",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "config.toml.example",
+      "file_b": "docs/TECHNICAL-DESIGN.md",
+      "cochanges": 3,
+      "confidence": 0.6,
+      "cross_module": true,
+      "module_a": "(raiz)",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "CHANGELOG.md",
+      "file_b": "pyproject.toml",
+      "cochanges": 12,
+      "confidence": 0.71,
+      "cross_module": false,
+      "module_a": "(raiz)",
+      "module_b": "(raiz)"
+    },
+    {
+      "file_a": "docs/IMPLEMENTATION-PLAN.md",
+      "file_b": "docs/PRD.md",
+      "cochanges": 5,
+      "confidence": 0.56,
+      "cross_module": false,
+      "module_a": "docs",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "docs/PRD.md",
+      "file_b": "docs/TECHNICAL-DESIGN.md",
+      "cochanges": 5,
+      "confidence": 0.56,
+      "cross_module": false,
+      "module_a": "docs",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "docs/IMPLEMENTATION-PLAN.md",
+      "file_b": "docs/TECHNICAL-DESIGN.md",
+      "cochanges": 5,
+      "confidence": 0.5,
+      "cross_module": false,
+      "module_a": "docs",
+      "module_b": "docs"
+    },
+    {
+      "file_a": "src/vigia_eew/config.py",
+      "file_b": "src/vigia_eew/models.py",
+      "cochanges": 3,
+      "confidence": 0.6,
+      "cross_module": false,
+      "module_a": "src/vigia_eew",
+      "module_b": "src/vigia_eew"
+    },
+    {
+      "file_a": "README.md",
+      "file_b": "config.toml.example",
+      "cochanges": 3,
+      "confidence": 0.6,
+      "cross_module": false,
+      "module_a": "(raiz)",
+      "module_b": "(raiz)"
+    },
+    {
+      "file_a": "docs/API-SPEC.md",
+      "file_b": "docs/DATA-MODEL.md",
+      "cochanges": 3,
+      "confidence": 0.5,
+      "cross_module": false,
+      "module_a": "docs",
+      "module_b": "docs"
+    }
+  ],
+  "cross_module_pairs": 14,
+  "bus_factor_by_module": [
+    {
+      "module": "tests",
+      "commits": 22,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "docs",
+      "commits": 16,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "packaging",
+      "commits": 8,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": ".github/workflows",
+      "commits": 8,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "src/vigia_eew/autostart",
+      "commits": 5,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "src/vigia_eew/assets",
+      "commits": 4,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "docs/plans",
+      "commits": 3,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": ".github/actions",
+      "commits": 2,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "docs/code-audit",
+      "commits": 1,
+      "authors": 1,
+      "top_author": "Claude",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "docs/reverse-sdd",
+      "commits": 1,
+      "authors": 1,
+      "top_author": "Claude",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "lat.md",
+      "commits": 1,
+      "authors": 1,
+      "top_author": "Claude",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": ".codegraph",
+      "commits": 1,
+      "authors": 1,
+      "top_author": "Claude",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "config.toml.example => src/vigia_eew",
+      "commits": 1,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "packaging/apt-r2",
+      "commits": 1,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "(raiz)",
+      "commits": 30,
+      "authors": 2,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 96.7
+    },
+    {
+      "module": "src/vigia_eew",
+      "commits": 20,
+      "authors": 2,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 95.0
+    },
+    {
+      "module": "src/vigia_eew/notify",
+      "commits": 9,
+      "authors": 2,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 88.9
+    },
+    {
+      "module": "src/vigia_eew/pipeline",
+      "commits": 9,
+      "authors": 2,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 88.9
+    },
+    {
+      "module": "src/vigia_eew/ingest",
+      "commits": 8,
+      "authors": 2,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 87.5
+    }
+  ],
+  "params": {
+    "max_commits": 1000,
+    "min_cochanges": 3,
+    "min_confidence": 0.5
+  }
+}
