@@ -1,0 +1,93 @@
+{
+  "repo": "/home/user/vigia-eew",
+  "stacks": [
+    {
+      "stack": "python",
+      "dir": ".",
+      "evidence": "pyproject.toml"
+    }
+  ],
+  "dockerfiles": [],
+  "compose_files": [],
+  "lockfiles": [],
+  "has_precommit": true,
+  "tests": {
+    "unit_count": 35,
+    "integration_count": 0,
+    "unit_sample": [
+      "tests/test_cli.py",
+      "tests/test_supervisor.py",
+      "tests/test_backoff.py",
+      "tests/test_alert_window.py",
+      "tests/test_agent_state.py",
+      "tests/test_presentation.py",
+      "tests/test_autostart_macos.py",
+      "tests/test_tui.py",
+      "tests/test_ws_emsc.py",
+      "tests/test_geocode.py",
+      "tests/test_normalize.py",
+      "tests/test_processor.py",
+      "tests/test_app.py",
+      "tests/test_autostart_windows.py",
+      "tests/test_models.py"
+    ],
+    "integration_sample": []
+  },
+  "gaps": {
+    "sources_scanned": [
+      ".pre-commit-config.yaml",
+      "pyproject.toml",
+      ".github/workflows/security.yml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/build.yml"
+    ],
+    "matrix": {
+      "DRY": {
+        "covered": false,
+        "tools_found": []
+      },
+      "SOLID": {
+        "covered": false,
+        "tools_found": [],
+        "note": "siempre evaluación manual (Phase 2)"
+      },
+      "tests_unitarias": {
+        "covered": true,
+        "tools_found": [
+          "pytest"
+        ]
+      },
+      "tests_integracion": {
+        "covered": true,
+        "tools_found": [
+          "integration"
+        ]
+      },
+      "SAST": {
+        "covered": true,
+        "tools_found": [
+          "bandit",
+          "semgrep"
+        ]
+      },
+      "SCA": {
+        "covered": true,
+        "tools_found": [
+          "pip-audit"
+        ]
+      },
+      "secretos": {
+        "covered": true,
+        "tools_found": [
+          "gitleaks"
+        ]
+      },
+      "contenedores": {
+        "covered": true,
+        "tools_found": [
+          "trivy"
+        ]
+      }
+    }
+  }
+}

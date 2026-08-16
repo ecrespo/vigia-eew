@@ -1,0 +1,4 @@
+No known vulnerabilities found
+Name      Skip Reason
+--------- -------------------------------
+vigia-eew distribution marked as editable

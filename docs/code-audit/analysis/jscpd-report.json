@@ -1,0 +1,105 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 78,
+        "endLoc": {
+          "column": 48,
+          "line": 78,
+          "position": 3273
+        },
+        "name": "vigia_eew/ingest/rest_geofon.py",
+        "start": 57,
+        "startLoc": {
+          "column": 25,
+          "line": 57,
+          "position": 2593
+        }
+      },
+      "format": "python",
+      "fragment": "        cfg: GEOFONSource,\n        reference: ReferencePoint,\n        filter_cfg: Filter,\n        state: StateStore,\n        output: asyncio.Queue[RawMessage],\n        *,\n        client: httpx.AsyncClient | None = None,\n        sleep: _SleepFn = asyncio.sleep,\n        timezone: str = \"UTC\",\n        now: Clock = default_clock,\n        logger: logging.Logger | None = None,\n    ) -> None:\n        self._cfg = cfg\n        self._reference = reference\n        self._filter = filter_cfg\n        self._state = state\n        self._output = output\n        self._client = client\n        self._sleep = sleep\n        self._timezone = timezone\n        self._now = now\n        self._log = logger or logging.getLogger(\"vigia_eew.ingest.geofon\")",
+      "lines": 22,
+      "secondFile": {
+        "end": 68,
+        "endLoc": {
+          "column": 48,
+          "line": 68,
+          "position": 2530
+        },
+        "name": "vigia_eew/ingest/rest_usgs.py",
+        "start": 47,
+        "startLoc": {
+          "column": 23,
+          "line": 47,
+          "position": 1850
+        }
+      },
+      "tokens": 124
+    },
+    {
+      "firstFile": {
+        "end": 180,
+        "endLoc": {
+          "column": 3,
+          "line": 180,
+          "position": 7552
+        },
+        "name": "vigia_eew/ingest/rest_geofon.py",
+        "start": 164,
+        "startLoc": {
+          "column": 42,
+          "line": 164,
+          "position": 7044
+        }
+      },
+      "format": "python",
+      "fragment": "                RawMessage(source=\"GEOFON\", action=\"create\", feature=feature)\n            )\n            moment = _time_ms(feature)\n            if moment is not None and (max_time is None or moment > max_time):\n                max_time = moment\n        return max_time\n\n    async def run(self) -> None:\n        \"\"\"Perpetual polling loop. Only exits when cancelled.\"\"\"\n        if self._client is None:\n            self._client = httpx.AsyncClient()\n        while True:\n            wait = await self.poll_once()\n            await self._sleep(wait)\n\n\ndef _is_earthquake(feature: dict[str, str]) -> bool:",
+      "lines": 17,
+      "secondFile": {
+        "end": 157,
+        "endLoc": {
+          "column": 3,
+          "line": 157,
+          "position": 6075
+        },
+        "name": "vigia_eew/ingest/rest_usgs.py",
+        "start": 142,
+        "startLoc": {
+          "column": 59,
+          "line": 142,
+          "position": 5580
+        }
+      },
+      "tokens": 85
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-08-16T23:31:24.758Z",
+    "formats": {
+      "python": {
+        "clones": 2,
+        "duplicatedLines": 37,
+        "duplicatedTokens": 209,
+        "lines": 4374,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 0.8459076360310928,
+        "percentageTokens": 0.7715593620791494,
+        "sources": 38,
+        "tokens": 27088
+      }
+    },
+    "total": {
+      "clones": 2,
+      "duplicatedLines": 37,
+      "duplicatedTokens": 209,
+      "lines": 4374,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 0.8459076360310928,
+      "percentageTokens": 0.7715593620791494,
+      "sources": 38,
+      "tokens": 27088
+    }
+  }
+}
