@@ -53,6 +53,7 @@ class Deduplicator:
                 return "duplicate"
         return "new"
 
+    # @lat: [[pipeline#State is pruned where it grows]]
     def register(self, ev: SeismicEvent) -> None:
         """Marks an event as alerted (id + signature) and persists the state (RF-10).
 
@@ -67,6 +68,7 @@ class Deduplicator:
         self._state.add_signature(ev.signature())
         self._state.save()
 
+    # @lat: [[pipeline#Cross-source dedup is heuristic because no shared id exists]]
     def _matches(self, ev: SeismicEvent, signature: EventSignature) -> bool:
         """True if `ev` and `signature` are the same earthquake per the heuristic (RF-09)."""
         distance = haversine_km(ev.lat, ev.lon, signature.lat, signature.lon)

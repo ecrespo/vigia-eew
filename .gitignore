@@ -32,6 +32,14 @@ uv.lock
 .idea/
 .vscode/
 
+# Knowledge layers — kept local, not versioned.
+# `.codegraph/` and `graphify-out/` are derived and rebuild from the AST at zero cost.
+# `lat.md/` is hand-authored and does NOT regenerate: whoever keeps it owns the only
+# copy. Rebuild the other two with `codegraph init` and `graphify update .`.
+.codegraph/
+lat.md/
+graphify-out/
+
 # Runtime
 *.log
 state.json

@@ -35,6 +35,7 @@ def take_focus(root: Any) -> None:
     root.focus_force()
 
 
+# @lat: [[notification#The alert is not dismissable by design]]
 def configure_undismissable(root: Any, *, on_close_attempt: Callable[[], None]) -> None:
     """Applies the undismissable window policy (RF-15, RF-16, RF-19)."""
     root.overrideredirect(True)  # no title bar or window buttons

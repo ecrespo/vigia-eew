@@ -1,0 +1,22 @@
+[
+ {
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 1,
+  "EndLine": 1,
+  "StartColumn": 1610,
+  "EndColumn": 1688,
+  "Match": "api-spec.md\":\"ca0ef1fb91bae4ab2947bfb9d90fad87413a8002463fb7e4c9de9bb9072b88f0\"",
+  "Secret": "ca0ef1fb91bae4ab2947bfb9d90fad87413a8002463fb7e4c9de9bb9072b88f0",
+  "File": "graphify-out/cache/stat-index.json",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 3.7393079,
+  "Author": "",
+  "Email": "",
+  "Date": "",
+  "Message": "",
+  "Tags": [],
+  "RuleID": "generic-api-key",
+  "Fingerprint": "graphify-out/cache/stat-index.json:generic-api-key:1"
+ }
+]

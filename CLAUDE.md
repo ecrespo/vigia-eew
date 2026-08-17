@@ -11,6 +11,44 @@ REST polling as backups — global redundancy and Venezuela-only local coverage)
 radius/magnitude. Single process per machine, no single point of failure (each machine runs
 its own agent).
 
+## Knowledge layers — query these before grepping
+
+Three context layers. **All three are local and gitignored** — none ships with a
+clone, so build them once per machine (commands below). They exist so you don't
+rediscover the codebase on every task.
+
+1. **Intent — `lat.md/`** (local, **hand-authored, does not regenerate**). Why the code
+   is the way it is: design decisions, domain rules, rejected alternatives. Run
+   `lat search "<topic>"` **before** changing behavior — several constants that look
+   arbitrary (dedup thresholds, the block-list country filter, the local-day boundary)
+   are deliberate. When present, `lat check` must pass before a task is done; it
+   validates every `[[link]]` and every `# @lat:` backlink in the source, and exits
+   cleanly (skipping) when the directory is absent.
+   Unlike the other two, **whoever holds this directory holds the only copy** — the
+   source of truth it was seeded from is the ADR series in `docs/TECHNICAL-DESIGN.md`.
+2. **Structure — `.codegraph/`** (local, self-maintaining). What the code is:
+   `codegraph query <sym>`, `codegraph callers/callees <sym>`, `codegraph impact <sym>`
+   before any non-trivial edit, `codegraph explore <area>` to orient. Never grep for
+   definitions or callers when this is present.
+3. **Meaning — `graphify-out/`** (local, gitignored). How it fits together across code
+   *and* docs: `graphify query "<question>"`, `graphify path "A" "B"`,
+   `graphify explain "X"`. `GRAPH_REPORT.md` is a one-page orientation. Edges are
+   tagged EXTRACTED (explicit in source) vs INFERRED (resolved) — verify INFERRED
+   against CodeGraph before trusting it.
+
+Layers 2 and 3 rebuild themselves from the AST; **`lat.md/` is maintained by hand and
+cannot be rebuilt**. If you make a non-obvious design decision, add or update its
+section and link the code with `[[src/path.py#Symbol]]` plus a `# @lat: [[section-id]]`
+comment at the code site. The `# @lat:` comments **are** committed, so they keep
+documenting intent inline even where the directory itself is absent.
+
+```bash
+npm i -g @colbymchenry/codegraph lat.md && uv tool install graphifyy   # one-time
+codegraph init        # build .codegraph/ — tree-sitter, zero LLM tokens
+graphify update .     # build graphify-out/ — AST only, zero LLM tokens
+lat check             # validate the intent layer (finishing gate; skips if absent)
+```
+
 ## Commands
 
 ```bash
