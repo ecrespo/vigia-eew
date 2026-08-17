@@ -175,8 +175,12 @@ Lo que **cualquier refactor o v2 debe preservar**:
   100 %, workflows 100 %, autostart 100 %, assets 100 %]`.
 - **Por qué importa**: es riesgo organizacional, no técnico.
 - **Qué pasa si no se hace nada**: en un proyecto personal, nada. Si el proyecto busca
-  contribuciones, la mitigación ya está construida y es inusualmente buena: 18 ADRs, un
-  kit SDD completo y una capa de intención (`lat.md/`) que documenta el *porqué*.
+  contribuciones, la mitigación ya está construida y es inusualmente buena: 18 ADRs y un
+  kit SDD completo que documentan el *porqué*, ambos versionados.
+- **Matiz posterior**: la capa de intención (`lat.md/`) **no se versiona** por decisión
+  del autor, así que no cuenta como mitigación compartida: un contribuidor nuevo recibe
+  los ADRs y el kit SDD, pero no el índice consultable que los resume. Los comentarios
+  `# @lat:` del código sí viajan y siguen señalando qué decisión gobierna cada sitio.
 - **Propuesta**: **riesgo aceptado.** Proponer "más autores" no es una decisión de
   arquitectura. Lo accionable ya está hecho.
 
