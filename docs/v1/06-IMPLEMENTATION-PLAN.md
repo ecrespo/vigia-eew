@@ -331,9 +331,9 @@ No es "todas las fases hechas": es esta lista.
 |---|---|---|---|
 | 1 | Una instalación limpia resuelve las mismas versiones que se verificaron | F0 | ✅ 2026-09-19 |
 | 2 | El runtime declarado recibe correcciones de errores, verificado en dos versiones | F1 | ✅ 2026-09-19 |
-| 3 | Ningún rango declarado admite una versión con avisos conocidos | F2 | ⬜ |
-| 4 | El gate mide las ocho dimensiones del Art. 8 | F0 + F2 | ⬜ |
-| 5 | El apagado es determinista, demostrado por un test que antes fallaba | F0 + F2 | ⬜ |
+| 3 | Ningún rango declarado admite una versión con avisos conocidos | F2 | ✅ 2026-09-19 |
+| 4 | El gate mide las ocho dimensiones del Art. 8 | F0 + F2 | ✅ 2026-09-19 |
+| 5 | El apagado es determinista, demostrado por un test que antes fallaba | F0 + F2 | ✅ 2026-09-19 |
 | 6 | **El alcance de la garantía de alerta está declarado** | F4 | ⬜ |
 | 7 | **La garantía se cumple bajo Wayland, o D-1 la degradó a recomendación** | F4 | ⬜ |
 | 8 | Ningún binario se publica sin haberse ejecutado | F4 | ⬜ |

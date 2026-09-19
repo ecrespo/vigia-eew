@@ -161,14 +161,14 @@
 
 ## Fase 2 · Cadena de suministro y gate completo
 
-### [ ] T-115 · Piso de seguridad de Pillow
+### [x] 2026-09-19 T-115 · Piso de seguridad de Pillow
 - **Qué**: `Pillow>=12.3.0,<13`. El piso pasa a ser el piso de seguridad real.
 - **REQ**: REQ-DEP-002 · **CA**: CA-101.3
 - **Archivos**: `pyproject.toml`, `uv.lock`
 - **Depende de**: T-111
 - **Done**: `uv sync --resolution lowest-direct` resuelve Pillow sin avisos.
 
-### [ ] T-116 · Actualizar `pip` por CVE-2026-13346 **[P]**
+### [x] 2026-09-19 T-116 · Actualizar `pip` por CVE-2026-13346 **[P]**
 - **Qué**: re-bloquear con `pip` ≥ 26.2.
 - **REQ**: REQ-DEP-003 · **CA**: CA-101.3
 - **Depende de**: T-111
@@ -176,7 +176,7 @@
 - **Nota**: es la misma acción que A-4 del plan de paquetería y R-05 del de remediación. **Se ejecuta
   aquí una sola vez**; allí quedan como referencia cruzada.
 
-### [ ] T-117 · Techos superiores en los rangos
+### [x] 2026-09-19 T-117 · Techos superiores en los rangos
 - **Qué**: techo `<X+1` en 8 de los 9 rangos de runtime. **`tzdata` queda exento**, por E-04.
 - **REQ**: REQ-DEP-005 · **CA**: CA-101.7
 - **Archivos**: `pyproject.toml`, `uv.lock`
@@ -192,7 +192,7 @@
   mínimo que resuelve y audita limpio. La especificación decía menos de lo necesario, no algo
   distinto: el techo sin piso resoluble no cumple REQ-DEP-005.
 
-### [ ] T-118 · Gate de resolución mínima
+### [x] 2026-09-19 T-118 · Gate de resolución mínima
 - **Qué**: resolver también con la versión mínima que cada rango permite, y auditar ese árbol en CI.
 - **REQ**: REQ-DEP-006 · **CA**: CA-101.4
 - **Archivos**: `.github/workflows/security.yml`
@@ -200,15 +200,16 @@
 - **Done**: rebajar deliberadamente un piso hace fallar el pipeline nombrando el paquete.
 - **Nota**: es lo que impide que el hallazgo de Pillow vuelva sin que nadie lo note.
 
-### [ ] T-119 · Sincronizar el estado compartido de la aplicación
+### [x] 2026-09-19 T-119 · Sincronizar el estado compartido de la aplicación
 - **Qué**: lock más evento de "runtime listo" para `_loop` y `_sup`, siguiendo el patrón que el
   proyecto ya usa en `agent_state.py:18`.
 - **REQ**: REQ-OPS-002 · **CA**: CA-103.2, CA-103.3
 - **Archivos**: `src/vigia_eew/app.py:420,431,443`
 - **Depende de**: **T-103** (su test debe existir y fallar antes)
 - **Done**: el test de T-103 pasa; la suite completa sigue verde.
+- **Hallazgo (2026-09-19)**: el arreglo inicial estaba incompleto. Quedaba una segunda ventana — `Supervisor.run()` hacía `self._stop.clear()` al arrancar y **descartaba** una parada pedida entre `publish_runtime()` y `run()`. Lo destapó la suite **bajo cobertura**, no la suite normal: una de las ocho dimensiones del Art. 8 cazando un bug de concurrencia que 400 pruebas en verde no vieron. La parada es ahora *sticky*.
 
-### [ ] T-120 · Gate de duplicación y complejidad
+### [x] 2026-09-19 T-120 · Gate de duplicación y complejidad
 - **Qué**: detección de duplicación y medición de complejidad cognitiva en el gate, con umbrales
   declarados.
 - **REQ**: REQ-OBS-007 · **CA**: CA-102.6
@@ -560,6 +561,7 @@ T-138 es el corte del release.
 |---|---|---|---|
 | 2026-09-19 | **F0 · T-101 a T-110** | ✅ 10/10 | Rama `feature/v1.0.0`, base `1911339`. Un commit por tarea, TDD en las ocho que admiten prueba. Gate completo en verde: 375 pruebas (1 `xfail` estricto, el de T-103), ruff, formato, mypy `strict`, 4 contratos de importación, cobertura por grupo y recursos de empaquetado. Lote rápido: 353 en 1,29 s. Dos decisiones: T-105 se confirmó con `--no-verify` porque no puede pasar el hook que introduce, y el test de T-103 quedó `xfail(strict=True)` para no dejar el gate rojo dos fases; `strict` fuerza retirar el marcador cuando T-119 lo arregle |
 | 2026-09-19 | **F1 · T-111 a T-114** | ✅ 4/4 | Piso a Python 3.13 en los 5 sitios (E-01), matriz 3.13+3.14 en CI, devcontainer y `CONTRIBUTING.md`. Re-bloqueo limpio: el lockfile pierde 355 líneas de marcadores de 3.11/3.12. **Suite verificada en las dos versiones de verdad, no solo en configuración**: 389 passed en 3.13 y en 3.14. Las 3 pruebas de GUI real pasan bajo Xvfb. No verificado: la imagen del devcontainer no se construyó (Docker no corre en la suite) — falta hacerlo una vez en máquina limpia antes del release |
+| 2026-09-19 | **F2 · T-115 a T-120** | ✅ 6/6 | Pisos y techos en los 9 rangos, `pip` ≥ 26.2, gate de resolución mínima, carrera de apagado cerrada y gate de duplicación/complejidad. **Gate completo: las 8 dimensiones del Art. 8.** 402 passed, sin `xfail` (T-119 lo retiró). Dos desviaciones registradas: T-117 tuvo que subir los pisos además de poner techos (tras T-111 siete no resolvían), y T-119 necesitó un segundo commit — `Supervisor.run()` descartaba una parada previa. Verificado rompiendo cada gate a propósito |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
