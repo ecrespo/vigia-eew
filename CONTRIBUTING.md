@@ -65,7 +65,7 @@ uv run pre-commit run --all-files --hook-stage pre-push  # the slower ones too
 | `bandit`, `semgrep` | Static analysis for security |
 | `gitleaks` | Secrets, in the tree and in history |
 | `pip-audit`, `trivy` | Known advisories in the dependency tree |
-| `scripts/check_coverage.py` | Coverage per criticality group: 85 % pipeline and state, 70 % ingest, 40 % adapters |
+| `scripts/check_coverage.py` | Coverage per criticality group: 85 % pipeline, state, config writer and history; 70 % ingest and tiles; 40 % adapters |
 
 If a boundary check fails, read the contract name in the output before changing the code.
 It is usually telling you that the change belongs somewhere else.
@@ -90,8 +90,21 @@ testable with no network, no display and no subprocess.
 tool; `@pytest.mark.gui` for a real UI toolkit. The commit-stage batch is
 `uv run pytest -m "not integration and not gui"`, and it should stay fast.
 
-**Real-GUI tests are opt-in.** `VIGIA_GUI_TESTS=1 uv run pytest` runs them; you need a
-display, which the devcontainer provides, or `xvfb-run -a` in front.
+**Real-GUI tests are opt-in locally and always on in CI.** `VIGIA_GUI_TESTS=1 uv run pytest`
+runs them; you need a display, which the devcontainer provides, or `xvfb-run -a` in front. CI
+sets the variable, so **measure coverage the same way** or the gate will disagree with it:
+
+```bash
+VIGIA_GUI_TESTS=1 xvfb-run -a uv run pytest --cov=vigia_eew --cov-branch \
+    --cov-report=json:coverage.json
+uv run python scripts/check_coverage.py coverage.json
+```
+
+Without the variable the widget modules measure near zero and
+`scripts/check_coverage.py` fails on a tree CI is perfectly happy with. The reason those tests
+run in CI at all is that they catch what only appears when a widget is really created -- a
+control that never reached the configuration panel, an image bound to the wrong Tk
+interpreter, an alert window that will not build.
 
 **Every `datetime` is timezone-aware and in UTC.** `models.py` rejects naive values.
 Conversion to local time happens at the edges, in `notify/presentation.py` and `timeutil.py`.

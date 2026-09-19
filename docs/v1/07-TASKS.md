@@ -510,7 +510,7 @@
 
 ## Fase 8 · Corte de la v1.0.0
 
-### [ ] T-138 · Publicar la v1.0.0
+### [~] T-138 · Publicar la v1.0.0 — **corte preparado, publicación pendiente**
 - **Qué**: changelog, etiqueta, release.
 - **REQ**: — · **Depende de**: la lista de corte de
   [06-IMPLEMENTATION-PLAN §5](06-IMPLEMENTATION-PLAN.md)
@@ -518,6 +518,29 @@
   T-133.
 - **Nota**: conserva el número T-138 por continuidad con las referencias ya escritas, aunque se
   ejecute la última. **El orden lo da la fase, no el número.**
+
+**Hecho en el repositorio** (2026-09-19):
+
+- versión `1.0.0` en `pyproject.toml` y en el lockfile;
+- sección `## [1.0.0]` del changelog escrita, y `[Sin publicar]` vacía;
+- las **10 condiciones de corte** marcadas y verificadas por `tests/test_release_cut.py`, que
+  además comprueba que la versión declarada y la anunciada coinciden y que ninguna tarea queda sin
+  marcar;
+- artefacto de Linux construido y **ejecutado**: binario onefile, `.deb` armado con `dpkg-deb`
+  (ver abajo) y el smoke de T-133 con `--acknowledge` en verde **sobre el binario extraído del
+  paquete**, no solo sobre el de `dist/`.
+
+**Lo que queda, y por qué no está hecho**: publicar es un `push` — de la rama, del PR a `main` y
+del **tag** `v1.0.0`, que es lo que dispara `build.yml` y produce los tres binarios. Esa secuencia
+sale del repositorio hacia fuera y **no se ejecuta sin que el mantenedor lo pida**. Hasta que
+ocurra, los binarios de macOS y Windows no existen: esta máquina no puede construirlos.
+
+- **Desviación registrada**: `build_linux.sh` construía el `.deb` solo con `fpm`, que exige Ruby.
+  Ahora lo arma con `dpkg-deb` cuando está disponible —que es siempre en Debian/Ubuntu, incluido el
+  runner de CI— y deja `fpm` como alternativa y como única vía para el `.rpm`. El piso de glibc del
+  paquete **se deriva de la máquina que construye**, no se inventa: un binario de PyInstaller lleva
+  dentro el runtime de Python enlazado contra esa glibc, así que declarar una menor produciría un
+  paquete que instala y no arranca.
 
 ---
 
@@ -590,6 +613,7 @@ T-138 es el corte del release.
 | 2026-09-19 | **F5 · T-135 a T-137, T-139 a T-141** | ✅ 6/6 | Escritor de configuración con `tomlkit` (ADR-019): preserva los comentarios, escribe por temporal y renombrado con respaldo previo, detecta la edición externa por huella y valida **antes** de tocar el disco. Panel **generado desde el esquema** (ADR-020), 43 campos en 10 secciones, con la validación de sección para la regla entre umbrales. Prioridad por fuente y deduplicador que **conserva el mejor, no el primero**. 539 passed con las pruebas de GUI real incluidas (Xvfb), gate completo en verde. Dos desviaciones registradas en T-135 y T-136, ambas por cifras de la especificación que se movieron al documentar los campos nuevos. **Hallazgo aparte:** `lat.md/` estaba en `.gitignore`, así que `tests/test_backlinks.py` y `lat check` leían archivos que solo existían en la máquina que los escribió — verificado clonando; corregido y con guarda propia |
 | 2026-09-19 | **F6 · T-142 a T-144** | ✅ 3/3 | `history.py`: una fila por **llegada evaluada**, con el motivo de cada descarte. SQLite (E-05, ADR-025) con `PRAGMA user_version`, migraciones en transacción y los cinco índices; tiempos en ISO-8601 (el orden lexicográfico es el cronológico) y `distance_km` almacenada, no recalculada. `HistoryWriter` mantiene la escritura **fuera** del camino llegada→presentación: cola, tarea supervisada e hilo de trabajo. Lo mejor-esfuerzo se verifica en tres niveles: almacén que no abre, escritura que falla, registrador que lanza — ninguno cuesta una alerta. Retención configurable, 90 días por defecto **declarado como estimación**. 575 passed (con GUI real bajo Xvfb), 568 también en 3.13; binario reconstruido y smoke completo `--acknowledge` en verde con `tomlkit` y `sqlite3` empaquetados. **Hallazgo:** la suite escribía un `history.sqlite3` real en el directorio de datos del desarrollador — el mismo descuido que `conftest.py` ya evitaba un directorio más allá; corregido. **Condición de corte 10 sigue abierta**: F6 entrega el almacén, F7 la vista consultable |
 | 2026-09-19 | **F7 · T-145 a T-149** | ✅ 5/5 | Consulta del histórico con filtros que combinan en AND, orden por columna y paginación — sin SQL construido en ningún punto: filtros estáticos con valores ligados y el orden como búsqueda en una tabla de sentencias. Listado con el **motivo** de cada descarte en palabras (es/en), mapa de OpenStreetMap bajo demanda con caché LRU fuera del directorio de estado, y **un solo filtro gobernando las dos vistas**. 663 passed con las pruebas de ventana real incluidas. Verificado rompiendo: AND→OR (5 fallos), caché desactivada y anillo de prefetch (4 fallos), control ausente en el panel (nombra las 4 rutas). **Tres hallazgos:** (1) `ImageTk.PhotoImage` sin `master` se liga al intérprete equivocado —`image "pyimage2" doesn't exist`— y solo aparece con dos raíces Tk; (2) **la suite descargaba teselas reales de OpenStreetMap** (12 archivos en `~/.cache/vigia-eew/`), ahora aislada y con guarda propia; (3) el smoke del binario era **intermitente** —una sola pulsación de ENTER contra una ventana que aún no tenía foco—, corregido y verificado 5 veces seguidas. El CI pasa a ejecutar las pruebas de ventana real: ya instalaba Xvfb, y `config_panel` sube de 66 % a 91 % medido |
+| 2026-09-19 | **F8 · T-138** | 🟡 corte preparado | Versión `1.0.0`, changelog de la v1 escrito y `[Sin publicar]` vacía. Las **10 condiciones de corte** pasan a ser verificables: `tests/test_release_cut.py` comprueba que la versión declarada y la anunciada coinciden, que las diez están marcadas y que **ninguna tarea queda sin marcar** — el gate que evita que la lista se desincronice después del tag y no antes. Artefacto de Linux construido, empaquetado y **ejecutado desde el paquete**: smoke `--acknowledge` en verde sobre el binario extraído del `.deb`. Desviación: `build_linux.sh` arma el `.deb` con `dpkg-deb` (siempre presente en Debian/Ubuntu) en vez de exigir `fpm`/Ruby, y **deriva el piso de glibc de la máquina que construye** en lugar de declararlo a ojo. **Lo que falta es un `push`**: rama, PR a `main` y tag `v1.0.0`, que es lo que dispara `build.yml` y produce los tres binarios. No se ejecuta sin que el mantenedor lo pida; hasta entonces macOS y Windows no existen como artefactos |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
