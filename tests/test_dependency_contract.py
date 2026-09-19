@@ -246,3 +246,16 @@ def test_each_ceiling_is_the_next_breaking_version() -> None:
         else:
             expected = [str(int(floor[0]) + 1)]
         assert ceiling == expected, f"{name}{spec}: expected ceiling <{'.'.join(expected)}"
+
+
+def test_the_minimum_resolution_is_audited_in_ci() -> None:
+    """CA-101.4: the tree the *ranges* allow is audited, not only the locked one.
+
+    The lockfile pins one clean resolution, and auditing it proves nothing
+    about what a user installing from PyPI gets. Only resolving at the floor
+    of every range tests the bound the package actually publishes -- which
+    is how Pillow>=10.0 sat there admitting 34 advisories while every audit
+    came back green.
+    """
+    audit_jobs = SECURITY_WORKFLOW.read_text()
+    assert "--resolution lowest-direct" in audit_jobs
