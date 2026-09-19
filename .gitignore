@@ -18,6 +18,7 @@ env/
 .ruff_cache/
 .coverage
 coverage.xml
+coverage.json
 htmlcov/
 report.xml
 # CI security scan reports (uploaded as artifacts, never committed)

@@ -67,12 +67,18 @@ jobs:
           --cov-branch
           --cov-report=term-missing
           --cov-report=xml:coverage.xml
+          --cov-report=json:coverage.json
           --junitxml=report.xml
+      # A single global fail_under lets a well-covered module pay for a bare
+      # one. Each criticality group is asked for its own figure instead, and
+      # the failure names the module that is short (REQ-OBS-003, CA-102.1).
+      - run: uv run python scripts/check_coverage.py coverage.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage
           path: |
             coverage.xml
+            coverage.json
             report.xml
           retention-days: 7
