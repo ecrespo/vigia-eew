@@ -186,3 +186,25 @@ def test_the_pillow_floor_is_its_security_floor() -> None:
     so it is what anyone installing from PyPI actually gets bounded by.
     """
     assert _declared_ranges()["pillow"] == ">=12.3.0,<13"
+
+
+def _locked_version(package: str) -> tuple[int, ...]:
+    """The version uv.lock pins for `package`, as a comparable tuple."""
+    block = re.search(
+        rf'\[\[package\]\]\nname = "{re.escape(package)}"\nversion = "([^"]+)"',
+        (REPO_ROOT / "uv.lock").read_text(),
+    )
+    assert block, f"{package} is not in the lockfile"
+    return tuple(int(part) for part in block.group(1).split(".") if part.isdigit())
+
+
+def test_pip_is_past_the_arbitrary_write_advisory() -> None:
+    """CA-101.3: CVE-2026-13346 is not in the locked tree.
+
+    pip mishandled doubly-encoded package URLs from an index, which let a
+    hostile index write files to arbitrary paths. It reaches the tree as
+    pip <- pip-api <- pip-audit, so it never ships to a user -- but it is
+    installed on every developer machine and every CI runner, which is
+    precisely where a package is installed from an index.
+    """
+    assert _locked_version("pip") >= (26, 2)
