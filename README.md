@@ -195,6 +195,10 @@ pause/resume notifications, **`q`** quit. There is no tray icon or toast in this
 
 ## Development
 
+> Contributing? **[CONTRIBUTING.md](CONTRIBUTING.md)** has the full picture: the devcontainer,
+> the quality gate, the testing conventions and the commit format. The rest of this section is
+> the short version.
+
 The project uses a `src/` layout, so it must be installed in **editable mode** before
 running the tests or the CLI from a checkout (otherwise `import vigia_eew` fails).
 
