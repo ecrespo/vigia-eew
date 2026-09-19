@@ -1,0 +1,20 @@
+Would reformat: src/vigia_eew/app.py
+Would reformat: src/vigia_eew/autostart/__init__.py
+Would reformat: src/vigia_eew/autostart/macos_launchagent.py
+Would reformat: src/vigia_eew/ingest/rest_geofon.py
+Would reformat: src/vigia_eew/ingest/rest_usgs.py
+Would reformat: src/vigia_eew/notify/controller.py
+Would reformat: src/vigia_eew/notify/queue.py
+Would reformat: src/vigia_eew/notify/sound.py
+Would reformat: src/vigia_eew/pipeline/dedup.py
+Would reformat: src/vigia_eew/pipeline/filter.py
+Would reformat: src/vigia_eew/supervisor.py
+Would reformat: tests/test_autostart_macos.py
+Would reformat: tests/test_config.py
+Would reformat: tests/test_controller.py
+Would reformat: tests/test_dedup.py
+Would reformat: tests/test_rest_geofon.py
+Would reformat: tests/test_rest_usgs.py
+Would reformat: tests/test_state.py
+Would reformat: tests/test_ws_emsc.py
+19 files would be reformatted, 60 files already formatted

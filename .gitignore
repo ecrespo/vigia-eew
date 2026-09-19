@@ -38,3 +38,9 @@ state.json
 config.toml
 .venv_sandbox/
 .claude/settings.local.json
+vigia-eew-presentacion.pptx
+graphify-out/
+lat.md/
+.codegraph/
+.fuse_hidden0000000c00000001
+.probe_sqlite.db-journal

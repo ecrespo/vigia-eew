@@ -1,0 +1,27 @@
+# Gitleaks configuration for vigia-eew.
+#
+# Picked up automatically by both the pre-commit hook and the `gitleaks dir .`
+# step in .github/workflows/security.yml, since neither passes --config. Both
+# pin gitleaks 8.21.2, which only understands the singular `[allowlist]` table
+# (the `[[allowlists]]` array form is parsed but ignored there, which silently
+# disables the exemption below).
+#
+# This file only *adds* an allowlist on top of the upstream default rules:
+# nothing is disabled, and every path not listed here is scanned as before.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Raw output of detect-secrets, versioned as evidence for dimension 7 of the code
+audit (docs/code-audit/). Its `hashed_secret` fields are SHA1 digests of the
+candidate strings the tool flagged -- they are the report *about* secrets, not
+secrets. Gitleaks' generic-api-key rule matches them on entropy alone.
+The audit's verdict for this dimension is 0 secrets in the tree and across the
+full history; see docs/code-audit/01-INFORME-AUDITORIA.md.
+"""
+paths = [
+  '''docs/code-audit/analysis/detect-secrets\.json''',
+  '''docs/code-audit/analysis/detect-secrets-history\.json''',
+]

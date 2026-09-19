@@ -1,0 +1,95 @@
+{
+  "repo": "/sessions/busy-eloquent-cray/mnt/vigia-eew",
+  "stacks": [
+    {
+      "stack": "python",
+      "dir": ".",
+      "evidence": "pyproject.toml"
+    }
+  ],
+  "dockerfiles": [],
+  "compose_files": [],
+  "lockfiles": [
+    "uv.lock"
+  ],
+  "has_precommit": true,
+  "tests": {
+    "unit_count": 35,
+    "integration_count": 0,
+    "unit_sample": [
+      "tests/test_agent_state.py",
+      "tests/test_dedup.py",
+      "tests/test_models.py",
+      "tests/test_sound.py",
+      "tests/test_autostart_linux.py",
+      "tests/test_subprocess_env.py",
+      "tests/test_tray.py",
+      "tests/test_autostart_windows.py",
+      "tests/test_filter.py",
+      "tests/test_presentation.py",
+      "tests/test_processor.py",
+      "tests/test_normalize.py",
+      "tests/test_app.py",
+      "tests/test_controller.py",
+      "tests/test_rest_funvisis.py"
+    ],
+    "integration_sample": []
+  },
+  "gaps": {
+    "sources_scanned": [
+      ".pre-commit-config.yaml",
+      "pyproject.toml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/build.yml",
+      ".github/workflows/security.yml"
+    ],
+    "matrix": {
+      "DRY": {
+        "covered": false,
+        "tools_found": []
+      },
+      "SOLID": {
+        "covered": false,
+        "tools_found": [],
+        "note": "siempre evaluación manual (Phase 2)"
+      },
+      "tests_unitarias": {
+        "covered": true,
+        "tools_found": [
+          "pytest"
+        ]
+      },
+      "tests_integracion": {
+        "covered": true,
+        "tools_found": [
+          "integration"
+        ]
+      },
+      "SAST": {
+        "covered": true,
+        "tools_found": [
+          "bandit",
+          "semgrep"
+        ]
+      },
+      "SCA": {
+        "covered": true,
+        "tools_found": [
+          "pip-audit"
+        ]
+      },
+      "secretos": {
+        "covered": true,
+        "tools_found": [
+          "gitleaks"
+        ]
+      },
+      "contenedores": {
+        "covered": true,
+        "tools_found": [
+          "trivy"
+        ]
+      }
+    }
+  }
+}
