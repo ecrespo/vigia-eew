@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.resources
 import logging
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +168,36 @@ class Settings(BaseModel):
     severity: Severity = Field(default_factory=Severity)
     notification: Notification = Field(default_factory=Notification)
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
+
+
+#: The four seismic sources, in the order they are declared. Declaration
+#: order is the tie-break when priorities are absent or equal, so it has to
+#: be written down somewhere rather than inferred from a dictionary.
+SOURCE_SECTIONS: tuple[str, ...] = (
+    "sources_emsc",
+    "sources_usgs",
+    "sources_funvisis",
+    "sources_geofon",
+)
+
+
+def by_priority[T](items: Sequence[tuple[T, int | None]]) -> list[T]:
+    """Orders `(item, priority)` pairs: ranked first, ascending; unranked last.
+
+    The rule of REQ-ING-011 in one place, because two callers need it and they
+    sit on opposite sides of the system -- the source registry, which decides
+    whose data prevails, and the configuration panel, which shows the user the
+    list they are ordering. Two copies of this would be two lists that agree
+    until somebody edits one.
+
+    Unranked keeps declaration order, which is what makes a `config.toml`
+    written before priorities existed mean exactly what it used to (CA-110.6).
+    """
+    ordered = sorted(
+        enumerate(items),
+        key=lambda pair: (pair[1][1] is None, pair[1][1] or 0, pair[0]),
+    )
+    return [item for _position, (item, _priority) in ordered]
 
 
 def default_config_path() -> Path:

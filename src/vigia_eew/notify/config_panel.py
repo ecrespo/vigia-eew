@@ -32,11 +32,11 @@ import types
 import zoneinfo
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, Literal, Protocol, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 
-from vigia_eew.config import SECTION_PATHS, Settings
+from vigia_eew.config import SECTION_PATHS, SOURCE_SECTIONS, Settings, by_priority
 from vigia_eew.config_writer import ConfigWriter, InvalidConfig
 
 FieldKind = Literal["bool", "int", "float", "str", "choice"]
@@ -366,6 +366,84 @@ class PanelModel:
                 self._errors[section.key] = error["msg"]
 
 
+@dataclass(frozen=True, slots=True)
+class NetworkEntry:
+    """One seismic network as the list shows it."""
+
+    key: str
+    label: str
+    enabled: bool
+
+
+class NetworkList:
+    """The four networks as an orderable list (REQ-GUI-008, CA-110.8).
+
+    A list rather than four numeric fields because the user is expressing an
+    *order*, and typing four numbers that have to stay distinct is a way of
+    asking them to do the interface's job.
+
+    Changes go straight into `PanelModel`, so the list saves, validates and
+    reverts through exactly the same path as every other control -- and
+    reordering it is not applied until the same Save.
+    """
+
+    def __init__(self, model: PanelModel) -> None:
+        self._model = model
+        self._order = list(by_priority([(key, self._priority(key)) for key in SOURCE_SECTIONS]))
+
+    @property
+    def entries(self) -> tuple[NetworkEntry, ...]:
+        return tuple(
+            NetworkEntry(key=key, label=_network_label(key), enabled=bool(self._enabled(key)))
+            for key in self._order
+        )
+
+    def move_up(self, key: str) -> None:
+        self._move(key, -1)
+
+    def move_down(self, key: str) -> None:
+        self._move(key, 1)
+
+    def set_enabled(self, key: str, enabled: bool) -> None:
+        """Turning a network off leaves it in the list; disabled is not deleted."""
+        self._model.edit(f"{_toml(key)}.enabled", enabled)
+
+    def _move(self, key: str, step: int) -> None:
+        position = self._order.index(key)
+        target = position + step
+        if not 0 <= target < len(self._order):
+            return
+        self._order[position], self._order[target] = self._order[target], self._order[position]
+        self._apply()
+
+    def _apply(self) -> None:
+        """Writes the shown order back as consecutive priorities.
+
+        All four, not only the ones that moved: once an order has been
+        expressed in the interface, leaving some unranked would let the list
+        shown and the list stored drift apart the moment a later version
+        changed the declaration order.
+        """
+        for position, key in enumerate(self._order, start=1):
+            self._model.edit(f"{_toml(key)}.priority", position)
+
+    def _priority(self, key: str) -> int | None:
+        value = self._model.value(f"{_toml(key)}.priority")
+        return value if isinstance(value, int) else None
+
+    def _enabled(self, key: str) -> Any:
+        return self._model.value(f"{_toml(key)}.enabled")
+
+
+def _toml(section_key: str) -> str:
+    """`"sources_emsc"` -> `"sources.emsc"`, the path the file uses."""
+    return ".".join(SECTION_PATHS[section_key])
+
+
+def _network_label(section_key: str) -> str:
+    return section_key.removeprefix("sources_").upper()
+
+
 def _table_for(declared: Mapping[str, Any], toml_path: tuple[str, ...]) -> Mapping[str, Any]:
     """The file's table at `toml_path`, or an empty one when the file omits it."""
     table: Any = declared
@@ -405,6 +483,14 @@ def _coerce(raw: Any, spec: FieldSpec) -> Any:
 # --- The widget tree -------------------------------------------------------------
 
 
+class Control(Protocol):
+    """What the panel needs of a control: it shows a value, and it holds one."""
+
+    def set(self, value: Any) -> None: ...
+
+    def get(self) -> Any: ...
+
+
 class _Control:
     """One Tk control over one field, reporting every edit to the model."""
 
@@ -434,6 +520,24 @@ class _Control:
         self._on_edit(self.spec.path, self._variable.get())
 
 
+class _PositionControl:
+    """A network's priority, shown as its place in the list.
+
+    It is a control in the sense that matters to CA-108.1: the field is
+    reachable and changeable from the interface. What changes it is the pair
+    of arrows next to it, not typing a number into it.
+    """
+
+    def __init__(self, label: Any) -> None:
+        self._label = label
+
+    def set(self, value: Any) -> None:
+        self._label.configure(text="-" if value is None else str(value))
+
+    def get(self) -> Any:
+        return str(self._label["text"])
+
+
 class ConfigPanel:
     """The panel itself: collapsible sections, live errors, save and restore.
 
@@ -454,11 +558,20 @@ class ConfigPanel:
         self._on_saved = on_saved
         self._frame = ttk.Frame(master, padding=8)
         self._frame.pack(fill="both", expand=True)
-        self.controls: dict[str, _Control] = {}
+        self.controls: dict[str, Control] = {}
         self._messages: dict[str, Any] = {}
         self._open: dict[str, bool] = {}
         self._sections_ui: dict[str, tuple[Any, Any]] = {}
         self._loading = False
+        self.networks = NetworkList(model)
+        # `enabled` and `priority` belong to the list: one setting, one
+        # control. A checkbox in the section *and* a row in the list would be
+        # two widgets over one field, and the loser is whichever the user
+        # touched first.
+        self._owned_by_the_list = {
+            f"{_toml(key)}.{name}" for key in SOURCE_SECTIONS for name in ("enabled", "priority")
+        }
+        self._build_networks()
         self._build_sections()
         self._build_footer()
         self._show_values()
@@ -479,6 +592,8 @@ class ConfigPanel:
             self._open[section.key] = False
             self._sections_ui[section.key] = (header, body)
             for row, field in enumerate(section.fields):
+                if field.path in self._owned_by_the_list:
+                    continue
                 ttk.Label(body, text=field.label).grid(row=row, column=0, sticky="w")
                 control = _Control(body, field, self._edited)
                 control.widget.grid(row=row, column=1, sticky="w", padx=6)
@@ -489,6 +604,51 @@ class ConfigPanel:
             section_message = ttk.Label(body, text="", foreground="#B00020")
             section_message.grid(row=len(section.fields), column=0, columnspan=3, sticky="w")
             self._messages[section.key] = section_message
+
+    def _build_networks(self) -> None:
+        """The four networks as a list: enable each, and order them (REQ-GUI-008)."""
+        from tkinter import ttk
+
+        ttk.Label(self._frame, text="Networks, in order of preference").pack(anchor="w")
+        self._network_frame = ttk.Frame(self._frame, padding=(16, 4))
+        self._network_frame.pack(fill="x")
+        specs = {field.path: field for section in self.model.sections for field in section.fields}
+        self._network_rows = {}
+        for entry in self.networks.entries:
+            row = ttk.Frame(self._network_frame)
+            enabled_path = f"{_toml(entry.key)}.enabled"
+            control = _Control(row, specs[enabled_path], self._edited)
+            control.widget.pack(side="left")
+            self.controls[enabled_path] = control
+            ttk.Label(row, text=entry.label, width=12).pack(side="left")
+            position = ttk.Label(row, text="", width=3)
+            position.pack(side="left")
+            self.controls[f"{_toml(entry.key)}.priority"] = _PositionControl(position)
+            ttk.Button(row, text="▲", width=3, command=self._mover(entry.key, up=True)).pack(
+                side="left"
+            )
+            ttk.Button(row, text="▼", width=3, command=self._mover(entry.key, up=False)).pack(
+                side="left"
+            )
+            self._network_rows[entry.key] = row
+        self._order_network_rows()
+
+    def _mover(self, key: str, *, up: bool) -> Callable[[], None]:
+        def move() -> None:
+            if up:
+                self.networks.move_up(key)
+            else:
+                self.networks.move_down(key)
+            self._order_network_rows()
+            self._show_values()
+
+        return move
+
+    def _order_network_rows(self) -> None:
+        for entry in self.networks.entries:
+            self._network_rows[entry.key].pack_forget()
+        for entry in self.networks.entries:
+            self._network_rows[entry.key].pack(fill="x")
 
     def _build_footer(self) -> None:
         from tkinter import ttk

@@ -90,3 +90,20 @@ Validation runs the section's own model over what the panel holds, so the rule l
 one place. A failure that names a field lands on that field. One that names none — the severity
 thresholds, where neither value is wrong on its own — belongs to the section, which is why
 CA-108.4 exists as a criterion separate from CA-108.3.
+
+### The networks are a list, not four numbers
+
+The four sources appear as an ordered list with arrows, and that list is the control for both
+their `enabled` flag and their `priority`.
+
+Four numeric fields that have to stay distinct would be asking the user to do the interface's job.
+A list is what they are actually expressing.
+
+Reordering declares a priority for **all four**, not only the ones that moved. Leaving some
+unranked would let the list on screen and the list in the file drift apart the moment a later
+version changed the declaration order — and the ordering rule itself lives in
+[[src/vigia_eew/config.py#by_priority]], where both the panel and the source registry read it, so
+there is only ever one list.
+
+A network turned off stays in the list. Disabled is not deleted, and it has to be visible to be
+turned back on.

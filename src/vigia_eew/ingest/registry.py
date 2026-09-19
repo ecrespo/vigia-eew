@@ -25,6 +25,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from vigia_eew.config import by_priority
 from vigia_eew.ingest import RawMessage, rest_funvisis, rest_geofon, rest_usgs, ws_emsc
 
 if TYPE_CHECKING:
@@ -193,15 +194,7 @@ def ordered_sources(
     registering them in registry order and they stay concurrent and
     independent (ADR-026, CA-110.7).
     """
-    ranked = sorted(
-        enumerate(registry),
-        key=lambda pair: (
-            pair[1].priority(cfg) is None,
-            pair[1].priority(cfg) or 0,
-            pair[0],
-        ),
-    )
-    return tuple(spec for _index, spec in ranked)
+    return tuple(by_priority([(spec, spec.priority(cfg)) for spec in registry]))
 
 
 def priority_rank(

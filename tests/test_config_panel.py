@@ -346,3 +346,156 @@ def test_smoke_a_bad_value_disables_the_real_save_button(tmp_path: Path) -> None
     assert str(panel.save_button["state"]) == "disabled"
     assert panel.message_for("filter.radius_km") != ""
     root.destroy()
+
+
+# --- T-141 · The networks as a reorderable list (REQ-GUI-008, CA-110.8) ----------
+
+
+def test_the_list_holds_the_four_networks_in_declared_order(panel: PanelModel) -> None:
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+
+    assert [n.label for n in networks.entries] == ["EMSC", "USGS", "FUNVISIS", "GEOFON"]
+    assert all(n.enabled for n in networks.entries)
+
+
+def test_the_list_opens_on_the_order_the_file_declares(config_file: Path) -> None:
+    from vigia_eew.notify.config_panel import NetworkList
+
+    config_file.write_text(
+        config_file.read_text(encoding="utf-8").replace(
+            "# priority = 1   # see [sources.emsc] above", "priority = 1"
+        ),
+        encoding="utf-8",
+    )
+    networks = NetworkList(PanelModel(ConfigWriter(config_file)))
+
+    assert [n.label for n in networks.entries][0] == "FUNVISIS"
+
+
+def test_moving_a_network_up_changes_the_order(panel: PanelModel) -> None:
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+    networks.move_up("sources_geofon")
+
+    assert [n.label for n in networks.entries] == ["EMSC", "USGS", "GEOFON", "FUNVISIS"]
+
+
+def test_the_first_network_cannot_move_up(panel: PanelModel) -> None:
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+    networks.move_up("sources_emsc")
+
+    assert [n.label for n in networks.entries][0] == "EMSC"
+
+
+def test_the_last_network_cannot_move_down(panel: PanelModel) -> None:
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+    networks.move_down("sources_geofon")
+
+    assert [n.label for n in networks.entries][-1] == "GEOFON"
+
+
+def test_reordering_and_saving_produces_a_file_in_the_same_order(
+    panel: PanelModel, config_file: Path
+) -> None:
+    """CA-110.8: what the user sees and what the file says are the same list."""
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+    networks.move_up("sources_funvisis")
+    networks.move_up("sources_funvisis")
+    shown = [n.label for n in networks.entries]
+
+    panel.save()
+
+    reloaded = load_config(config_file)
+    by_priority = sorted(
+        ("EMSC", "USGS", "FUNVISIS", "GEOFON"),
+        key=lambda name: getattr(reloaded, f"sources_{name.lower()}").priority,
+    )
+    assert by_priority == shown == ["FUNVISIS", "EMSC", "USGS", "GEOFON"]
+
+
+def test_reordering_declares_a_priority_for_every_network(panel: PanelModel) -> None:
+    """Once an order is expressed in the interface, all four carry a number.
+
+    Leaving some unranked would mean the list shown and the list stored could
+    drift apart the moment a later version changed the declaration order.
+    """
+    from vigia_eew.notify.config_panel import NetworkList
+
+    NetworkList(panel).move_up("sources_geofon")
+
+    assert sorted(panel.changes()) == [
+        "sources.emsc.priority",
+        "sources.funvisis.priority",
+        "sources.geofon.priority",
+        "sources.usgs.priority",
+    ]
+
+
+def test_disabling_a_network_is_one_change_and_keeps_the_others(
+    panel: PanelModel, config_file: Path
+) -> None:
+    """CA-110.5 from the interface: the flag decides existence, nothing else."""
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+    networks.set_enabled("sources_funvisis", False)
+
+    assert panel.changes() == {"sources.funvisis.enabled": False}
+    panel.save()
+    reloaded = load_config(config_file)
+    assert reloaded.sources_funvisis.enabled is False
+    assert reloaded.sources_emsc.enabled is True
+
+
+def test_a_disabled_network_stays_in_the_list(panel: PanelModel) -> None:
+    """It has to be visible to be re-enabled; disabled is not deleted."""
+    from vigia_eew.notify.config_panel import NetworkList
+
+    networks = NetworkList(panel)
+    networks.set_enabled("sources_geofon", False)
+
+    entry = next(n for n in networks.entries if n.key == "sources_geofon")
+    assert entry.enabled is False
+    assert len(networks.entries) == 4
+
+
+@pytest.mark.gui
+@pytest.mark.skipif(
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
+)
+def test_smoke_reordering_in_the_real_panel_reaches_the_file(tmp_path: Path) -> None:
+    """CA-110.8 through the widgets: the list, the model and the file agree."""
+    import tkinter as tk
+
+    from vigia_eew.notify.config_panel import ConfigPanel
+
+    path = tmp_path / "config.toml"
+    path.write_text(bundled_example(), encoding="utf-8")
+    root = tk.Tk()
+    panel = ConfigPanel(root, PanelModel(ConfigWriter(path)))
+    root.update_idletasks()
+
+    panel.networks.move_up("sources_geofon")
+    panel._order_network_rows()
+    panel._show_values()
+    root.update_idletasks()
+    shown = [n.label for n in panel.networks.entries]
+    panel.model.save()
+
+    reloaded = load_config(path)
+    stored = sorted(
+        ("EMSC", "USGS", "FUNVISIS", "GEOFON"),
+        key=lambda name: getattr(reloaded, f"sources_{name.lower()}").priority,
+    )
+    assert stored == shown
+    assert panel.controls["sources.geofon.priority"].get() == "3"
+    root.destroy()
