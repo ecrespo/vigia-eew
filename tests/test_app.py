@@ -46,31 +46,31 @@ def _app(**cfg_kw) -> Application:
 def test_supervisor_with_all_sources():
     app = _app()
     sup = app.wiring.build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["ws", "rest", "funvisis", "geofon", "pipeline"]
+    assert sup.names == ["ws", "rest", "funvisis", "geofon", "pipeline", "history"]
 
 
 def test_supervisor_without_emsc():
     app = _app(sources_emsc=EMSCSource(enabled=False))
     sup = app.wiring.build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["rest", "funvisis", "geofon", "pipeline"]
+    assert sup.names == ["rest", "funvisis", "geofon", "pipeline", "history"]
 
 
 def test_supervisor_without_usgs():
     app = _app(sources_usgs=USGSSource(enabled=False))
     sup = app.wiring.build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["ws", "funvisis", "geofon", "pipeline"]
+    assert sup.names == ["ws", "funvisis", "geofon", "pipeline", "history"]
 
 
 def test_supervisor_without_funvisis():
     app = _app(sources_funvisis=FUNVISISSource(enabled=False))
     sup = app.wiring.build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["ws", "rest", "geofon", "pipeline"]
+    assert sup.names == ["ws", "rest", "geofon", "pipeline", "history"]
 
 
 def test_supervisor_without_geofon():
     app = _app(sources_geofon=GEOFONSource(enabled=False))
     sup = app.wiring.build_supervisor(asyncio.Queue(), object())
-    assert sup.names == ["ws", "rest", "funvisis", "pipeline"]
+    assert sup.names == ["ws", "rest", "funvisis", "pipeline", "history"]
 
 
 # --- Notification controller built by the app ---
@@ -269,7 +269,14 @@ def test_wire_tui_binds_controller_and_supervisor():
     ctrl = app._wire_tui(tui_app)
     assert tui_app.bound_controller is ctrl
     assert isinstance(tui_app.bound_supervisor, Supervisor)
-    assert tui_app.bound_supervisor.names == ["ws", "rest", "funvisis", "geofon", "pipeline"]
+    assert tui_app.bound_supervisor.names == [
+        "ws",
+        "rest",
+        "funvisis",
+        "geofon",
+        "pipeline",
+        "history",
+    ]
 
 
 def test_controller_for_tui_binds_controller_without_supervisor():

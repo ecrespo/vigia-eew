@@ -1,8 +1,13 @@
 """Shared test fixtures.
 
-Isolate the whole suite from the real user config directory: tests must never
-read the developer's `~/.config/vigia-eew/config.toml` nor seed one there
-(RF-24). Each test gets a unique, non-existent default path under `tmp_path`.
+Isolate the whole suite from the real user directories: tests must never read
+the developer's `~/.config/vigia-eew/config.toml` nor seed one there (RF-24),
+and must never write a history into their data directory either. Each test
+gets unique, non-existent default paths under `tmp_path`.
+
+The history half of this was added after a test run created a real
+`history.sqlite3` on the machine running it -- the same mistake the config
+fixture already existed to prevent, one directory over.
 """
 
 from __future__ import annotations
@@ -18,6 +23,14 @@ def _isolate_user_config(monkeypatch, tmp_path):
         config_module,
         "default_config_path",
         lambda: tmp_path / "vigia-eew" / "config.toml",
+    )
+
+    from vigia_eew import history as history_module
+
+    monkeypatch.setattr(
+        history_module,
+        "default_history_path",
+        lambda: tmp_path / "vigia-eew" / "history.sqlite3",
     )
 
 

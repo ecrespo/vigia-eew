@@ -271,6 +271,7 @@ class Application:
         """Coordinated shutdown: the tray icon, the supervisor, and the worker thread."""
         if self._tray_icon is not None:
             self._tray_icon.stop()
+        self.wiring.close_history()
         runtime = self._runtime.await_ready(runtime_timeout)
         if runtime is None:
             # The worker never published: it died before assembling the

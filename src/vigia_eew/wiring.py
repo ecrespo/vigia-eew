@@ -25,6 +25,7 @@ from typing import Any
 from vigia_eew import geocode, geoloc, tray
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings
+from vigia_eew.history import HistoryStore, HistoryWriter
 from vigia_eew.i18n import resolve_locale
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.registry import (
@@ -70,6 +71,7 @@ class Wiring:
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
         self._panel_window: Any = None
+        self._history: HistoryWriter | None = None
 
     # --- Startup ---
 
@@ -158,7 +160,44 @@ class Wiring:
             Deduplicator(self.cfg.dedup, self.state, priority_rank=priority_rank(self.cfg)),
             on_alert=on_alert,
             on_update=on_update,
+            record=self._history_sink(),
         )
+
+    def build_history(self) -> HistoryWriter | None:
+        """Opens the history, or gives it up and says so (REQ-HIS-002).
+
+        Best-effort by construction, like the tray and the toast: a read-only
+        directory, a file from a newer version, a disk that is full -- none of
+        them may cost an alert, so all of them end here as a warning and a
+        `None`. Art. 1 and Art. 3.
+        """
+        if not self.cfg.history.enabled:
+            self._log.info("history_disabled")
+            return None
+        if self._history is not None:
+            return self._history
+        try:
+            store = HistoryStore(retention_days=self.cfg.history.retention_days).open()
+        except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
+            self._log.warning("history_unavailable type=%s detail=%s", type(exc).__name__, exc)
+            return None
+        self._history = HistoryWriter(store)
+        self._log.info(
+            "history_open path=%s retention_days=%d",
+            store.path,
+            self.cfg.history.retention_days,
+        )
+        return self._history
+
+    def _history_sink(self) -> Callable[[Any], None] | None:
+        writer = self.build_history()
+        return None if writer is None else writer.submit
+
+    def close_history(self) -> None:
+        """Closes the file on shutdown, best-effort."""
+        if self._history is not None:
+            self._history.close()
+            self._history = None
 
     def build_supervisor(
         self, raw_queue: asyncio.Queue[RawMessage], processor: Processor
@@ -180,6 +219,15 @@ class Wiring:
             if spec.is_enabled(self.cfg):
                 sup.add(spec.task_name, spec.make_task(ctx))
         sup.add("pipeline", lambda: processor.run())
+        # Supervised like any other task, and for the same reason: its failure
+        # must isolate. A history that dies takes nothing with it.
+        #
+        # Asked for here rather than assumed to exist: `build_history` is
+        # idempotent, so the supervisor does not silently depend on the
+        # processor having been built first.
+        writer = self.build_history()
+        if writer is not None:
+            sup.add("history", writer.run)
         return sup
 
     # --- Notification ---

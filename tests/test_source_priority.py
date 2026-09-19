@@ -140,7 +140,7 @@ def test_the_supervisor_still_registers_tasks_in_registry_order(tmp_path) -> Non
 
     sup = wiring.build_supervisor(queue, processor)
 
-    assert sup.names == ["ws", "rest", "funvisis", "geofon", "pipeline"]
+    assert sup.names == ["ws", "rest", "funvisis", "geofon", "pipeline", "history"]
 
 
 def test_a_disabled_source_is_still_left_out_whatever_its_priority(tmp_path) -> None:
