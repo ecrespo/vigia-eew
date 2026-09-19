@@ -10,7 +10,8 @@ screen.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from vigia_eew.i18n import DEFAULT_LOCALE, t
 from vigia_eew.models import SeismicEvent, SeverityLevel
@@ -43,10 +44,24 @@ def severity_color(severity: SeverityLevel) -> str:
     return _COLOR_BY_SEVERITY[severity]
 
 
+def format_moment(moment: datetime, zone: str = VENEZUELA_ZONE) -> str:
+    """Converts an instant to the given zone and formats it for reading (RNF-12).
+
+    Fail-safe on the zone, like every other reader of a configured timezone in
+    this codebase: an unusable one shows UTC rather than refusing to show the
+    time at all. A history that will not render because of a typo in a config
+    field is worse than one that renders in the wrong zone and says so.
+    """
+    try:
+        local = moment.astimezone(ZoneInfo(zone))
+    except (ZoneInfoNotFoundError, ValueError):
+        local = moment.astimezone(UTC)
+    return local.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _local_time(ev: SeismicEvent, zone: str) -> str:
     """Converts `time_utc` to the given zone and formats it (RNF-12)."""
-    local = ev.time_utc.astimezone(ZoneInfo(zone))
-    return local.strftime("%Y-%m-%d %H:%M:%S")
+    return format_moment(ev.time_utc, zone)
 
 
 def _place(ev: SeismicEvent, locale_code: str) -> str:

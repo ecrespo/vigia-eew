@@ -80,15 +80,18 @@ class Application:
 
     # --- Callbacks that need a running application ---
 
-    def _toggle_pause(self) -> None:
-        """Tray callback: pause/resume (RF-34).
+    def _on_tk_thread(self, action: Callable[[], Any]) -> None:
+        """Runs `action` on the Tk thread, or not at all if there is no window.
 
-        Scheduled through `root.after(0, ...)` because `resume()` can create a
-        Tk window and Tkinter is not thread-safe (ADR-006) -- the tray runs on
-        its own thread, not the Tk one.
+        Every tray callback goes through here. The tray runs on its own thread
+        and Tkinter is not thread-safe (ADR-006), so touching a widget from the
+        callback directly works right up until it does not.
         """
-        if self._root is None or self._ctrl is None:
-            return
+        if self._root is not None:
+            self._root.after(0, action)
+
+    def _toggle_pause(self) -> None:
+        """Tray callback: pause/resume (RF-34)."""
 
         def do_toggle() -> None:
             if self._ctrl is None:
@@ -98,27 +101,23 @@ class Application:
             else:
                 self._ctrl.pause()
 
-        self._root.after(0, do_toggle)
+        self._on_tk_thread(do_toggle)
 
     def _exit_from_tray(self) -> None:
         """Tray callback: exits the agent (RF-34)."""
-        if self._root is not None:
-            self._root.after(0, self._root.quit)
+        self._on_tk_thread(lambda: self._root.quit())
 
     def _edit_config(self) -> None:
         """Tray callback: opens `config.toml` in the OS's associated app (RF-34)."""
         self.wiring.open_config(self._effective_config_path)
 
     def _open_panel(self) -> None:
-        """Tray callback: opens the configuration panel (REQ-GUI-005).
+        """Tray callback: opens the configuration panel (REQ-GUI-005)."""
+        self._on_tk_thread(lambda: self.wiring.open_panel(self._root, self._effective_config_path))
 
-        Scheduled with `root.after(0, ...)` for the reason `_toggle_pause`
-        already documents: the panel is a Tk window and the tray asking for it
-        is not on the Tk thread.
-        """
-        if self._root is None:
-            return
-        self._root.after(0, lambda: self.wiring.open_panel(self._root, self._effective_config_path))
+    def _open_history(self) -> None:
+        """Tray callback: opens the history window (REQ-HIS-005)."""
+        self._on_tk_thread(lambda: self.wiring.open_history(self._root))
 
     @property
     def _effective_config_path(self) -> Path:
@@ -165,6 +164,7 @@ class Application:
             edit_config=self._edit_config,
             exit_agent=self._exit_from_tray,
             open_panel=self._open_panel,
+            open_history=self._open_history,
         )
 
     def _wire_tui(self, tui_app: Any) -> AlertController:

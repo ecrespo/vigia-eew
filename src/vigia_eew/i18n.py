@@ -49,6 +49,49 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "tray_open_panel": {"en": "Configuration…", "es": "Configuración…"},
     "tray_edit_config": {"en": "Edit configuration...", "es": "Editar configuración..."},
     "tray_quit": {"en": "Quit", "es": "Salir"},
+    "tray_open_history": {"en": "History…", "es": "Histórico…"},
+    # The history view (REQ-HIS-005). Its whole purpose is to answer "why was
+    # I not warned about that one?", so the reason has to arrive as a phrase,
+    # not as the pipeline's internal word for it.
+    "history_title": {"en": "Earthquake history", "es": "Histórico de sismos"},
+    "history_column_time": {"en": "Local time", "es": "Hora local"},
+    "history_column_magnitude": {"en": "Magnitude", "es": "Magnitud"},
+    "history_column_place": {"en": "Place", "es": "Lugar"},
+    "history_column_distance": {"en": "Distance", "es": "Distancia"},
+    "history_column_source": {"en": "Network", "es": "Red"},
+    "history_column_verdict": {"en": "Verdict", "es": "Veredicto"},
+    "history_column_reason": {"en": "Reason", "es": "Motivo"},
+    "history_verdict_alerted": {"en": "Alerted", "es": "Alertado"},
+    "history_verdict_discarded": {"en": "Discarded", "es": "Descartado"},
+    "history_reason_radius": {"en": "Outside the radius", "es": "Fuera del radio"},
+    "history_reason_magnitude": {
+        "en": "Below the minimum magnitude",
+        "es": "Bajo la magnitud mínima",
+    },
+    "history_reason_country": {"en": "In another country", "es": "En otro país"},
+    "history_reason_freshness": {"en": "Not from today", "es": "No es de hoy"},
+    "history_reason_duplicate": {
+        "en": "Already reported by another network",
+        "es": "Ya reportado por otra red",
+    },
+    "history_filter_magnitude": {"en": "Minimum magnitude", "es": "Magnitud mínima"},
+    "history_filter_verdict": {"en": "Verdict", "es": "Veredicto"},
+    "history_filter_source": {"en": "Network", "es": "Red"},
+    "history_filter_any": {"en": "Any", "es": "Cualquiera"},
+    "history_filter_clear": {"en": "Clear filters", "es": "Limpiar filtros"},
+    "history_count": {"en": "{shown} of {total}", "es": "{shown} de {total}"},
+    "history_empty": {
+        "en": "Nothing recorded yet.",
+        "es": "Todavía no hay nada registrado.",
+    },
+    # The map (REQ-MAP-002, REQ-MAP-005).
+    "map_unavailable": {
+        "en": "Map unavailable (no tiles and no connection). The list still works.",
+        "es": "Mapa no disponible (sin teselas ni conexión). El listado sigue funcionando.",
+    },
+    "map_legend_alerted": {"en": "Alerted", "es": "Alertado"},
+    "map_legend_discarded": {"en": "Discarded", "es": "Descartado"},
+    "map_legend_size": {"en": "Size = magnitude", "es": "Tamaño = magnitud"},
 }
 
 

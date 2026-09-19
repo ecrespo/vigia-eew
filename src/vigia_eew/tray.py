@@ -77,6 +77,7 @@ def build_icon(
     edit_config: Callable[[], None],
     exit: Callable[[], None],
     open_panel: Callable[[], None] | None = None,
+    open_history: Callable[[], None] | None = None,
     icon_path: Path | None = None,
     locale_code: str = DEFAULT_LOCALE,
 ) -> Icon:
@@ -117,6 +118,10 @@ def build_icon(
     if open_panel is not None:
         entries.append(
             MenuItem(t("tray_open_panel", locale_code), action=lambda icon, item: open_panel())
+        )
+    if open_history is not None:
+        entries.append(
+            MenuItem(t("tray_open_history", locale_code), action=lambda icon, item: open_history())
         )
     entries += [
         MenuItem(t("tray_edit_config", locale_code), action=lambda icon, item: edit_config()),

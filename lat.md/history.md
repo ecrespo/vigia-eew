@@ -96,3 +96,19 @@ keep it a membership test: `MSC` does not match `|EMSC|`.
 One query object drives the list and the map, so that filtering cannot come to mean two different
 things in two views of one history.
 \n
+
+## The map is a view on the list, never the other way round
+
+[[src/vigia_eew/notify/history_view.py#HistoryList]] depends on the local file and nothing else.
+No network, no third party, no image decoding.
+
+That is Art. 3 applied to a feature rather than to a failure: the history answers "why was I not
+warned?" whether or not there is connectivity, and the geographic reading is an addition on top.
+The plan says the same thing in scope terms — if something had to be cut, the map goes and the
+list stays.
+
+A test walks the module's imports and fails if a network library or the tile client appears among
+them. Prose about the map is fine; an import of it is not.
+
+Both views read **one** query object. The list owns it and the map reads it, so a filter cannot
+come to mean two different things in two views of one history.

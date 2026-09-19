@@ -26,7 +26,7 @@ from vigia_eew import geocode, geoloc, tray
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings
 from vigia_eew.history import HistoryStore, HistoryWriter
-from vigia_eew.i18n import resolve_locale
+from vigia_eew.i18n import resolve_locale, t
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.registry import (
     SOURCE_REGISTRY,
@@ -71,6 +71,7 @@ class Wiring:
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
         self._panel_window: Any = None
+        self._history_window: Any = None
         self._history: HistoryWriter | None = None
 
     # --- Startup ---
@@ -332,6 +333,7 @@ class Wiring:
         edit_config: Callable[[], None],
         exit_agent: Callable[[], None],
         open_panel: Callable[[], None] | None = None,
+        open_history: Callable[[], None] | None = None,
     ) -> tray.TrayIcon | None:
         """Builds the tray icon if enabled (RF-34); best-effort, never fatal."""
         if not self.cfg.notification.tray_icon:
@@ -344,6 +346,7 @@ class Wiring:
                 edit_config=edit_config,
                 exit=exit_agent,
                 open_panel=open_panel,
+                open_history=open_history,
                 locale_code=self.locale,
             )
             return tray.TrayIcon(icon)
@@ -354,6 +357,44 @@ class Wiring:
     def open_config(self, path: Path) -> None:
         """Opens `config.toml` with the OS's associated application (RF-34)."""
         tray.open_config(path)
+
+    def open_history(self, root: Any) -> Any:
+        """Opens the history window (REQ-HIS-005). Tk thread only, like the panel.
+
+        Reads the history through its **own** store rather than the writer's
+        connection: the view runs on the Tk thread and the writer on a worker
+        one, and a reader that blocks behind a write would put the interface at
+        the mercy of a disk. Two connections to one SQLite file is what the
+        engine is for.
+
+        A history that cannot be opened for reading leaves the entry doing
+        nothing and says so, which is the same best-effort rule the writer
+        follows -- nothing about the history may cost an alert.
+        """
+        import tkinter as tk
+
+        from vigia_eew.notify.history_view import HistoryList, HistoryView
+
+        if self._history_window is not None and self._history_window.winfo_exists():
+            self._history_window.lift()
+            return self._history_window
+        try:
+            store = HistoryStore(prune_on_open=False).open()
+        except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
+            self._log.warning("history_view_unavailable type=%s detail=%s", type(exc).__name__, exc)
+            return None
+        window = tk.Toplevel(root)
+        window.title(t("history_title", self.locale))
+        listing = HistoryList(store, locale_code=self.locale, zone=self.cfg.notification.timezone)
+        HistoryView(window, listing, locale_code=self.locale)
+        window.protocol("WM_DELETE_WINDOW", lambda: self._close_history(store, window))
+        self._history_window = window
+        return window
+
+    def _close_history(self, store: HistoryStore, window: Any) -> None:
+        store.close()
+        self._history_window = None
+        window.destroy()
 
     def open_panel(self, root: Any, path: Path) -> Any:
         """Opens the configuration panel in its own window (REQ-GUI-005).
