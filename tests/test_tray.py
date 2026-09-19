@@ -150,3 +150,50 @@ def test_app_imports_without_display():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- T-137 · Both ways in are offered (REQ-GUI-005, CA-108.10) ---
+
+
+def _menu_texts(**overrides):
+    icon = build_icon(
+        state=AgentState(),
+        paused=lambda: False,
+        toggle_pause=lambda: None,
+        edit_config=lambda: None,
+        exit=lambda: None,
+        **overrides,
+    )
+    return icon, [str(i.text) for i in icon.menu if i.text is not None]
+
+
+def test_the_menu_offers_the_panel_and_the_file() -> None:
+    """CA-108.10: the panel is another way in, not a replacement for the file.
+
+    The file is what lets somebody version it with Git, copy it between
+    machines and edit it over SSH. Replacing it with a panel would take all
+    three away.
+    """
+    _icon, texts = _menu_texts(open_panel=lambda: None)
+
+    assert any("configuration…" in t.lower() and "edit" not in t.lower() for t in texts)
+    assert any("edit configuration" in t.lower() for t in texts)
+
+
+def test_the_panel_entry_invokes_its_callback() -> None:
+    opened: list[int] = []
+    icon, _texts = _menu_texts(open_panel=lambda: opened.append(1))
+
+    for item in icon.menu:
+        if item.text and str(item.text).lower().startswith("configuration"):
+            item(icon)
+
+    assert opened == [1]
+
+
+def test_without_a_panel_the_file_entry_is_still_there() -> None:
+    """The TUI has no panel (REQ-GUI-006 is deferred) and must not lose the file."""
+    _icon, texts = _menu_texts()
+
+    assert any("edit configuration" in t.lower() for t in texts)
+    assert not any(t.lower().startswith("configuration") for t in texts)

@@ -107,8 +107,23 @@ class Application:
 
     def _edit_config(self) -> None:
         """Tray callback: opens `config.toml` in the OS's associated app (RF-34)."""
-        path = Path(self._config_path) if self._config_path is not None else default_config_path()
-        self.wiring.open_config(path)
+        self.wiring.open_config(self._effective_config_path)
+
+    def _open_panel(self) -> None:
+        """Tray callback: opens the configuration panel (REQ-GUI-005).
+
+        Scheduled with `root.after(0, ...)` for the reason `_toggle_pause`
+        already documents: the panel is a Tk window and the tray asking for it
+        is not on the Tk thread.
+        """
+        if self._root is None:
+            return
+        self._root.after(0, lambda: self.wiring.open_panel(self._root, self._effective_config_path))
+
+    @property
+    def _effective_config_path(self) -> Path:
+        """The file both ways into the configuration act on."""
+        return Path(self._config_path) if self._config_path is not None else default_config_path()
 
     def _after_acknowledge(self, _ev: SeismicEvent) -> None:
         """Closes the app once the queue has drained, where that applies (simulate)."""
@@ -149,6 +164,7 @@ class Application:
             toggle_pause=self._toggle_pause,
             edit_config=self._edit_config,
             exit_agent=self._exit_from_tray,
+            open_panel=self._open_panel,
         )
 
     def _wire_tui(self, tui_app: Any) -> AlertController:

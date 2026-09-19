@@ -499,3 +499,35 @@ def test_smoke_reordering_in_the_real_panel_reaches_the_file(tmp_path: Path) -> 
     assert stored == shown
     assert panel.controls["sources.geofon.priority"].get() == "3"
     root.destroy()
+
+
+@pytest.mark.gui
+@pytest.mark.skipif(
+    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
+)
+def test_smoke_the_tray_entry_opens_one_panel_window(tmp_path: Path) -> None:
+    """T-137: the menu entry ends in a real window, and only ever one.
+
+    Two panels over one file would be CA-108.7's external-edit conflict with
+    itself: whichever saved second would be refused, by the other copy of the
+    same panel.
+    """
+    import tkinter as tk
+
+    from vigia_eew.agent_state import AgentState
+    from vigia_eew.state import StateStore
+    from vigia_eew.wiring import Wiring
+
+    path = tmp_path / "config.toml"
+    path.write_text(bundled_example(), encoding="utf-8")
+    root = tk.Tk()
+    root.withdraw()
+    wiring = Wiring(Settings(), StateStore(tmp_path / "state.json"), AgentState())
+
+    first = wiring.open_panel(root, path)
+    second = wiring.open_panel(root, path)
+    root.update_idletasks()
+
+    assert first is second
+    assert len([w for w in root.winfo_children() if isinstance(w, tk.Toplevel)]) == 1
+    root.destroy()

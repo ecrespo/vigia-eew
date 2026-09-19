@@ -69,6 +69,7 @@ class Wiring:
         self.locale = resolve_locale(cfg.notification.language)
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
+        self._panel_window: Any = None
 
     # --- Startup ---
 
@@ -282,6 +283,7 @@ class Wiring:
         toggle_pause: Callable[[], None],
         edit_config: Callable[[], None],
         exit_agent: Callable[[], None],
+        open_panel: Callable[[], None] | None = None,
     ) -> tray.TrayIcon | None:
         """Builds the tray icon if enabled (RF-34); best-effort, never fatal."""
         if not self.cfg.notification.tray_icon:
@@ -293,6 +295,7 @@ class Wiring:
                 toggle_pause=toggle_pause,
                 edit_config=edit_config,
                 exit=exit_agent,
+                open_panel=open_panel,
                 locale_code=self.locale,
             )
             return tray.TrayIcon(icon)
@@ -303,3 +306,27 @@ class Wiring:
     def open_config(self, path: Path) -> None:
         """Opens `config.toml` with the OS's associated application (RF-34)."""
         tray.open_config(path)
+
+    def open_panel(self, root: Any, path: Path) -> Any:
+        """Opens the configuration panel in its own window (REQ-GUI-005).
+
+        Must be called on the Tk thread -- `Application` schedules it, because
+        the tray that asks for it runs on its own (ADR-006).
+
+        A second call raises the window that is already open instead of
+        building another. Two panels over one file would be the external-edit
+        conflict of CA-108.7 with itself.
+        """
+        import tkinter as tk
+
+        from vigia_eew.config_writer import ConfigWriter
+        from vigia_eew.notify.config_panel import ConfigPanel, PanelModel
+
+        if self._panel_window is not None and self._panel_window.winfo_exists():
+            self._panel_window.lift()
+            return self._panel_window
+        window = tk.Toplevel(root)
+        window.title("Vigía-eew")
+        ConfigPanel(window, PanelModel(ConfigWriter(path)))
+        self._panel_window = window
+        return window

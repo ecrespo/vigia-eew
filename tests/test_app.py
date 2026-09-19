@@ -361,3 +361,48 @@ def test_build_geo_filter_wires_configured_timezone():
     app = _app(notification=Notification(timezone="America/Caracas"))
     geo = app.wiring.build_geo_filter()
     assert geo._timezone == "America/Caracas"
+
+
+# --- T-137 · Opening the configuration panel (REQ-GUI-005) ---
+
+
+def test_open_panel_schedules_on_the_tk_thread(monkeypatch, tmp_path):
+    """Tkinter is not thread-safe, and the tray runs on its own thread (ADR-006).
+
+    Building a window straight from the tray's callback is the same mistake
+    `_toggle_pause` already avoids -- it works until it does not.
+    """
+    opened = []
+    import vigia_eew.wiring as wiring_mod
+
+    monkeypatch.setattr(
+        wiring_mod.Wiring, "open_panel", lambda self, root, path: opened.append(path)
+    )
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+    app._root = _FakeRoot()
+
+    app._open_panel()
+
+    assert len(app._root.after_calls) == 1
+    ms, callback = app._root.after_calls[0]
+    assert ms == 0
+    callback()
+    assert opened == [tmp_path / "config.toml"]
+
+
+def test_open_panel_does_nothing_without_a_window(tmp_path):
+    """No root means no GUI session; there is nowhere to put a panel."""
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+
+    app._open_panel()  # must not raise
+
+
+def test_the_tray_is_built_with_both_ways_into_the_configuration(tmp_path):
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+    app._root = _FakeRoot()
+
+    icon = app._build_tray()
+
+    texts = [str(i.text) for i in icon._icon.menu if i.text is not None]
+    assert any(t.lower().startswith("configuration") for t in texts)
+    assert any("edit configuration" in t.lower() for t in texts)

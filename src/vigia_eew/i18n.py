@@ -43,6 +43,10 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     },
     "tray_pause_notifications": {"en": "Pause notifications", "es": "Pausar notificaciones"},
     "tray_resume_notifications": {"en": "Resume notifications", "es": "Reanudar notificaciones"},
+    # Two ways into the same file, deliberately (REQ-GUI-005): the panel for
+    # the user this product is written for, the editor for everyone who wants
+    # to version the file, copy it between machines, or reach it over SSH.
+    "tray_open_panel": {"en": "Configuration…", "es": "Configuración…"},
     "tray_edit_config": {"en": "Edit configuration...", "es": "Editar configuración..."},
     "tray_quit": {"en": "Quit", "es": "Salir"},
 }

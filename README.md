@@ -123,9 +123,15 @@ from the bundled template at the path below; you can also copy
 | **macOS** | `~/Library/Application Support/vigia-eew/config.toml` |
 | **Windows** | `%LOCALAPPDATA%\vigia-eew\config.toml` |
 
-You can also point at any file explicitly with `--config <path>`. From the desktop tray icon,
-**"Edit configuration…"** opens the file currently in use (creating it from the template if
-needed).
+You can also point at any file explicitly with `--config <path>`. The desktop tray icon offers
+two ways into it, deliberately: **"Configuration…"** opens a panel covering every setting, with
+live validation and a reorderable list of seismic networks; **"Edit configuration…"** opens the
+file itself in your editor (creating it from the template if needed), which is what lets you
+version it with Git, copy it between machines, or reach it over SSH.
+
+Saving from the panel preserves every comment in the file, keeps the previous version as
+`config.toml.bak`, and refuses to overwrite an edit you made elsewhere while it was open.
+**Changes apply when the agent restarts** — the configuration is read once, at startup.
 
 **Most useful settings** (see `config.toml.example` for the full schema):
 
