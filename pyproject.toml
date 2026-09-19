@@ -82,6 +82,12 @@ include = ["src/vigia_eew", "docs", "ARCHITECTURE.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# --strict-markers: un marcador mal escrito es un error, no una selección vacía.
+addopts = "--strict-markers"
+markers = [
+    "integration: crosses a real process, filesystem or tool boundary (git, lint-imports, a spawned interpreter)",
+    "gui: drives a real UI toolkit -- Tkinter against a display, or the Textual driver",
+]
 
 [tool.ruff]
 line-length = 100

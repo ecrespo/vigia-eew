@@ -53,6 +53,7 @@ def test_pipeline_to_presentation_is_forbidden() -> None:
     assert "vigia_eew.notify" in contract["forbidden_modules"]
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(shutil.which("lint-imports") is None, reason="import-linter not installed")
 def test_current_tree_satisfies_every_contract() -> None:
     """CA-103.5: the contracts hold today, so any new cycle is the first failure.

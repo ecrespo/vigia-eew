@@ -12,8 +12,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETUP_ENV_ACTION = REPO_ROOT / ".github" / "actions" / "setup-python-env" / "action.yml"
+
+# Every assertion here reads the working tree through git or off disk.
+pytestmark = pytest.mark.integration
 
 
 def _tracked_files() -> set[str]:

@@ -6,6 +6,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from vigia_eew.agent_state import AgentState
 from vigia_eew.tray import (
     TrayIcon,
@@ -136,6 +138,7 @@ def test_stop_calls_stop_and_waits_for_the_thread():
 # --- Headless import safety (RF-36): the agent must import with no X display ---
 
 
+@pytest.mark.integration
 def test_app_imports_without_display():
     # pystray connects to its GUI backend at import; importing it lazily keeps
     # `vigia_eew.app` (and `--tui` on a headless server) import-safe without a display.

@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from textual.widgets import RichLog, Static
 
 from vigia_eew.agent_state import AgentState
 from vigia_eew.notify.presentation import AlertData
 from vigia_eew.tui import AlertScreen, VigiaTuiApp
+
+# Every test here mounts a real Textual app and drives it through its async
+# driver. Headless, but a UI toolkit all the same -- and the slowest file.
+pytestmark = pytest.mark.gui
 
 
 def _data(severity: str = "critical", place: str = "La Guaira") -> AlertData:
