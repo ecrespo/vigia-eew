@@ -153,3 +153,37 @@ operating system, can clear it without consequence.
 It is bounded and least-recently-used, so it cannot grow into somebody's disk. A failure is never
 cached as an answer: caching "no" would leave a zone blank long after the network came back, which
 looks exactly like a map that is simply broken.
+
+## What the map says, and how it says it
+
+[[src/vigia_eew/notify/history_map.py#plan]] works out the whole drawing before a widget is
+touched: which tile goes where, how big each symbol is, which symbols are alerts.
+
+That separation is what makes the product's claims checkable. "A magnitude 6 is visibly bigger
+than a 3" is a number in a test, not an impression; "alerted and discarded are told apart" is an
+assertion about two styles, not a screenshot somebody looked at once.
+
+**The symbol scales linearly with magnitude, not with energy.** Energy is the honest physical
+scale and it is useless here — a magnitude 7 releases about thirty thousand times what a 4 does,
+which on a screen is either a dot or a continent. What REQ-MAP-003 asks for is a readable order.
+
+**The difference is shape as well as colour.** An alert is filled and a discard is an outline, so
+the distinction survives a printout, a screenshot, and a reader who cannot tell the two colours
+apart. A verdict nobody planned for is drawn as a discard rather than left out: silently
+under-reporting the history is worse than drawing it modestly.
+
+### No tiles means no map, and it says so
+
+With nothing to draw under them, the symbols are not drawn either.
+
+A dot at a pixel with no geography beneath it is a picture of nowhere, and it would look like a
+map. Saying the map is unavailable is the honest answer, and the list is already on screen
+answering the real question (REQ-MAP-002, Art. 3).
+
+One tile in hand is still a map, though: a partly cached zone draws what it has rather than
+throwing away a usable cache.
+
+### The legend and the attribution are never conditional
+
+Both are painted whatever else is or is not there — the attribution because the licence requires
+it wherever a tile is, and the legend because a symbol nobody can read explains nothing.
