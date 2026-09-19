@@ -329,7 +329,7 @@ No es "todas las fases hechas": es esta lista.
 
 | # | Condición | Fase | Estado |
 |---|---|---|---|
-| 1 | Una instalación limpia resuelve las mismas versiones que se verificaron | F0 | ⬜ |
+| 1 | Una instalación limpia resuelve las mismas versiones que se verificaron | F0 | ✅ 2026-09-19 |
 | 2 | El runtime declarado recibe correcciones de errores, verificado en dos versiones | F1 | ⬜ |
 | 3 | Ningún rango declarado admite una versión con avisos conocidos | F2 | ⬜ |
 | 4 | El gate mide las ocho dimensiones del Art. 8 | F0 + F2 | ⬜ |

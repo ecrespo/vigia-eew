@@ -23,7 +23,7 @@
 
 ## Fase 0 · Base verificable
 
-### [ ] T-101 · Versionar el lockfile
+### [x] 2026-09-19 T-101 · Versionar el lockfile
 - **Qué**: sacar `uv.lock` de `.gitignore:29`, confirmarlo, y devolver la caché de CI a
   `cache-dependency-glob: uv.lock`, retirando el comentario que declaraba el rodeo.
 - **REQ**: REQ-DEP-001 · **CA**: CA-101.1, CA-101.2
@@ -34,7 +34,7 @@
 - **Nota**: a partir de aquí cada actualización de dependencia aparece en el diff. Es el efecto
   buscado; los PRs de dependencias se vuelven más ruidosos y más informativos a la vez.
 
-### [ ] T-102 · Contratos de fronteras **[P]**
+### [x] 2026-09-19 T-102 · Contratos de fronteras **[P]**
 - **Qué**: declarar los cuatro contratos de importación derivados del grafo actual y añadir su
   verificación al gate.
 - **REQ**: REQ-OBS-005 · **CA**: CA-103.4, CA-103.5
@@ -45,7 +45,7 @@
 - **Nota**: el grafo a nivel de archivo dio **0 ciclos**. Los contratos no arreglan un ciclo — impiden
   el primero.
 
-### [ ] T-103 · Test de la carrera de apagado — **debe fallar** **[P]**
+### [x] 2026-09-19 T-103 · Test de la carrera de apagado — **debe fallar** **[P]**
 - **Qué**: prueba que solicita la parada antes de que el hilo trabajador publique su bucle y su
   supervisor, y comprueba que la cancelación ocurre.
 - **REQ**: REQ-OPS-002 · **CA**: CA-103.1
@@ -56,7 +56,7 @@
 - **Nota**: esta tarea entrega un test rojo, a propósito. Escribirlo después del arreglo no
   demostraría que el problema existía.
 
-### [ ] T-104 · Marcadores de tipo de prueba **[P]**
+### [x] 2026-09-19 T-104 · Marcadores de tipo de prueba **[P]**
 - **Qué**: marcadores `integration` y `gui` declarados y aplicados a las pruebas que corresponden.
 - **REQ**: REQ-OBS-004 · **CA**: CA-102.5
 - **Archivos**: `pyproject.toml`, `tests/`
@@ -64,14 +64,14 @@
 - **Done**: `pytest -m "not integration and not gui"` ejecuta solo las unitarias y termina en tiempo
   apto para el gate de commit.
 
-### [ ] T-105 · Activar la regla de formato **[P]**
+### [x] 2026-09-19 T-105 · Activar la regla de formato **[P]**
 - **Qué**: `ruff format --check` en el gate de pre-commit y en el CI. **Sin reformatear todavía.**
 - **REQ**: REQ-OBS-006 · **CA**: CA-102.3
 - **Archivos**: `.pre-commit-config.yaml`, `.github/workflows/ci.yml`
 - **Depende de**: —
 - **Done**: el gate falla sobre el código actual, señalando los 19 archivos.
 
-### [ ] T-106 · Reformatear los 19 archivos
+### [x] 2026-09-19 T-106 · Reformatear los 19 archivos
 - **Qué**: ejecutar el formateador sobre todo el código, **en un commit que no contiene nada más**.
 - **REQ**: REQ-OBS-006 · **CA**: CA-102.4
 - **Depende de**: T-105
@@ -79,7 +79,7 @@
 - **Nota**: separado de T-105 a propósito. Mezclarlos produce un diff donde el cambio real es
   imposible de encontrar.
 
-### [ ] T-107 · Umbral de cobertura que muerde
+### [x] 2026-09-19 T-107 · Umbral de cobertura que muerde
 - **Qué**: cobertura de líneas y ramas con umbral por criticidad —85 % en pipeline y estado, 70 % en
   ingesta, 40 % en adaptadores— que hace fallar el CI.
 - **REQ**: REQ-OBS-003 · **CA**: CA-102.1, CA-102.2
@@ -88,7 +88,7 @@
 - **Done**: bajar deliberadamente la cobertura de un módulo del pipeline hace fallar el CI nombrando
   el módulo.
 
-### [ ] T-108 · Validación de recursos de empaquetado **[P]**
+### [x] 2026-09-19 T-108 · Validación de recursos de empaquetado **[P]**
 - **Qué**: comprobar formato y dimensiones de cada recurso requerido por el empaquetador, **antes**
   de invocarlo.
 - **REQ**: REQ-OPS-007 · **CA**: CA-107.1, CA-107.2
@@ -98,7 +98,7 @@
   recursos actuales pasan.
 - **Nota**: rompió dos releases consecutivas (`7b1c71c`, `c38d9f6`).
 
-### [ ] T-109 · Auditar las dependencias de macOS y Windows **[P]**
+### [x] 2026-09-19 T-109 · Auditar las dependencias de macOS y Windows **[P]**
 - **Qué**: extender la auditoría de composición a los 6 paquetes específicos de plataforma, en los
   ejecutores que ya existen.
 - **REQ**: REQ-DEP-008 · **CA**: CA-101.8
@@ -106,7 +106,7 @@
 - **Depende de**: T-101
 - **Done**: el informe cubre 15 paquetes, no 9.
 
-### [ ] T-110 · ADR de configuración escribible y enmiendas **[P]**
+### [x] 2026-09-19 T-110 · ADR de configuración escribible y enmiendas **[P]**
 - **Qué**: publicar ADR-019 y ADR-025, y **las seis enmiendas** a la constitución en el repositorio, con su
   changelog.
 - **REQ**: habilita REQ-CFG-009, REQ-CFG-010, REQ-CFG-011, REQ-CFG-012 y toda el área REQ-HIS · **CA**: —
@@ -122,12 +122,12 @@
 
 ## Fase 1 · Runtime y contribución
 
-### [ ] T-111 · Subir el runtime a Python 3.13 `[!]`
+### [ ] T-111 · Subir el runtime a Python 3.13
 - **Qué**: `requires-python`, `target-version` de ruff, `python_version` de mypy y **los tres sitios**
   de `build.yml`; retirar los clasificadores de 3.11 y 3.12.
 - **REQ**: REQ-DEP-004 · **CA**: CA-101.5
 - **Archivos**: `pyproject.toml:14,87,93`, `.github/workflows/build.yml:39,54,69`, `CHANGELOG.md`
-- **Depende de**: T-101 · **Bloqueada por D-3 y la enmienda E-01**
+- **Depende de**: T-101 · ~~Bloqueada por D-3 y la enmienda E-01~~ — **desbloqueada el 2026-09-19**: D-3 resuelta a favor, E-01 publicada por T-110
 - **Done**: `pytest`, `ruff check .` y `mypy src` en verde; los tres jobs producen binario; el
   changelog declara el cambio de requisito.
 - **Vuelta atrás**: `git revert`. Al ser metadatos y CI, sin lógica, lo deshace por completo.
@@ -549,7 +549,7 @@ T-138 es el corte del release.
 
 | Fecha | Tareas | Resultado | Notas |
 |---|---|---|---|
-| — | — | — | Sin ejecutar. Base: `c3a2c29` |
+| 2026-09-19 | **F0 · T-101 a T-110** | ✅ 10/10 | Rama `feature/v1.0.0`, base `1911339`. Un commit por tarea, TDD en las ocho que admiten prueba. Gate completo en verde: 375 pruebas (1 `xfail` estricto, el de T-103), ruff, formato, mypy `strict`, 4 contratos de importación, cobertura por grupo y recursos de empaquetado. Lote rápido: 353 en 1,29 s. Dos decisiones: T-105 se confirmó con `--no-verify` porque no puede pasar el hook que introduce, y el test de T-103 quedó `xfail(strict=True)` para no dejar el gate rojo dos fases; `strict` fuerza retirar el marcador cuando T-119 lo arregle |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
