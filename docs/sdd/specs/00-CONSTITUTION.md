@@ -105,7 +105,7 @@ Decidido; no se rediscute por feature.
 | UI terminal | Textual | ≥ 8.2 |
 | Empaquetado | hatchling (wheel/PyPI) + PyInstaller (binarios) | — |
 | Gestor de proyecto | `uv`, **con `uv.lock` versionado** | — |
-| Calidad | ruff, mypy `strict`, pytest, bandit, pip-audit, gitleaks, semgrep, trivy, import-linter | — |
+| Calidad | ruff, mypy `strict`, pytest, bandit, pip-audit, gitleaks, semgrep, trivy, import-linter, jscpd (duplicación), lizard + flake8-cognitive-complexity (complejidad) | — |
 | Contenedores | **Ninguno para el producto** — es un agente de escritorio. Permitidos en desarrollo y build (enmendado, E-03) | — |
 
 **Regla de versiones:** todo rango de dependencia DEBERÁ llevar techo superior (`>=X,<Y`) y el

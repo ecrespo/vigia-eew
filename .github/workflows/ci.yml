@@ -54,6 +54,23 @@ jobs:
   # The suite runs on the declared floor and on the version above it
   # (REQ-DEP-007). A floor verified on a single interpreter is a floor nobody
   # has tested moving off, which is how the next bump becomes a surprise.
+  # Dimensions 1 and 2 of Article 8, which the gate did not measure at all
+  # before (REQ-OBS-007, code-audit P2-4).
+  quality:
+    name: Duplication and complexity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - name: Cognitive complexity
+        run: >-
+          uv run --with flake8 --with flake8-cognitive-complexity
+          flake8 --select=CCR001 --max-cognitive-complexity=16 src/
+      - name: Structural complexity and length
+        run: uv run --with lizard lizard src/ --CCN 15 --length 200 -w
+      - name: Duplication
+        run: npx --yes jscpd@4 src --min-tokens 70 --threshold 3 --reporters console
+
   test:
     name: Tests (pytest + coverage, py${{ matrix.python-version }})
     runs-on: ubuntu-latest

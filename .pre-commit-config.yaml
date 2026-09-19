@@ -62,6 +62,24 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Dimension 2 of Article 8, on both axes. lizard counts structure and
+      # length; flake8's CCR001 counts what a reader has to hold in their head,
+      # which is the part that actually hurts. Ceiling starts at 16 because
+      # rest_geofon._process_text is exactly 16 -- T-127 brings it to 12.
+      - id: cognitive-complexity
+        name: cognitive complexity (CCR001, max 16)
+        entry: uv run --with flake8 --with flake8-cognitive-complexity flake8 --select=CCR001 --max-cognitive-complexity=16 src/
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: lizard
+        name: structural complexity (lizard, CCN<=15)
+        entry: uv run --with lizard lizard src/ --CCN 15 --length 200 -w
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: bandit
         name: bandit (SAST)
         entry: uv run --extra dev --extra security bandit -r src --severity-level=medium
@@ -70,6 +88,17 @@ repos:
         always_run: true
 
       # -- pre-push stage (slower / network) --
+      # Dimension 1 of Article 8. Here rather than on every commit because it
+      # shells out to npx: the audit measured 0.95 % duplication and moved on,
+      # and a number nobody enforces is a number that only ever goes up.
+      - id: jscpd
+        name: duplication (jscpd, >3% blocks)
+        entry: bash -c 'if command -v npx >/dev/null 2>&1; then npx --yes jscpd@4 src --min-tokens 70 --threshold 3 --reporters console; else echo "npx unavailable -- skipped locally; CI enforces it"; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: pytest
         name: pytest (unit tests)
         entry: uv run --extra dev --extra security pytest -q

@@ -86,3 +86,49 @@ def test_format_rule_is_in_continuous_integration() -> None:
     """CA-102.3: and in CI, so a bypassed hook is still caught."""
     ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert "ruff format --check" in ci
+
+
+def _gate_text() -> str:
+    """Everything the gate runs, hooks and CI together."""
+    hooks = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    return hooks + ci
+
+
+def test_duplication_is_measured_by_the_gate() -> None:
+    """CA-102.6: dimension 1 of Article 8 is enforced, not just reported.
+
+    The audit measured 0.95 % and moved on. A number nobody enforces is a
+    number that only ever goes up.
+    """
+    assert "jscpd" in _gate_text()
+
+
+def test_cognitive_complexity_is_measured_by_the_gate() -> None:
+    """CA-102.6: dimension 2, on the axis that predicts unreadable code.
+
+    Cyclomatic complexity counts branches; cognitive complexity counts how
+    much a reader has to hold in their head, which is the thing that hurts.
+    Both run: lizard covers structure and length, flake8 covers the reader.
+    """
+    gate = _gate_text()
+    assert "CCR001" in gate
+    assert "lizard" in gate
+
+
+def test_the_complexity_ceiling_is_the_one_the_audit_declared() -> None:
+    """The threshold starts at 16 because two functions are already there.
+
+    16 is `rest_geofon._process_text` exactly, so the gate holds the line
+    without blocking on work that belongs to T-127. Lowering it to 12 is
+    that task's job, and this assertion makes the change deliberate rather
+    than incidental.
+    """
+    assert "--max-cognitive-complexity=16" in _gate_text()
+
+
+def test_duplication_runs_where_its_cost_belongs() -> None:
+    """jscpd shells out to npx, so it runs before push, not on every commit."""
+    hooks = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
+    jscpd_block = hooks.split("id: jscpd", 1)[1].split("- id:", 1)[0]
+    assert "pre-push" in jscpd_block
