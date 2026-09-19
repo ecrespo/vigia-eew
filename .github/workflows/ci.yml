@@ -71,6 +71,16 @@ jobs:
       - name: Duplication
         run: npx --yes jscpd@4 src --min-tokens 70 --threshold 3 --reporters console
 
+  # Article 9 as a lint (REQ-OBS-008). A decision that no longer matches the
+  # code is worse than an undocumented one: it is read, believed and acted on.
+  intent:
+    name: Intent layer (lat check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned: the version that the repo's intent layer was written against.
+      - run: npx --yes lat.md@0.12.2 check
+
   test:
     name: Tests (pytest + coverage, py${{ matrix.python-version }})
     runs-on: ubuntu-latest

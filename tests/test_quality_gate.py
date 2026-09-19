@@ -130,3 +130,13 @@ def test_duplication_runs_where_its_cost_belongs() -> None:
     hooks = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
     jscpd_block = hooks.split("id: jscpd", 1)[1].split("- id:", 1)[0]
     assert "pre-push" in jscpd_block
+
+
+def test_the_intent_layer_is_verified_by_the_gate() -> None:
+    """CA-103.7: drift between a decision and the code fails like a style error.
+
+    A decision record that no longer matches the code is worse than no record
+    at all: it is read, believed, and acted on. Article 9 asks for them to be
+    updated in the same change; this is what makes forgetting fail loudly.
+    """
+    assert "lat check" in _gate_text()

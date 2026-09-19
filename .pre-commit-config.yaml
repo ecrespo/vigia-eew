@@ -80,6 +80,17 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # Article 9 as a lint. A decision that no longer matches the code is
+      # worse than an undocumented one: it is read, believed and acted on.
+      # Best-effort locally -- `lat` is a node tool and not everyone will have
+      # it -- but CI runs it unconditionally, as with trivy.
+      - id: lat-check
+        name: intent layer (lat check)
+        entry: bash -c 'if command -v lat >/dev/null 2>&1; then lat check; else echo "lat unavailable -- skipped locally; CI enforces it"; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: bandit
         name: bandit (SAST)
         entry: uv run --extra dev --extra security bandit -r src --severity-level=medium
