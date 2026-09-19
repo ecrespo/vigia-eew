@@ -221,7 +221,7 @@
 
 ## Fase 3 · Estructura interna
 
-### [ ] T-121 · Contrato `SourceSpec` y registro de las cuatro fuentes
+### [x] 2026-09-19 T-121 · Contrato `SourceSpec` y registro de las cuatro fuentes
 - **Qué**: el registro declarativo que sustituye a la escalera del normalizador y a las cuatro
   fábricas.
 - **REQ**: REQ-ING-009 · **CA**: CA-104.2, CA-104.3, CA-104.5, CA-104.6
@@ -230,7 +230,7 @@
 - **Done**: sin escaleras por tipo de fuente en el pipeline; la suite de ingesta pasa sin
   modificarse.
 
-### [ ] T-122 · Separar el cableado de la orquestación
+### [x] 2026-09-19 T-122 · Separar el cableado de la orquestación
 - **Qué**: `wiring.py` con la construcción de dependencias que hoy vive en `Application`.
 - **REQ**: REQ-ING-009 · **CA**: CA-104.1, CA-104.4
 - **Archivos**: `src/vigia_eew/wiring.py` *(nuevo)*, `src/vigia_eew/app.py`
@@ -239,14 +239,14 @@
   fuente de prueba toca tres archivos.
 - **Nota**: cierra el hallazgo P1-1 de la evaluación de arquitectura — fan-out 25 sobre 40 módulos.
 
-### [ ] T-123 · Identificador de correlación en el contrato interno
+### [x] 2026-09-19 T-123 · Identificador de correlación en el contrato interno
 - **Qué**: campo de correlación generado en la ingesta y propagado por normalización y filtro.
 - **REQ**: REQ-OBS-002 · **CA**: CA-105.1, CA-105.3
 - **Archivos**: `src/vigia_eew/models.py`, `src/vigia_eew/ingest/`, `src/vigia_eew/pipeline/`
 - **Depende de**: T-121
 - **Done**: una búsqueda por el identificador devuelve ingesta, normalización y veredicto de filtro.
 
-### [ ] T-124 · Correlación a través de la deduplicación y la presentación
+### [x] 2026-09-19 T-124 · Correlación a través de la deduplicación y la presentación
 - **Qué**: el deduplicador **enlaza** el identificador de la llegada descartada con el de la
   superviviente; la presentación lo registra.
 - **REQ**: REQ-OBS-002 · **CA**: CA-105.2, CA-105.4, CA-105.5
@@ -257,7 +257,7 @@
 - **Nota**: el enlace en la deduplicación es **el punto de la tarea**. Sin él queda justo el hueco que
   se quería cubrir.
 
-### [ ] T-125 · Contrato de hilos documentado **[P]**
+### [x] 2026-09-19 T-125 · Contrato de hilos documentado **[P]**
 - **Qué**: tabla que declara, por cada dato mutable accedido por más de un hilo, a qué hilo pertenece
   y con qué primitiva se sincroniza.
 - **REQ**: REQ-OPS-003 · **CA**: CA-103.6
@@ -265,28 +265,28 @@
 - **Depende de**: T-119
 - **Done**: la tabla existe y el estado compartido de la aplicación aparece en ella.
 
-### [ ] T-126 · Lote de calidad agrupado
+### [x] 2026-09-19 T-126 · Lote de calidad agrupado
 - **Qué**: los nueve ítems P3 en un PR: duplicación entre los dos lectores FDSN, acceso al estado,
   fixture repetido, espera en un test, tres pruebas sin aserción y el `assert` del modelo.
 - **REQ**: REQ-OBS-007 · **CA**: CA-102.6
 - **Depende de**: T-120
 - **Done**: el gate de duplicación pasa; las tres pruebas sin aserción la tienen.
 
-### [ ] T-127 · Bajar la complejidad de dos funciones **[P]**
+### [x] 2026-09-19 T-127 · Bajar la complejidad de dos funciones **[P]**
 - **Qué**: extraer la lectura de fila del poller de GEOFON; simplificar la ramificación de la CLI.
 - **REQ**: REQ-OBS-007 · **CA**: CA-102.7
 - **Archivos**: `src/vigia_eew/ingest/rest_geofon.py`, `src/vigia_eew/cli.py:56`
 - **Depende de**: T-120
 - **Done**: ninguna función supera el umbral declarado de complejidad cognitiva.
 
-### [ ] T-128 · Verificación de la capa de intención en el gate **[P]**
+### [x] 2026-09-19 T-128 · Verificación de la capa de intención en el gate **[P]**
 - **Qué**: la comprobación de coherencia entre decisiones y código como hook.
 - **REQ**: REQ-OBS-008 · **CA**: CA-103.7
 - **Archivos**: `.pre-commit-config.yaml`
 - **Depende de**: T-102
 - **Done**: un enlace roto hace fallar el gate igual que un error de estilo.
 
-### [ ] T-129 · Backlinks en los tres puntos de mayor valor
+### [x] 2026-09-19 T-129 · Backlinks en los tres puntos de mayor valor
 - **Qué**: enlace desde el código a la decisión que lo explica en el veredicto de deduplicación, la
   aceptación del filtro y la resolución de la referencia automática.
 - **REQ**: REQ-OBS-008 · **CA**: CA-103.7
@@ -294,6 +294,7 @@
   `src/vigia_eew/geoloc.py`
 - **Depende de**: T-128
 - **Done**: los tres enlaces resuelven y el gate los verifica.
+- **Hallazgo (2026-09-19)**: `lat check` **no valida** los enlaces escritos dentro de los `.py` —resuelve los que van de la capa de intención al código, y escanea los `.py`, pero un backlink roto ahí pasa en silencio (comprobado rompiendo uno)—. `tests/test_backlinks.py` cierra esa mitad: resuelve cada enlace `lat.md/` escrito en `src/` contra su documento y su encabezado.
 - **Nota**: es el ítem que ninguna ola del backlog había situado. Va aquí por su dependencia de
   T-128.
 
@@ -562,6 +563,7 @@ T-138 es el corte del release.
 | 2026-09-19 | **F0 · T-101 a T-110** | ✅ 10/10 | Rama `feature/v1.0.0`, base `1911339`. Un commit por tarea, TDD en las ocho que admiten prueba. Gate completo en verde: 375 pruebas (1 `xfail` estricto, el de T-103), ruff, formato, mypy `strict`, 4 contratos de importación, cobertura por grupo y recursos de empaquetado. Lote rápido: 353 en 1,29 s. Dos decisiones: T-105 se confirmó con `--no-verify` porque no puede pasar el hook que introduce, y el test de T-103 quedó `xfail(strict=True)` para no dejar el gate rojo dos fases; `strict` fuerza retirar el marcador cuando T-119 lo arregle |
 | 2026-09-19 | **F1 · T-111 a T-114** | ✅ 4/4 | Piso a Python 3.13 en los 5 sitios (E-01), matriz 3.13+3.14 en CI, devcontainer y `CONTRIBUTING.md`. Re-bloqueo limpio: el lockfile pierde 355 líneas de marcadores de 3.11/3.12. **Suite verificada en las dos versiones de verdad, no solo en configuración**: 389 passed en 3.13 y en 3.14. Las 3 pruebas de GUI real pasan bajo Xvfb. No verificado: la imagen del devcontainer no se construyó (Docker no corre en la suite) — falta hacerlo una vez en máquina limpia antes del release |
 | 2026-09-19 | **F2 · T-115 a T-120** | ✅ 6/6 | Pisos y techos en los 9 rangos, `pip` ≥ 26.2, gate de resolución mínima, carrera de apagado cerrada y gate de duplicación/complejidad. **Gate completo: las 8 dimensiones del Art. 8.** 402 passed, sin `xfail` (T-119 lo retiró). Dos desviaciones registradas: T-117 tuvo que subir los pisos además de poner techos (tras T-111 siete no resolvían), y T-119 necesitó un segundo commit — `Supervisor.run()` descartaba una parada previa. Verificado rompiendo cada gate a propósito |
+| 2026-09-19 | **F3 · T-121 a T-129** | ✅ 9/9 | Registro declarativo de fuentes (`ingest/registry.py`, cada fuente dueña de su traducción), `wiring.py` separando composición de orquestación (**`app.py`: fan-out 22→8, 450→272 líneas**), correlación punta a punta con enlace en la deduplicación, contrato de hilos, lote P3 (**duplicación en `src/`: 0 clones, 0 %**), complejidad ≤ 12 y backlinks verificados. 432 passed, gate completo en verde. Dos hallazgos: `lat check` no valida enlaces dentro de `.py` (cubierto por `tests/test_backlinks.py`), y 17 pruebas de composición se movieron con la composición |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
