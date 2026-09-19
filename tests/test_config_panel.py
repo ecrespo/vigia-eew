@@ -62,10 +62,13 @@ def test_every_field_in_the_schema_reaches_the_panel() -> None:
     assert described == _leaf_paths()
 
 
-def test_the_ten_sections_are_all_present() -> None:
+def test_every_section_of_the_file_is_a_section_of_the_panel() -> None:
+    """HU-108 counted ten. `[history]` (F6) made eleven, and nobody edited
+    the panel to add it -- which is the whole of what ADR-020 promised."""
     sections = describe()
-    assert len(sections) == 10
+    assert len(sections) == 11
     assert [s.key for s in sections][:2] == ["reference", "filter"]
+    assert "history" in {s.key for s in sections}
 
 
 def test_a_field_the_generator_cannot_render_fails_by_name() -> None:

@@ -112,3 +112,14 @@ level = "INFO"
 file = "vigia-eew.log"
 max_bytes = 1048576
 backups = 3
+
+[history]
+# Local record of every earthquake the agent evaluated, with the reason for each
+# one it discarded -- so "why was I not warned about that one?" has an answer.
+# A file on this machine and nowhere else: no sync, no backup, no telemetry.
+enabled = true
+# Days kept. Entries older than this are removed when the agent starts. The
+# figure is an ESTIMATE, not a measurement: discards are far more numerous than
+# alerts and the volume depends on global seismicity. Measure yours and adjust.
+# 0 keeps nothing; `enabled = false` records nothing at all.
+retention_days = 90

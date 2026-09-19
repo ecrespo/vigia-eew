@@ -155,6 +155,24 @@ class LoggingCfg(BaseModel):
     backups: int = Field(default=3, ge=0)
 
 
+class History(BaseModel):
+    """Event history parameters (REQ-HIS-004, ADR-025).
+
+    `retention_days` is the parameter that absorbs an uncertain estimate.
+    The volume -- tens of thousands of rows a year -- depends on global
+    seismicity and on what each network publishes, and discards outnumber
+    alerts by a lot. It is configurable from the start for that reason:
+    measure on first real use and adjust the default with the number.
+
+    `0` keeps nothing older than the moment of the prune; the history can be
+    turned off entirely with `enabled = false`, and the agent alerts exactly
+    the same either way.
+    """
+
+    enabled: bool = True
+    retention_days: int = Field(default=90, ge=0)
+
+
 class Settings(BaseModel):
     """Full agent configuration (RF-24)."""
 
@@ -168,6 +186,7 @@ class Settings(BaseModel):
     severity: Severity = Field(default_factory=Severity)
     notification: Notification = Field(default_factory=Notification)
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
+    history: History = Field(default_factory=History)
 
 
 #: The four seismic sources, in the order they are declared. Declaration
@@ -275,6 +294,7 @@ SECTION_PATHS: dict[str, tuple[str, ...]] = {
         "severity",
         "notification",
         "logging",
+        "history",
     )
 }
 

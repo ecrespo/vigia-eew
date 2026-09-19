@@ -36,7 +36,7 @@ def config_file(tmp_path: Path) -> Path:
 #: them. What the criterion actually demands is that a save preserve them, and
 #: that is asserted by comparing before with after. The literal stays so the
 #: template losing its documentation is a failure rather than a smaller number.
-TEMPLATE_COMMENT_LINES = 59
+TEMPLATE_COMMENT_LINES = 66
 
 
 def _comment_lines(path: Path) -> list[str]:
