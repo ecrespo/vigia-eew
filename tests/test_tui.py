@@ -181,7 +181,11 @@ async def test_simulate_tui_end_to_end_shows_and_acknowledges():
         state=application._agent_state,
         on_start=application._inject_simulated_alert,
     )
-    application._controller_for_tui(app)
+    # Mirrors run_tui: the application keeps the controller, which is what
+    # on_start reaches for when it injects the simulated event.
+    application._ctrl = application.wiring.build_tui_controller(
+        app, on_acknowledge=application._after_acknowledge
+    )
     async with app.run_test() as pilot:
         await pilot.pause()
         assert isinstance(app.screen, AlertScreen)

@@ -45,31 +45,31 @@ def _app(**cfg_kw) -> Application:
 
 def test_supervisor_with_all_sources():
     app = _app()
-    sup = app._build_supervisor(asyncio.Queue(), object())
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
     assert sup.names == ["ws", "rest", "funvisis", "geofon", "pipeline"]
 
 
 def test_supervisor_without_emsc():
     app = _app(sources_emsc=EMSCSource(enabled=False))
-    sup = app._build_supervisor(asyncio.Queue(), object())
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
     assert sup.names == ["rest", "funvisis", "geofon", "pipeline"]
 
 
 def test_supervisor_without_usgs():
     app = _app(sources_usgs=USGSSource(enabled=False))
-    sup = app._build_supervisor(asyncio.Queue(), object())
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
     assert sup.names == ["ws", "funvisis", "geofon", "pipeline"]
 
 
 def test_supervisor_without_funvisis():
     app = _app(sources_funvisis=FUNVISISSource(enabled=False))
-    sup = app._build_supervisor(asyncio.Queue(), object())
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
     assert sup.names == ["ws", "rest", "geofon", "pipeline"]
 
 
 def test_supervisor_without_geofon():
     app = _app(sources_geofon=GEOFONSource(enabled=False))
-    sup = app._build_supervisor(asyncio.Queue(), object())
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
     assert sup.names == ["ws", "rest", "funvisis", "pipeline"]
 
 
@@ -79,8 +79,9 @@ def test_supervisor_without_geofon():
 def test_controller_formats_and_shows():
     app = _app()
     seen: list = []
-    ctrl = app._build_controller(
+    ctrl = app.wiring.build_controller(
         lambda data, severity, on_acknowledge: seen.append((data, severity)) or _FakeWindow(),
+        on_acknowledge=app._after_acknowledge,
     )
     ctrl.enqueue(simulated_event(app.cfg.reference, app.cfg.severity))
     assert len(seen) == 1
@@ -181,7 +182,11 @@ def test_build_tray_enabled_returns_icon():
 def test_toggle_pause_schedules_on_tk_thread():
     app = _app()
     app._root = _FakeRoot()
-    ctrl = app._build_controller(lambda data, severity, on_acknowledge: _FakeWindow())
+    ctrl = app.wiring.build_controller(
+        lambda data, severity, on_acknowledge: _FakeWindow(),
+        on_acknowledge=app._after_acknowledge,
+    )
+    app._ctrl = ctrl
     assert ctrl.paused is False
 
     app._toggle_pause()
@@ -205,9 +210,9 @@ def test_exit_from_tray_schedules_quit():
 def test_edit_config_uses_explicit_path(monkeypatch, tmp_path):
     path = tmp_path / "config.toml"
     calls = []
-    import vigia_eew.app as app_mod
+    import vigia_eew.wiring as wiring_mod
 
-    monkeypatch.setattr(app_mod.tray, "open_config", lambda r: calls.append(r))
+    monkeypatch.setattr(wiring_mod.tray, "open_config", lambda r: calls.append(r))
     app = Application(Settings(), config_path=path)
     app._edit_config()
     assert calls == [path]
@@ -216,8 +221,9 @@ def test_edit_config_uses_explicit_path(monkeypatch, tmp_path):
 def test_edit_config_uses_default_path_without_explicit_config(monkeypatch):
     calls = []
     import vigia_eew.app as app_mod
+    import vigia_eew.wiring as wiring_mod
 
-    monkeypatch.setattr(app_mod.tray, "open_config", lambda r: calls.append(r))
+    monkeypatch.setattr(wiring_mod.tray, "open_config", lambda r: calls.append(r))
     app = _app()
     app._edit_config()
     assert len(calls) == 1
@@ -269,7 +275,7 @@ def test_wire_tui_binds_controller_and_supervisor():
 def test_controller_for_tui_binds_controller_without_supervisor():
     app = _app()
     tui_app = _FakeTuiApp()
-    ctrl = app._controller_for_tui(tui_app)
+    ctrl = app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
     assert tui_app.bound_controller is ctrl
     assert tui_app.bound_supervisor is None  # simulate mode: no ingestion
 
@@ -277,7 +283,7 @@ def test_controller_for_tui_binds_controller_without_supervisor():
 def test_inject_simulated_alert_pushes_event():
     app = _app()
     tui_app = _FakeTuiApp()
-    app._controller_for_tui(tui_app)
+    app._ctrl = app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
     app._inject_simulated_alert()
     assert len(tui_app.pushed) == 1
     data, severity = tui_app.pushed[0]
@@ -309,7 +315,7 @@ def _country_event(lat, lon, distance_km=50.0):
 
 def test_resolve_user_country_uses_config_override():
     app = _app(filter=Filter(country_filter=True, country="ve"))
-    assert app._resolve_user_country() == "VE"
+    assert app.wiring.resolve_user_country() == "VE"
 
 
 def test_resolve_user_country_auto_from_reference_point():
@@ -317,14 +323,14 @@ def test_resolve_user_country_auto_from_reference_point():
         reference=ReferencePoint(name="Caracas", lat=10.48, lon=-66.90),
         filter=Filter(country_filter=True, country="auto"),
     )
-    assert app._resolve_user_country() == "VE"
+    assert app.wiring.resolve_user_country() == "VE"
 
 
 def test_build_geo_filter_disabled_keeps_other_country():
     # today_only=False: these fixtures use a fixed 2026-06-28 date, unrelated to the
     # freshness filter (RF-40), which has its own dedicated tests in test_filter.py.
     app = _app(filter=Filter(country_filter=False, today_only=False))
-    geo = app._build_geo_filter()
+    geo = app.wiring.build_geo_filter()
     assert geo.accepts(_country_event(4.71, -74.07)) is True  # Bogotá, kept (filter off)
 
 
@@ -333,7 +339,7 @@ def test_build_geo_filter_enabled_drops_other_country():
         reference=ReferencePoint(name="Caracas", lat=10.48, lon=-66.90),
         filter=Filter(country_filter=True, country="auto", radius_km=2000, today_only=False),
     )
-    geo = app._build_geo_filter()
+    geo = app.wiring.build_geo_filter()
     assert geo.accepts(_country_event(4.71, -74.07)) is False  # Bogotá (CO) dropped
     assert geo.accepts(_country_event(10.48, -66.90)) is True  # Caracas (VE) kept
     assert geo.accepts(_country_event(12.0, -64.0)) is True  # offshore VE -> kept
@@ -345,7 +351,7 @@ def test_build_geo_filter_inactive_when_country_unresolved():
         reference=ReferencePoint(name="Ocean", lat=0.0, lon=-30.0),
         filter=Filter(country_filter=True, country="auto", today_only=False),
     )
-    geo = app._build_geo_filter()
+    geo = app.wiring.build_geo_filter()
     assert geo.accepts(_country_event(4.71, -74.07)) is True  # not suppressed
 
 
@@ -353,5 +359,5 @@ def test_build_geo_filter_wires_configured_timezone():
     # RF-40/RF-41: _build_geo_filter must pass the configured timezone through to
     # GeoFilter so the freshness check uses the user's local day, not UTC.
     app = _app(notification=Notification(timezone="America/Caracas"))
-    geo = app._build_geo_filter()
+    geo = app.wiring.build_geo_filter()
     assert geo._timezone == "America/Caracas"

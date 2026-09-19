@@ -141,6 +141,7 @@ type = "layers"
 layers = [
     "vigia_eew.cli",
     "vigia_eew.app",
+    "vigia_eew.wiring",
     "vigia_eew.tui | vigia_eew.tray",
     "vigia_eew.notify | vigia_eew.autostart",
     "vigia_eew.pipeline",
