@@ -106,8 +106,23 @@ class StateStore:
                 a.acknowledged_utc = when
                 break
 
-    def add_signature(self, signature: EventSignature) -> None:
-        """Stores a recent signature for inter-source dedup (RF-09)."""
+    def add_signature(self, signature: EventSignature, *, replacing: str | None = None) -> None:
+        """Stores a recent signature for inter-source dedup (RF-09).
+
+        With `replacing`, the signature of that event id is swapped for this
+        one instead of a second being appended. That is what a higher-priority
+        arrival does (REQ-PIP-010): one earthquake keeps one signature, so the
+        next arrival is compared against the data that actually prevailed and
+        not against the one already overruled.
+
+        A `replacing` id that is not found falls back to appending -- state
+        written before v1.0 carries no event ids to match on.
+        """
+        if replacing is not None:
+            for index, existing in enumerate(self._state.recent_signatures):
+                if existing.event_id == replacing:
+                    self._state.recent_signatures[index] = signature
+                    return
         self._state.recent_signatures.append(signature)
 
     def update_usgs_cursor(self, cursor_ms: int) -> None:

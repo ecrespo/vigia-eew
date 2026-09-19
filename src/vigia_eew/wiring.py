@@ -27,7 +27,12 @@ from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings
 from vigia_eew.i18n import resolve_locale
 from vigia_eew.ingest import RawMessage
-from vigia_eew.ingest.registry import SOURCE_REGISTRY, IngestContext, validate_registry
+from vigia_eew.ingest.registry import (
+    SOURCE_REGISTRY,
+    IngestContext,
+    priority_rank,
+    validate_registry,
+)
 from vigia_eew.logging_conf import configure_logging
 from vigia_eew.models import SeismicEvent, SeverityLevel
 from vigia_eew.notify.controller import AlertController
@@ -146,7 +151,10 @@ class Wiring:
             raw_queue,
             Normalizer(self.cfg.reference, self.cfg.severity),
             self.build_geo_filter(),
-            Deduplicator(self.cfg.dedup, self.state),
+            # The rank is resolved here, where the registry is already known,
+            # and handed over as a plain mapping. The pipeline needs the order
+            # the user declared, not the catalogue it was declared in.
+            Deduplicator(self.cfg.dedup, self.state, priority_rank=priority_rank(self.cfg)),
             on_alert=on_alert,
             on_update=on_update,
         )

@@ -7,6 +7,9 @@ one, applies the normalize -> filter -> deduplicate sequence (TECHNICAL-DESIGN Â
   - `new` -> registered as alerted and delivered to `on_alert`;
   - `update` (a revision of the one on screen) -> delivered to `on_update` without
     alerting again (RF-11);
+  - `supersede` -> the same earthquake, reported by a network the user ranked
+    higher: the alert on screen is refreshed with the better data, without
+    alerting again (RF-11, REQ-PIP-010);
   - `duplicate` -> discarded.
 
 `on_alert`/`on_update` are callbacks (in the agent, they publish onto the
@@ -63,8 +66,8 @@ class Processor:
         ev = self._normalizer.normalize(msg)
         if ev is None:
             return
-        verdict = self._filter.verdict(ev)
-        if not verdict.accepted:
+        allowed = self._filter.verdict(ev)
+        if not allowed.accepted:
             # At INFO, not DEBUG: "why was I not warned about that one?" is the
             # question this line exists to answer, and it cannot answer it from
             # a log level nobody runs with (REQ-OBS-002).
@@ -73,19 +76,38 @@ class Processor:
                 ev.trace_id,
                 ev.id,
                 ev.source,
-                verdict.reason,
+                allowed.reason,
                 ev.magnitude,
                 ev.distance_km,
             )
             return
         # The deduplicator logs its own verdict with the journey it linked the
         # arrival to; discards are no longer silent, which is the whole point.
-        result = self._dedup.verdict(ev).result
-        if result == "new":
+        verdict = self._dedup.verdict(ev)
+        if verdict.result == "new":
             self._dedup.register(ev)
             self._on_alert(ev)
-        elif result == "update" and self._on_update is not None:
+        elif verdict.result == "update" and self._on_update is not None:
             self._on_update(ev)
+        elif verdict.result == "supersede":
+            self._prevail(ev, verdict.linked_id)
+
+    def _prevail(self, ev: SeismicEvent, superseded: str | None) -> None:
+        """A better-ranked network reported the earthquake already on screen.
+
+        It refreshes the alert; it does not raise a second one. The whole
+        arrival prevails -- magnitude, epicentre, depth, and the distance the
+        normalizer derived from that epicentre -- because patching one field
+        would leave the rest describing a different earthquake (CA-110.3).
+
+        Note what this cannot reach: an arrival the filter discarded never
+        arrives here, so a better network whose coordinates put the event
+        outside the radius does not overrule the alert. Alerting stays the
+        filter's decision, which is the half of ADR-026 that is easy to lose.
+        """
+        self._dedup.register(ev, superseding=superseded)
+        if self._on_update is not None:
+            self._on_update(ev.model_copy(update={"action": "update", "supersedes": superseded}))
 
     async def run(self) -> None:
         """Pipeline loop: consumes the queue until cancelled."""

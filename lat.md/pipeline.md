@@ -68,3 +68,27 @@ An `update` for an event already on screen updates that alert in place.
 
 Raising a second window for a revised magnitude would train the user to dismiss alerts
 reflexively, which is the one behavior the product cannot afford.
+
+### The best arrival prevails, not the first
+
+When two networks report the same earthquake, the one the user ranked higher supplies the data,
+whichever arrived first.
+
+Before v1.0 the first arrival won and every later one was discarded. That was not a decision, it
+was latency: the concrete case is a local earthquake carrying a global network's automatic
+magnitude while the national network's revised one is thrown away. See ADR-026 and
+[[lat.md/ingestion#Priority ranks data, never alerts]].
+
+The superseding arrival refreshes the alert rather than raising a second one, which is the same
+rule the EMSC `update` path follows and for the same reason. What prevails is the **whole**
+arrival — magnitude, epicentre, depth and the distance the normalizer derived from that
+epicentre — because patching one field would leave the rest describing a different earthquake.
+
+Two consequences worth stating, because both are easy to lose:
+
+- **Registering a supersede replaces the stored signature instead of adding one.** One earthquake
+  keeps one signature, so a third arrival is compared against the data that prevailed and not
+  against the one already overruled. A middling network cannot win by arriving late.
+- **A supersede cannot reach an arrival the filter discarded.** If the better network's
+  coordinates put the event outside the radius, it never gets to the deduplicator, and the alert
+  on screen keeps the data it had. Alerting stays the filter's decision.

@@ -83,6 +83,12 @@ class SeismicEvent(BaseModel):
     distance_km: float = Field(ge=0)
     severity: SeverityLevel
     action: Action = "create"
+    #: Id of the arrival this one overrules, when a higher-priority network
+    #: reported the same earthquake (REQ-PIP-010, ADR-026). Set only on the
+    #: refresh the pipeline emits, and it is what lets the alert queue
+    #: recognise a revision of the alert on screen even though the two
+    #: arrivals carry different ids -- they come from different catalogues.
+    supersedes: str | None = None
 
     @field_validator("time_utc", "lastupdate_utc")
     @classmethod
@@ -103,6 +109,8 @@ class SeismicEvent(BaseModel):
             time_utc=self.time_utc,
             magnitude=self.magnitude,
             trace_id=self.trace_id,
+            source=self.source,
+            event_id=self.id,
         )
 
 
@@ -117,6 +125,12 @@ class EventSignature(BaseModel):
     #: earthquake can be linked to it instead of losing its own (REQ-OBS-002).
     #: Defaulted: state files written before v1.0 carry no trace ids.
     trace_id: str = ""
+    #: Which network reported it, and under which id. The network is what the
+    #: deduplicator compares against the priority order (REQ-PIP-010); the id
+    #: is what lets a superseding arrival replace this signature rather than
+    #: leave a second one behind. Both defaulted for state written before v1.0.
+    source: str = ""
+    event_id: str = ""
 
     @field_validator("time_utc")
     @classmethod
