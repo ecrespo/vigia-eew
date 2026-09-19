@@ -66,7 +66,12 @@ class Deduplicator:
         return self.verdict(ev).result
 
     def verdict(self, ev: SeismicEvent) -> DedupVerdict:
-        """The same decision, plus the journey the arrival belongs to."""
+        """The same decision, plus the journey the arrival belongs to.
+
+        Why the heuristic has the shape it has, and why an `update` refreshes
+        the alert instead of raising a second one:
+        [[lat.md/pipeline#Processing pipeline#Deduplication]].
+        """
         if self._state.already_alerted(ev.id):
             # Same id: either a revision (update) of an active alert, or a duplicate.
             linked = self._state.trace_of(ev.id)

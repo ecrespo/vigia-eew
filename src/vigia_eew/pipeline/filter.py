@@ -73,6 +73,10 @@ class GeoFilter:
         they were not warned, and radius, magnitude, country and freshness are
         four very different answers -- one of them is a misconfigured home
         location and another is a working filter doing its job (REQ-OBS-002).
+
+        Why the country check rejects rather than admits, and why freshness
+        uses the local calendar day rather than UTC:
+        [[lat.md/pipeline#Processing pipeline#Filtering: radius, magnitude, country, freshness]].
         """
         if ev.distance_km > self._cfg.radius_km:
             return FilterVerdict(False, "radius")
