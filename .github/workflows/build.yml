@@ -85,9 +85,22 @@ jobs:
           name: macos-dmg
           path: dist/*.dmg
 
+  # A PyInstaller binary links against the glibc of the machine that built
+  # it, and that becomes the oldest distribution it will run on. With
+  # `ubuntu-latest` that floor moves the day GitHub rolls the label -- no
+  # commit, no release note, and no way to find out except a user reporting
+  # that the AppImage no longer starts (REQ-OPS-009).
+  #
+  # Pinned to 22.04 (glibc 2.35) so re-running the build produces a binary
+  # with the same compatibility floor. GitHub does eventually retire a
+  # versioned label, and that is the right failure: a build that stops,
+  # loudly, instead of a floor that moves in silence.
+  #
+  # Permitted by amendment E-03: "no containers" is scoped to the product,
+  # not to how it is built.
   linux:
     name: Linux AppImage + .deb/.rpm
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: assets
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +121,14 @@ jobs:
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x /usr/local/bin/linuxdeploy /usr/local/bin/appimagetool
       - run: bash packaging/build_linux.sh
+      # Record the floor rather than trusting it. If the base ever moves, this
+      # line moves with it and the diff in the build log says so (CA-107.6).
+      - name: Declarar la compatibilidad del binario
+        run: |
+          echo "built on: $(. /etc/os-release && echo "$PRETTY_NAME")"
+          echo "build glibc: $(ldd --version | head -1)"
+          echo "binary requires: $(objdump -T dist/vigia-eew \
+            | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1)"
       # Nothing is published that has not been run (REQ-OPS-008). Two releases
       # shipped broken on a resource that only went missing at *runtime*
       # (`bdc2a9d`), and nothing noticed because nothing in the build ever ran

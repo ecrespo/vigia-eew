@@ -163,3 +163,31 @@ def test_the_acknowledgement_half_runs_where_it_can() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
     assert workflow.count("--acknowledge") == 1
     assert "xvfb-run -a ./scripts/smoke_binary.sh --acknowledge" in workflow
+
+
+def _job(name: str) -> str:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
+    for block in re.split(r"^  (?=\w[\w-]*:$)", workflow, flags=re.M):
+        if block.startswith(f"{name}:"):
+            return block
+    raise AssertionError(f"no {name} job in build.yml")
+
+
+def test_the_linux_binary_declares_its_base() -> None:
+    """CA-107.5: an explicit, versioned base, not the runner's default.
+
+    A PyInstaller binary links against the glibc of the machine that built
+    it, and that becomes the oldest distribution it will run on. With
+    `ubuntu-latest` that floor moves the day GitHub rolls the label, without
+    a commit, a release note, or any way to notice except a user's bug
+    report.
+    """
+    job = _job("linux")
+    assert "ubuntu-latest" not in job, "the Linux build still follows the runner's default"
+    assert re.search(r"container:|ubuntu-\d\d\.\d\d", job), "no versioned base declared"
+
+
+def test_the_declared_base_is_pinned_by_digest_or_version() -> None:
+    """CA-107.6: re-running the build does not move the compatibility floor."""
+    job = _job("linux")
+    assert re.search(r"ubuntu-\d\d\.\d\d", job), "the base carries no version"
