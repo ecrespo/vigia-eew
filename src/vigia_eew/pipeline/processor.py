@@ -78,14 +78,14 @@ class Processor:
                 ev.distance_km,
             )
             return
-        result = self._dedup.classify(ev)
+        # The deduplicator logs its own verdict with the journey it linked the
+        # arrival to; discards are no longer silent, which is the whole point.
+        result = self._dedup.verdict(ev).result
         if result == "new":
             self._dedup.register(ev)
             self._on_alert(ev)
-        elif result == "update":
-            if self._on_update is not None:
-                self._on_update(ev)
-        # "duplicate": discarded silently
+        elif result == "update" and self._on_update is not None:
+            self._on_update(ev)
 
     async def run(self) -> None:
         """Pipeline loop: consumes the queue until cancelled."""

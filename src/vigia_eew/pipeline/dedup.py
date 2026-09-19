@@ -18,6 +18,7 @@ older than 24 h before persisting (RF-42), so the state file doesn't grow unboun
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Literal
 
 from vigia_eew.config import Dedup
@@ -26,6 +27,24 @@ from vigia_eew.models import AlertedId, EventSignature, SeismicEvent
 from vigia_eew.state import StateStore
 
 DedupResult = Literal["new", "update", "duplicate"]
+
+
+@dataclass(frozen=True, slots=True)
+class DedupVerdict:
+    """The outcome, and the journey this arrival belongs to.
+
+    `linked_trace` is the correlation id of the arrival that already alerted
+    this earthquake. Without it, a discarded second arrival leaves precisely
+    the gap the requirement exists to close: somebody asks why their second
+    network produced no alert, and the answer -- "because the first one
+    already did, at 12:00:07" -- is unreachable.
+
+    None when the event is new: it starts its own journey, and linking it to
+    anything would be an invention.
+    """
+
+    result: DedupResult
+    linked_trace: str | None
 
 
 class Deduplicator:
@@ -44,14 +63,35 @@ class Deduplicator:
 
     def classify(self, ev: SeismicEvent) -> DedupResult:
         """Determines the dedup outcome for an already-filtered event."""
+        return self.verdict(ev).result
+
+    def verdict(self, ev: SeismicEvent) -> DedupVerdict:
+        """The same decision, plus the journey the arrival belongs to."""
         if self._state.already_alerted(ev.id):
             # Same id: either a revision (update) of an active alert, or a duplicate.
-            return "update" if ev.action == "update" else "duplicate"
+            linked = self._state.trace_of(ev.id)
+            result: DedupResult = "update" if ev.action == "update" else "duplicate"
+            self._log.info(
+                "dedup_same_id trace=%s linked_to=%s id=%s source=%s result=%s",
+                ev.trace_id,
+                linked,
+                ev.id,
+                ev.source,
+                result,
+            )
+            return DedupVerdict(result, linked)
         for signature in self._state.state.recent_signatures:
             if self._matches(ev, signature):
-                self._log.info("dedup_cross_source id=%s source=%s", ev.id, ev.source)
-                return "duplicate"
-        return "new"
+                linked = signature.trace_id or None
+                self._log.info(
+                    "dedup_cross_source trace=%s linked_to=%s id=%s source=%s",
+                    ev.trace_id,
+                    linked,
+                    ev.id,
+                    ev.source,
+                )
+                return DedupVerdict("duplicate", linked)
+        return DedupVerdict("new", None)
 
     def register(self, ev: SeismicEvent) -> None:
         """Marks an event as alerted (id + signature) and persists the state (RF-10).
@@ -61,7 +101,9 @@ class Deduplicator:
         lifetime. `prune()` previously existed but was never invoked from any run path.
         """
         self._state.prune()
-        self._state.register_alerted(AlertedId(id=ev.id, source=ev.source, time_utc=ev.time_utc))
+        self._state.register_alerted(
+            AlertedId(id=ev.id, source=ev.source, time_utc=ev.time_utc, trace_id=ev.trace_id)
+        )
         self._state.add_signature(ev.signature())
         self._state.save()
 

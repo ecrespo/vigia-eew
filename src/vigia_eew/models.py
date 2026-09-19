@@ -85,7 +85,11 @@ class SeismicEvent(BaseModel):
     def signature(self) -> EventSignature:
         """Produces the signature used for inter-source deduplication (RF-09)."""
         return EventSignature(
-            lat=self.lat, lon=self.lon, time_utc=self.time_utc, magnitude=self.magnitude
+            lat=self.lat,
+            lon=self.lon,
+            time_utc=self.time_utc,
+            magnitude=self.magnitude,
+            trace_id=self.trace_id,
         )
 
 
@@ -96,6 +100,10 @@ class EventSignature(BaseModel):
     lon: float
     time_utc: datetime
     magnitude: float
+    #: Journey that alerted this signature, so a later arrival of the same
+    #: earthquake can be linked to it instead of losing its own (REQ-OBS-002).
+    #: Defaulted: state files written before v1.0 carry no trace ids.
+    trace_id: str = ""
 
     @field_validator("time_utc")
     @classmethod
@@ -112,6 +120,8 @@ class AlertedId(BaseModel):
     source: str
     time_utc: datetime
     acknowledged_utc: datetime | None = None  # acknowledge audit trail (OBJ-1)
+    #: See `EventSignature.trace_id`. Defaulted for state written before v1.0.
+    trace_id: str = ""
 
     @field_validator("time_utc", "acknowledged_utc")
     @classmethod

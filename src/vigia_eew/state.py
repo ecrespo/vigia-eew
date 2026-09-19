@@ -81,6 +81,18 @@ class StateStore:
         """Indicates whether an event id was already alerted (RF-10)."""
         return any(a.id == event_id for a in self._state.alerted_ids)
 
+    def trace_of(self, event_id: str) -> str | None:
+        """The correlation id of the journey that alerted `event_id`, if known.
+
+        None for state written before v1.0, which carries no trace ids. An
+        unlinked journey is worth less than a linked one and still better than
+        refusing to load somebody's state file.
+        """
+        for alert in self._state.alerted_ids:
+            if alert.id == event_id:
+                return alert.trace_id or None
+        return None
+
     def register_alerted(self, alert: AlertedId) -> None:
         """Adds an alerted id if it wasn't already present."""
         if not self.already_alerted(alert.id):
