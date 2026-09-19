@@ -27,6 +27,20 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "tray_ws_connected": {"en": "WS: connected", "es": "WS: conectado"},
     "tray_ws_reconnecting": {"en": "WS: reconnecting…", "es": "WS: reconectando…"},
     "tray_no_alerts_yet": {"en": "No alerts yet", "es": "Sin alertas todavía"},
+    # REQ-ALE-003: the user has to be able to see, on their own machine, whether
+    # the "above everything" promise actually holds in their session.
+    "tray_alert_guaranteed": {
+        "en": "Alert: always on top",
+        "es": "Alerta: siempre encima",
+    },
+    "tray_alert_degraded": {
+        "en": "Alert: may be covered (Wayland)",
+        "es": "Alerta: puede quedar tapada (Wayland)",
+    },
+    "tray_alert_unknown": {
+        "en": "Alert: on top not confirmed here",
+        "es": "Alerta: encima no confirmado aquí",
+    },
     "tray_pause_notifications": {"en": "Pause notifications", "es": "Pausar notificaciones"},
     "tray_resume_notifications": {"en": "Resume notifications", "es": "Reanudar notificaciones"},
     "tray_edit_config": {"en": "Edit configuration...", "es": "Editar configuración..."},

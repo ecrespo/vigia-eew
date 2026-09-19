@@ -70,6 +70,15 @@ class Wiring:
     def configure(self, *, resolve_location: bool) -> None:
         """Sets up logging and loads persisted state, resolving the reference if asked."""
         configure_logging(self.cfg.logging)
+        # First line in the log, on purpose: when somebody reports "it did not
+        # come up over my game", this is the entry that answers it (REQ-ALE-003).
+        env = self.agent_state.presentation
+        self._log.info(
+            "presentation_guarantee session=%s guarantee=%s reason=%s",
+            env.session,
+            env.guarantee,
+            env.reason,
+        )
         self.state.load()
         if resolve_location:
             self.resolve_automatic_reference()

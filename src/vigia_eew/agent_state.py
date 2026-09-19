@@ -8,15 +8,89 @@ Not persisted — it only lives while the process is running.
 `AgentRuntime` protects the other thing that crosses those threads: the event
 loop and supervisor the worker publishes and the Tk thread reads at shutdown.
 Same lock pattern, for the same reason (ADR-002).
+
+`PresentationEnvironment` is not thread-shared -- it is decided once at
+startup and never changes -- but it lives here because it is part of what the
+tray reports about the agent, which is what this module is for.
 """
 
 from __future__ import annotations
 
+import os
+import sys
 import threading
-from typing import TYPE_CHECKING, Protocol
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
     import asyncio
+    from collections.abc import Mapping
+
+#: Whether the "above everything, cannot be dismissed" promise holds here.
+Guarantee = Literal["guaranteed", "degraded", "unknown"]
+
+
+@dataclass(frozen=True, slots=True)
+class PresentationEnvironment:
+    """Where this session sits with respect to the alert guarantee (REQ-ALE-003).
+
+    Attributes:
+        guarantee: "guaranteed", "degraded", or "unknown" when the session
+            cannot be classified. Unknown is a fail-safe outcome, never fatal.
+        session: what was detected -- "wayland", "x11", "windows", "macos"
+            or "unknown".
+        reason: one sentence, shown to the user and written to the log.
+    """
+
+    guarantee: Guarantee
+    session: str
+    reason: str
+
+
+#: Measured on this project's own hardware, GNOME/Wayland via XWayland:
+#: `wm_attributes("-topmost", True)` is accepted without error and reading it
+#: back gives 0. The same call under a plain X server on the same machine
+#: gives 1. Nothing in the code can tell the difference at the call site,
+#: which is why the session has to be reasoned about instead.
+_WAYLAND_REASON = (
+    "Wayland compositors own window stacking: Tk accepts -topmost and silently "
+    "drops it, so the alert can be covered by another window"
+)
+_X11_REASON = "X11 honours -topmost and focus requests from the alert window"
+_NATIVE_REASON = "the platform honours always-on-top for an application window"
+_UNKNOWN_REASON = (
+    "the desktop session could not be identified; the alert is shown, but being "
+    "above every other window is not confirmed here"
+)
+
+
+def detect_presentation_environment(
+    *,
+    environ: Mapping[str, str] | None = None,
+    platform: str | None = None,
+) -> PresentationEnvironment:
+    """Classifies the current session against the alert guarantee.
+
+    Never raises and never refuses: this runs at startup, and an agent that
+    will not start because it cannot classify a desktop is strictly worse
+    than one that starts and says it is not sure (RNF-03, Art. 3).
+    """
+    env = os.environ if environ is None else environ
+    system = sys.platform if platform is None else platform
+
+    if system.startswith("win"):
+        return PresentationEnvironment("guaranteed", "windows", _NATIVE_REASON)
+    if system == "darwin":
+        return PresentationEnvironment("guaranteed", "macos", _NATIVE_REASON)
+
+    session = (env.get("XDG_SESSION_TYPE") or "").strip().lower()
+    if session == "wayland" or (not session and env.get("WAYLAND_DISPLAY")):
+        return PresentationEnvironment("degraded", "wayland", _WAYLAND_REASON)
+    if session == "x11":
+        return PresentationEnvironment("guaranteed", "x11", _X11_REASON)
+    # DISPLAY alone is not evidence of X11: XWayland sets it too, which is
+    # exactly how an agent would conclude it was safe when it is not.
+    return PresentationEnvironment("unknown", "unknown", _UNKNOWN_REASON)
 
 
 class Stoppable(Protocol):
@@ -89,10 +163,13 @@ class AgentRuntime:
 class AgentState:
     """Thread-safe snapshot of connection status and last alert, for the tray menu."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, presentation: PresentationEnvironment | None = None) -> None:
         self._lock = threading.Lock()
         self._ws_connected = False
         self._last_alert: str | None = None
+        #: Decided once at startup and never mutated, so it needs no lock.
+        #: Injectable so the classification can be tested without the session.
+        self.presentation = presentation or detect_presentation_environment()
 
     @property
     def ws_connected(self) -> bool:

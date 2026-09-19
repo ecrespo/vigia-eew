@@ -50,8 +50,12 @@ def test_the_code_declares_no_shared_state_the_table_omits() -> None:
     src = REPO_ROOT / "src" / "vigia_eew"
     holders = set()
     for module in src.rglob("*.py"):
-        text = module.read_text()
-        if "threading.Lock()" in text or "threading.Event()" in text:
-            holders.update(re.findall(r"^class (\w+)", text, re.M))
-    undocumented = {name for name in holders if name not in table and name not in {"Stoppable"}}
+        # Per class, not per module: a frozen value object declared next to a
+        # lock-holding one acquires nothing, and flagging it would train people
+        # to add rows for things that need no row.
+        for block in re.split(r"^class ", module.read_text(), flags=re.M)[1:]:
+            name = re.match(r"(\w+)", block)
+            if name and ("threading.Lock()" in block or "threading.Event()" in block):
+                holders.add(name.group(1))
+    undocumented = {name for name in holders if name not in table}
     assert undocumented == set(), f"synchronised state missing from the table: {undocumented}"

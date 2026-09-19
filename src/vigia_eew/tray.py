@@ -91,6 +91,12 @@ def build_icon(
     def _last_alert_text(_item: MenuItem) -> str:
         return state.last_alert or t("tray_no_alerts_yet", locale_code)
 
+    def _guarantee_text(_item: MenuItem) -> str:
+        # The product promises an alert that cannot be ignored. Where it
+        # cannot keep that promise, saying so is the least it owes the user
+        # (REQ-ALE-003, CA-106.2).
+        return t(f"tray_alert_{state.presentation.guarantee}", locale_code)
+
     def _pause_text(_item: MenuItem) -> str:
         key = "tray_resume_notifications" if paused() else "tray_pause_notifications"
         return t(key, locale_code)
@@ -98,6 +104,7 @@ def build_icon(
     menu = Menu(
         MenuItem(_status_text, action=None, enabled=False),
         MenuItem(_last_alert_text, action=None, enabled=False),
+        MenuItem(_guarantee_text, action=None, enabled=False),
         Menu.SEPARATOR,
         MenuItem(_pause_text, action=lambda icon, item: toggle_pause()),
         MenuItem(t("tray_edit_config", locale_code), action=lambda icon, item: edit_config()),
