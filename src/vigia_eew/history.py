@@ -416,17 +416,40 @@ class HistoryStore:
 
     # --- Reading ---
 
+    def _select(self, statement: str, parameters: dict[str, Any]) -> sqlite3.Cursor:
+        """Runs one of this module's own statements with the caller's values bound.
+
+        The single place a query reaches SQLite, and the reason it is worth
+        having on its own: `statement` is not a string anybody assembled. It is
+        `_COUNT`, or one entry of `_PAGES` -- a table built once at import from
+        `ORDERABLE`, a tuple of column names written in this file. A key that
+        is not in it raises in Python before getting here, which
+        `test_an_order_the_schema_does_not_offer_is_refused` holds to.
+
+        Everything that varies -- dates, magnitudes, distances, verdicts,
+        networks, limit, offset -- arrives through `parameters` as bound
+        values, never interpolated.
+
+        The static analyser sees `execute()` called with a name rather than a
+        literal and cannot tell those two apart, so the suppression is here,
+        on one line, next to the argument for it -- rather than at the call
+        sites, where it would read as a habit.
+        """
+        # ruff: the rule id is one token and does not wrap.
+        # nosemgrep: python.django.security.injection.sql.sql-injection-using-db-cursor-execute.sql-injection-db-cursor-execute  # noqa: E501
+        return self._connection.execute(statement, parameters)
+
     def count(self, query: HistoryQuery | None = None) -> int:
         """How many rows match; a page of fifty still has to say "of nine hundred"."""
         request = query or HistoryQuery()
-        row = self._connection.execute(_COUNT, request.parameters()).fetchone()
+        row = self._select(_COUNT, request.parameters()).fetchone()
         return int(row[0])
 
     def query(self, request: HistoryQuery | None = None) -> list[EventRecord]:
         """The rows that match, ordered and paginated (REQ-HIS-005)."""
         request = request or HistoryQuery()
         statement = request.statement()  # refuses an ordering the schema does not offer
-        return [_from_row(row) for row in self._connection.execute(statement, request.parameters())]
+        return [_from_row(row) for row in self._select(statement, request.parameters())]
 
     def sources(self) -> list[str]:
         """The networks actually present in this history, for the filter to offer.

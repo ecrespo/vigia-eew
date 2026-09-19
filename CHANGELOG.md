@@ -102,6 +102,14 @@ being true.
   build jobs now launches what it just built and requires it to present an alert;
   on Linux it also acknowledges it and requires a clean exit.
 
+### Security
+- **`anyio` moved to 4.15.1** (REQ-DEP-003) — 4.14.1 carried CVE-2026-63374 (critical:
+  IDNA 2003 host-name encoding in `TLSStream` allows potential TLS certificate
+  spoofing), CVE-2026-64847 and CVE-2026-63349. It reaches the tree through `httpx`,
+  which is how the agent talks to three of its four seismic sources, so the TLS one is
+  squarely on the path that matters. Caught by the pre-push audit while cutting this
+  release, which is what that gate is for.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added
