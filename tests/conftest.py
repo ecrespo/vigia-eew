@@ -33,6 +33,39 @@ def _isolate_user_config(monkeypatch, tmp_path):
         lambda: tmp_path / "vigia-eew" / "history.sqlite3",
     )
 
+    from vigia_eew import tiles as tiles_module
+
+    monkeypatch.setattr(
+        tiles_module,
+        "default_cache_dir",
+        lambda: tmp_path / "vigia-eew" / "tiles",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _no_tile_provider(monkeypatch):
+    """The suite never reaches the tile provider.
+
+    Not a convenience: the map is the one part of the product that contacts a
+    third party, and a test run that quietly downloads from OpenStreetMap is a
+    test run sending traffic on somebody's behalf. Caught by finding real
+    tiles in `~/.cache/vigia-eew/` after a run.
+
+    Every test that needs tiles injects a source. Anything that reaches for
+    the real one gets this instead, and `TileClient.tile` turns it into the
+    "map unavailable" state the requirement already demands.
+    """
+    from vigia_eew import tiles as tiles_module
+
+    real_download = tiles_module.TileClient._download
+
+    def guarded(self, ref):
+        if self._fetch is None:
+            raise RuntimeError(f"the suite must not fetch {ref.name}; inject a tile source")
+        return real_download(self, ref)
+
+    monkeypatch.setattr(tiles_module.TileClient, "_download", guarded)
+
 
 # --- Test doubles for the WebSocket transport ---------------------------------
 #

@@ -168,6 +168,15 @@ class HistoryList:
         self.query = _replace(self.query, order_by=column.sort_key, descending=descending)
         self.refresh()
 
+    def records(self) -> list[EventRecord]:
+        """The stored rows behind what is on screen.
+
+        The map draws from these, so that the two views cannot come to show
+        different sets: one query, one list of records, two readings of it
+        (REQ-MAP-004).
+        """
+        return [row.record for row in self.rows]
+
     def label(self, column: Column) -> str:
         return t(column.label_key, self._locale)
 

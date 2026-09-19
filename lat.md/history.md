@@ -187,3 +187,19 @@ throwing away a usable cache.
 
 Both are painted whatever else is or is not there — the attribution because the licence requires
 it wherever a tile is, and the legend because a symbol nobody can read explains nothing.
+
+## One filter, two readings of it
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] owns the wiring so that neither view has
+to know about the other.
+
+The direction is one-way: the list decides the set and the map is handed the records it produced.
+A map still showing symbols the table has filtered away would not be a second opinion — it would
+be the product contradicting itself on one screen (REQ-MAP-004).
+
+It lives in its own module rather than in either view, because the list has to stay free of the
+map. The list is the part that works with nothing but the file, and an import guard keeps it that
+way; putting the wiring inside it would have been the first step to losing that.
+
+Sorting is the exception that proves the direction: order is a property of a table and a map has
+no rows to reorder, so sorting changes the table and leaves the map showing the same earthquakes.

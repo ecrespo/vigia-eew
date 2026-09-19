@@ -331,3 +331,21 @@ def test_smoke_a_real_tile_reaches_the_canvas(tmp_path: Path) -> None:
     assert images, "no tile reached the canvas"
     assert map_view.drawing.available is True
     root.destroy()
+
+
+def test_the_real_window_tests_run_in_ci_and_not_only_here() -> None:
+    """A check only the developer runs is a check that stops being run.
+
+    The widget smokes are what catch the failures that need a real toolkit --
+    a `PhotoImage` bound to the wrong interpreter, a control that never
+    reached the panel, an alert that will not build. CI already installs Xvfb
+    for them; this asserts it also switches them on (REQ-DEV-003).
+    """
+    from pathlib import Path
+
+    workflow = (
+        Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci.yml"
+    ).read_text()
+
+    assert "VIGIA_GUI_TESTS" in workflow
+    assert "xvfb-run" in workflow

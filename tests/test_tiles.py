@@ -274,3 +274,23 @@ def test_an_unwritable_cache_still_serves_the_tile(tmp_path: Path, monkeypatch) 
     )
 
     assert client.tile(TileRef(7, 44, 62)) is not None
+
+
+def test_the_suite_itself_cannot_reach_the_provider() -> None:
+    """The guard in `conftest.py`, asserted rather than assumed.
+
+    A test run that quietly downloads from OpenStreetMap is a test run
+    sending traffic on somebody's behalf -- found by discovering real tiles in
+    the developer's cache directory after a run. Every test that needs tiles
+    injects a source; anything reaching for the real one fails here.
+    """
+    client = TileClient(TileCache())
+
+    with pytest.raises(RuntimeError, match="must not fetch"):
+        client._download(TileRef(7, 40, 60))
+
+
+def test_the_cache_used_by_the_suite_is_not_the_developer_s(tmp_path: Path) -> None:
+    from vigia_eew.tiles import default_cache_dir
+
+    assert "pytest" in str(default_cache_dir()) or str(tmp_path) in str(default_cache_dir())

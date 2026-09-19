@@ -373,7 +373,7 @@ class Wiring:
         """
         import tkinter as tk
 
-        from vigia_eew.notify.history_view import HistoryList, HistoryView
+        from vigia_eew.notify.history_window import HistoryWindow
 
         if self._history_window is not None and self._history_window.winfo_exists():
             self._history_window.lift()
@@ -385,8 +385,13 @@ class Wiring:
             return None
         window = tk.Toplevel(root)
         window.title(t("history_title", self.locale))
-        listing = HistoryList(store, locale_code=self.locale, zone=self.cfg.notification.timezone)
-        HistoryView(window, listing, locale_code=self.locale)
+        HistoryWindow(
+            window,
+            store,
+            locale_code=self.locale,
+            zone=self.cfg.notification.timezone,
+            reference=(self.cfg.reference.lat, self.cfg.reference.lon),
+        )
         window.protocol("WM_DELETE_WINDOW", lambda: self._close_history(store, window))
         self._history_window = window
         return window

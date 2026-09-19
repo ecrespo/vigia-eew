@@ -288,7 +288,13 @@ class HistoryMap:
     def _paint_tiles(self) -> None:
         for tile in self.drawing.tiles:
             try:
-                image = ImageTk.PhotoImage(Image.open(io.BytesIO(tile.data)))
+                # `master=` is not optional here, whatever the signature says.
+                # A `PhotoImage` binds to an interpreter, and without being
+                # told which it takes the default one -- which is the wrong
+                # one the moment a second Tk root exists in the process. The
+                # symptom is `image "pyimage2" doesn't exist` at draw time,
+                # and it was the GUI smoke that produced it.
+                image = ImageTk.PhotoImage(Image.open(io.BytesIO(tile.data)), master=self.canvas)
             except Exception:  # noqa: BLE001 - a corrupt tile is one blank square
                 continue
             # Held here because Tk keeps no reference of its own: without this
