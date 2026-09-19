@@ -337,7 +337,7 @@ No es "todas las fases hechas": es esta lista.
 | 6 | **El alcance de la garantía de alerta está declarado** | F4 | ✅ 2026-09-19 |
 | 7 | **La garantía se cumple bajo Wayland, o D-1 la degradó a recomendación** | F4 | ✅ 2026-09-19 · D-1 la degradó a `[SHOULD]` |
 | 8 | Ningún binario se publica sin haberse ejecutado | F4 | ✅ 2026-09-19 |
-| 9 | **El usuario configura el agente sin editar un archivo, y decide qué red manda** | F5 | ⬜ |
+| 9 | **El usuario configura el agente sin editar un archivo, y decide qué red manda** | F5 | ✅ 2026-09-19 |
 | 10 | **El agente conserva un histórico consultable de lo que evaluó, con el motivo de cada descarte** | F6 + F7 | ⬜ |
 
 **Las condiciones 6 y 7 son las que de verdad separan un 0.6.0 de un 1.0.0.** Las demás son higiene

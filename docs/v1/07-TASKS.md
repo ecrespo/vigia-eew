@@ -349,7 +349,7 @@
 
 ## Fase 5 · Configuración gráfica y prioridad de redes
 
-### [ ] T-135 · Escritor de configuración
+### [x] 2026-09-19 T-135 · Escritor de configuración
 - **Qué**: cargar con huella, validar, comparar huella, escribir por temporal y renombrado
   preservando comentarios, con respaldo. Sin interfaz todavía.
 - **REQ**: REQ-CFG-009, REQ-CFG-010, REQ-CFG-011, REQ-CFG-012 · **CA**: CA-108.5, CA-108.6, CA-108.7, CA-108.8
@@ -357,10 +357,13 @@
 - **Depende de**: **T-110**
 - **Done**: guardar un campo conserva las 46 líneas de comentarios; una interrupción deja el original
   intacto y sin temporales; una edición externa produce conflicto en lugar de sobrescritura.
+- **Desviación**: la plantilla pasa de **46 a 59 líneas de comentarios** al documentar la prioridad
+  por fuente. El criterio de CA-108.5 es la **preservación**, y así se verifica (antes == después);
+  el literal se mantiene para que perder documentación siga siendo un fallo y no una cifra menor.
 - **Nota**: probado sobre archivo temporal real. La atomicidad **es** una operación de sistema de
   archivos; simularla no probaría nada.
 
-### [ ] T-136 · Panel de configuración generado desde el esquema
+### [x] 2026-09-19 T-136 · Panel de configuración generado desde el esquema
 - **Qué**: panel con secciones plegables cubriendo los 39 campos, validación en vivo y restaurar
   valores por defecto.
 - **REQ**: REQ-GUI-001, REQ-GUI-002, REQ-GUI-003, REQ-GUI-004 · **CA**: CA-108.1..108.4, CA-108.9
@@ -368,15 +371,20 @@
 - **Depende de**: T-135
 - **Done**: la prueba que recorre el esquema pasa, y **falla** si se añade un campo al modelo sin
   control en el panel.
+- **Desviación**: el panel cubre **43 campos**, no 39. Los cuatro nuevos son la prioridad por
+  fuente de T-139, y aparecieron en el panel **sin tocarlo** — que es exactamente lo que ADR-020
+  prometía. La prueba recorre el esquema, así que la cifra no está escrita en ningún sitio que
+  pueda quedarse viejo. Verificado en el otro sentido: quitando `priority` del constructor del
+  panel, el smoke nombra las cuatro rutas que faltan.
 
-### [ ] T-137 · Integrar el panel en la bandeja
+### [x] 2026-09-19 T-137 · Integrar el panel en la bandeja
 - **Qué**: la entrada de menú abre el panel, conservando la que abre el archivo.
 - **REQ**: REQ-GUI-005 · **CA**: CA-108.10
 - **Archivos**: `src/vigia_eew/tray.py:52`
 - **Depende de**: T-136
 - **Done**: el menú ofrece las dos entradas y ambas funcionan.
 
-### [ ] T-139 · Prioridad en la especificación de fuente **[P]**
+### [x] 2026-09-19 T-139 · Prioridad en la especificación de fuente **[P]**
 - **Qué**: campo de prioridad en `SourceSpec` y en el esquema de configuración, con valor por defecto
   para archivos que no lo traen.
 - **REQ**: REQ-ING-011 · **CA**: CA-110.5, CA-110.6
@@ -384,7 +392,7 @@
 - **Depende de**: T-121
 - **Done**: un `config.toml` de la v0.6.0 carga sin error y sus fuentes quedan ordenadas al final.
 
-### [ ] T-140 · El deduplicador resuelve por prioridad
+### [x] 2026-09-19 T-140 · El deduplicador resuelve por prioridad
 - **Qué**: al unir dos llegadas, prevalecen los datos de la fuente de mayor prioridad; la distancia
   se recalcula con la ubicación que prevalece.
 - **REQ**: REQ-PIP-010 · **CA**: CA-110.1, 110.2, 110.3, 110.4, 110.7
@@ -395,7 +403,7 @@
 - **Nota**: la prioridad **no decide si se alerta** — eso sigue siendo del filtro. CA-110.4 es el
   criterio que lo protege.
 
-### [ ] T-141 · Lista de redes en el panel
+### [x] 2026-09-19 T-141 · Lista de redes en el panel
 - **Qué**: las cuatro fuentes como lista con casilla de habilitación y reordenación.
 - **REQ**: REQ-GUI-008 · **CA**: CA-110.8
 - **Archivos**: `src/vigia_eew/notify/config_panel.py`
@@ -565,6 +573,7 @@ T-138 es el corte del release.
 | 2026-09-19 | **F2 · T-115 a T-120** | ✅ 6/6 | Pisos y techos en los 9 rangos, `pip` ≥ 26.2, gate de resolución mínima, carrera de apagado cerrada y gate de duplicación/complejidad. **Gate completo: las 8 dimensiones del Art. 8.** 402 passed, sin `xfail` (T-119 lo retiró). Dos desviaciones registradas: T-117 tuvo que subir los pisos además de poner techos (tras T-111 siete no resolvían), y T-119 necesitó un segundo commit — `Supervisor.run()` descartaba una parada previa. Verificado rompiendo cada gate a propósito |
 | 2026-09-19 | **F3 · T-121 a T-129** | ✅ 9/9 | Registro declarativo de fuentes (`ingest/registry.py`, cada fuente dueña de su traducción), `wiring.py` separando composición de orquestación (**`app.py`: fan-out 22→8, 450→272 líneas**), correlación punta a punta con enlace en la deduplicación, contrato de hilos, lote P3 (**duplicación en `src/`: 0 clones, 0 %**), complejidad ≤ 12 y backlinks verificados. 432 passed, gate completo en verde. Dos hallazgos: `lat check` no valida enlaces dentro de `.py` (cubierto por `tests/test_backlinks.py`), y 17 pruebas de composición se movieron con la composición |
 | 2026-09-19 | **F4 · T-130, T-131, T-133, T-134** | ✅ 4/5 · T-132 fuera del corte | Alcance de la garantía declarado en README + bandeja + log; spike de Wayland con veredicto medido en GNOME Shell 50.1; smoke del binario en los 3 jobs de empaquetado; base de Linux fijada a `ubuntu-22.04`. **D-1 resuelta: `[SHOULD]`**, T-132 fuera del corte. Evidencia decisiva del spike: Mutter no anuncia `zwlr_layer_shell_v1` → ningún cliente puede cumplir la garantía en GNOME, con ningún toolkit. Desviación: ENTER pasa a acusar la alerta Tk (paridad con la TUI, CA-106.7, y es lo que permite conducir el smoke sin puntero) |
+| 2026-09-19 | **F5 · T-135 a T-137, T-139 a T-141** | ✅ 6/6 | Escritor de configuración con `tomlkit` (ADR-019): preserva los comentarios, escribe por temporal y renombrado con respaldo previo, detecta la edición externa por huella y valida **antes** de tocar el disco. Panel **generado desde el esquema** (ADR-020), 43 campos en 10 secciones, con la validación de sección para la regla entre umbrales. Prioridad por fuente y deduplicador que **conserva el mejor, no el primero**. 539 passed con las pruebas de GUI real incluidas (Xvfb), gate completo en verde. Dos desviaciones registradas en T-135 y T-136, ambas por cifras de la especificación que se movieron al documentar los campos nuevos. **Hallazgo aparte:** `lat.md/` estaba en `.gitignore`, así que `tests/test_backlinks.py` y `lat check` leían archivos que solo existían en la máquina que los escribió — verificado clonando; corregido y con guarda propia |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
