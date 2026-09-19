@@ -166,6 +166,99 @@ ON CONFLICT(source, source_event_id) DO UPDATE SET
 """
 
 
+#: Columns a result set may be ordered by. The ordering is the one part of a
+#: query that cannot be a bound value, so it is a lookup into statements built
+#: from these names and nothing else -- never a string assembled from input.
+ORDERABLE = ("occurred_at", "recorded_at", "magnitude", "distance_km", "verdict", "source")
+
+#: Separator around each source name in the membership test below. Present on
+#: both sides of every name so that "MSC" cannot match "EMSC".
+_SEP = "|"
+
+_SELECT = """
+SELECT * FROM events
+WHERE (:since IS NULL OR occurred_at >= :since)
+  AND (:until IS NULL OR occurred_at <= :until)
+  AND (:min_magnitude IS NULL OR magnitude >= :min_magnitude)
+  AND (:max_distance_km IS NULL OR distance_km <= :max_distance_km)
+  AND (:verdict IS NULL OR verdict = :verdict)
+  AND (:sources IS NULL OR instr(:sources, '|' || source || '|') > 0)
+"""
+
+_COUNT = _SELECT.replace("SELECT * FROM events", "SELECT COUNT(*) FROM events")
+
+#: Every statement the query can issue, built once from `ORDERABLE`. A whole
+#: statement per ordering rather than a clause appended at call time: it keeps
+#: the set of possible queries finite, visible and impossible to widen from
+#: outside.
+_PAGES: dict[tuple[str, bool], str] = {
+    (column, descending): (
+        _SELECT
+        + " ORDER BY "
+        + column
+        + (" DESC" if descending else " ASC")
+        + ", id DESC LIMIT :limit OFFSET :offset"
+    )
+    for column in ORDERABLE
+    for descending in (True, False)
+}
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryQuery:
+    """What to look for (REQ-HIS-005, CA-111.8).
+
+    Every filter is optional and they combine with AND, which is what the
+    criterion asks for: a query by magnitude *and* date range returns the rows
+    that satisfy both, not either.
+
+    The same object drives the list and the map, so that filtering cannot mean
+    two different things in two views of one history (REQ-MAP-004).
+    """
+
+    since: datetime | None = None
+    until: datetime | None = None
+    min_magnitude: float | None = None
+    max_distance_km: float | None = None
+    verdict: str | None = None
+    sources: tuple[str, ...] = ()
+    order_by: str = "occurred_at"
+    descending: bool = True
+    limit: int = 500
+    offset: int = 0
+
+    def parameters(self) -> dict[str, Any]:
+        """The query as bound values -- nothing here is ever interpolated."""
+        return {
+            "since": _iso(self.since),
+            "until": _iso(self.until),
+            "min_magnitude": self.min_magnitude,
+            "max_distance_km": self.max_distance_km,
+            "verdict": self.verdict,
+            # A delimited string rather than an `IN` list, because an `IN` list
+            # is the one filter whose length would force the statement to be
+            # built at call time. The delimiters are what keep it a membership
+            # test: "MSC" does not match "|EMSC|".
+            "sources": (_SEP + _SEP.join(self.sources) + _SEP if self.sources else None),
+            "limit": self.limit,
+            "offset": self.offset,
+        }
+
+    def statement(self) -> str:
+        """The prepared statement for this ordering, or a refusal naming it."""
+        try:
+            return _PAGES[(self.order_by, self.descending)]
+        except KeyError:
+            raise ValueError(
+                f"cannot order the history by {self.order_by!r}; "
+                f"choose one of {', '.join(ORDERABLE)}"
+            ) from None
+
+
+def _iso(moment: datetime | None) -> str | None:
+    return None if moment is None else moment.astimezone(UTC).isoformat()
+
+
 def _initial_schema(db: sqlite3.Connection) -> None:
     db.execute(_CREATE)
     for statement in _INDEXES:
@@ -323,16 +416,31 @@ class HistoryStore:
 
     # --- Reading ---
 
-    def count(self) -> int:
-        return int(self._connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+    def count(self, query: HistoryQuery | None = None) -> int:
+        """How many rows match; a page of fifty still has to say "of nine hundred"."""
+        request = query or HistoryQuery()
+        row = self._connection.execute(_COUNT, request.parameters()).fetchone()
+        return int(row[0])
+
+    def query(self, request: HistoryQuery | None = None) -> list[EventRecord]:
+        """The rows that match, ordered and paginated (REQ-HIS-005)."""
+        request = request or HistoryQuery()
+        statement = request.statement()  # refuses an ordering the schema does not offer
+        return [_from_row(row) for row in self._connection.execute(statement, request.parameters())]
+
+    def sources(self) -> list[str]:
+        """The networks actually present in this history, for the filter to offer.
+
+        What is there, not the four the product hopes for: a history carried
+        over from a configuration with one network disabled should not offer a
+        filter that can only ever return nothing.
+        """
+        cursor = self._connection.execute("SELECT DISTINCT source FROM events ORDER BY source")
+        return [row[0] for row in cursor]
 
     def rows(self, *, limit: int = 1000) -> list[EventRecord]:
-        """The most recent arrivals, newest last. Filtering by the criteria that
-        matter is REQ-HIS-005, and it belongs to the view that will ask for it."""
-        cursor = self._connection.execute(
-            "SELECT * FROM events ORDER BY occurred_at, id LIMIT ?", (limit,)
-        )
-        return [_from_row(row) for row in cursor]
+        """Everything, oldest first -- the whole file in the order it happened."""
+        return self.query(HistoryQuery(descending=False, limit=limit))
 
     # --- Retention (REQ-HIS-004) ---
 

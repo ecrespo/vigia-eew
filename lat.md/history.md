@@ -74,3 +74,25 @@ No sync, no remote backup, no telemetry — amendment E-06 and REQ-HIS-006.
 
 There is no client in this module to point anywhere, and a test fails if the module so much as
 mentions a network library. It is a file on one computer, and that is the whole design.
+
+## The query is a finite set of statements, not a string that gets built
+
+[[src/vigia_eew/history.py#HistoryQuery]] carries every filter as a bound value, and the ordering
+picks one of a table of whole statements built from a list of column names.
+
+The filters are static SQL — `(:min_magnitude IS NULL OR magnitude >= :min_magnitude)` — so
+combining them never assembles anything. They combine with AND, which is what CA-111.8 asks for:
+by magnitude *and* date range returns the rows satisfying both, not either. Verified by swapping
+one AND for an OR and watching five tests fail.
+
+The ordering is the one part that cannot be a bound value, so it is a lookup keyed by column and
+direction. An ordering nobody declared fails in Python, naming it, instead of reaching SQLite —
+and the set of queries the store can possibly issue stays finite and visible.
+
+The source filter is a delimited string rather than an `IN` list, because an `IN` list is the one
+filter whose length would force the statement to be built at call time. The delimiters are what
+keep it a membership test: `MSC` does not match `|EMSC|`.
+
+One query object drives the list and the map, so that filtering cannot come to mean two different
+things in two views of one history.
+\n

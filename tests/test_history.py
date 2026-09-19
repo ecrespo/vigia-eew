@@ -17,6 +17,7 @@ import pytest
 from vigia_eew.history import (
     SCHEMA_VERSION,
     EventRecord,
+    HistoryQuery,
     HistoryStore,
     HistoryTooNew,
 )
@@ -337,3 +338,164 @@ def test_the_store_opens_nothing_but_a_local_file(tmp_path: Path) -> None:
     source = Path(history_module.__file__).read_text(encoding="utf-8")
     for forbidden in ("http", "socket", "requests", "httpx", "urllib"):
         assert forbidden not in source, f"the history store mentions {forbidden}"
+
+
+# --- CA-111.8 · Querying by the criteria that matter (T-145) ----------------------
+
+
+def _populate(store: HistoryStore) -> None:
+    """A history with spread across every axis the query offers."""
+    store.record(
+        _record(
+            source="EMSC",
+            source_event_id="emsc-old-big",
+            occurred_at=_WHEN - timedelta(days=10),
+            magnitude=6.1,
+            distance_km=40.0,
+            verdict="alerted",
+        )
+    )
+    store.record(
+        _record(
+            source="USGS",
+            source_event_id="usgs-recent-small",
+            occurred_at=_WHEN - timedelta(hours=2),
+            magnitude=2.7,
+            distance_km=90.0,
+            verdict="discarded",
+            reason="magnitude",
+            severity=None,
+        )
+    )
+    store.record(
+        _record(
+            source="GEOFON",
+            source_event_id="gfz-recent-big",
+            occurred_at=_WHEN - timedelta(hours=1),
+            magnitude=5.4,
+            distance_km=250.0,
+            verdict="alerted",
+        )
+    )
+    store.record(
+        _record(
+            source="FUNVISIS",
+            source_event_id="fun-recent-mid",
+            occurred_at=_WHEN - timedelta(minutes=30),
+            magnitude=4.2,
+            distance_km=15.0,
+            verdict="discarded",
+            reason="radius",
+            severity=None,
+        )
+    )
+
+
+def test_a_query_by_magnitude_and_dates_returns_exactly_both(store: HistoryStore) -> None:
+    """CA-111.8, word for word: *both* criteria, not either."""
+    _populate(store)
+
+    found = store.query(
+        HistoryQuery(since=_WHEN - timedelta(days=1), min_magnitude=4.0),
+    )
+
+    assert {row.source_event_id for row in found} == {"gfz-recent-big", "fun-recent-mid"}
+
+
+def test_an_empty_query_returns_everything(store: HistoryStore) -> None:
+    _populate(store)
+
+    assert len(store.query(HistoryQuery())) == 4
+
+
+def test_the_upper_bound_of_the_range_is_inclusive(store: HistoryStore) -> None:
+    _populate(store)
+
+    found = store.query(HistoryQuery(until=_WHEN - timedelta(days=10)))
+
+    assert [row.source_event_id for row in found] == ["emsc-old-big"]
+
+
+def test_a_query_by_distance_keeps_what_is_near(store: HistoryStore) -> None:
+    _populate(store)
+
+    found = store.query(HistoryQuery(max_distance_km=50.0))
+
+    assert {row.source_event_id for row in found} == {"emsc-old-big", "fun-recent-mid"}
+
+
+def test_a_query_by_verdict_separates_the_two_groups(store: HistoryStore) -> None:
+    _populate(store)
+
+    assert len(store.query(HistoryQuery(verdict="alerted"))) == 2
+    assert len(store.query(HistoryQuery(verdict="discarded"))) == 2
+
+
+def test_a_query_by_network_takes_several(store: HistoryStore) -> None:
+    _populate(store)
+
+    found = store.query(HistoryQuery(sources=("EMSC", "GEOFON")))
+
+    assert {row.source for row in found} == {"EMSC", "GEOFON"}
+
+
+def test_a_network_whose_name_contains_another_is_not_matched_by_accident(
+    store: HistoryStore,
+) -> None:
+    """The source filter is a membership test, not a substring search."""
+    store.record(_record(source="EMSC", source_event_id="e-1"))
+
+    assert store.query(HistoryQuery(sources=("MSC",))) == []
+
+
+def test_results_can_be_ordered_by_any_of_the_criteria(store: HistoryStore) -> None:
+    """CA-111.8's second half: ordered by any of those fields."""
+    _populate(store)
+
+    by_magnitude = store.query(HistoryQuery(order_by="magnitude", descending=True))
+    assert [row.magnitude for row in by_magnitude] == [6.1, 5.4, 4.2, 2.7]
+
+    by_distance = store.query(HistoryQuery(order_by="distance_km", descending=False))
+    assert [row.distance_km for row in by_distance] == [15.0, 40.0, 90.0, 250.0]
+
+
+def test_the_default_order_is_the_most_recent_first(store: HistoryStore) -> None:
+    """What somebody opening a history wants to see is what just happened."""
+    _populate(store)
+
+    assert store.query(HistoryQuery())[0].source_event_id == "fun-recent-mid"
+
+
+def test_an_order_the_schema_does_not_offer_is_refused(store: HistoryStore) -> None:
+    """The ordering is the one part of the query that cannot be a bound value.
+
+    So it is a lookup into a table of statements built from constants, and a
+    key that is not in it fails here rather than reaching SQLite.
+    """
+    with pytest.raises(ValueError, match="rowid"):
+        store.query(HistoryQuery(order_by="rowid; DROP TABLE events"))
+
+
+def test_results_are_paginated(store: HistoryStore) -> None:
+    _populate(store)
+
+    first = store.query(HistoryQuery(limit=2))
+    second = store.query(HistoryQuery(limit=2, offset=2))
+
+    assert len(first) == len(second) == 2
+    assert {row.id for row in first}.isdisjoint({row.id for row in second})
+
+
+def test_the_matching_rows_can_be_counted_without_fetching_them(store: HistoryStore) -> None:
+    """A page of fifty out of nine hundred still has to be able to say "of 900"."""
+    _populate(store)
+
+    assert store.count(HistoryQuery(min_magnitude=4.0)) == 3
+    assert len(store.query(HistoryQuery(min_magnitude=4.0, limit=1))) == 1
+
+
+def test_the_networks_present_in_the_history_can_be_listed(store: HistoryStore) -> None:
+    """The filter offers what is actually there, not the four it hopes for."""
+    _populate(store)
+
+    assert store.sources() == ["EMSC", "FUNVISIS", "GEOFON", "USGS"]
