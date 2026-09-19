@@ -51,12 +51,21 @@ jobs:
       # The graph is acyclic today; this is what stops the first cycle.
       - run: uv run lint-imports
 
+  # The suite runs on the declared floor and on the version above it
+  # (REQ-DEP-007). A floor verified on a single interpreter is a floor nobody
+  # has tested moving off, which is how the next bump becomes a surprise.
   test:
-    name: Tests (pytest + coverage)
+    name: Tests (pytest + coverage, py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python-env
+        with:
+          python-version: ${{ matrix.python-version }}
       # The suite imports the GUI modules (tkinter + pystray's X backend), which need a
       # display even though the real-window tests are skipped. Xvfb provides a headless one.
       - run: sudo apt-get update && sudo apt-get install -y xvfb
@@ -76,7 +85,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage
+          name: coverage-py${{ matrix.python-version }}
           path: |
             coverage.xml
             coverage.json
