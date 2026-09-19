@@ -65,3 +65,28 @@ The order matters: the window worth protecting is between "the original is gone"
 is in place", so the copy has to exist before the rename, not after it. One backup and not a
 history — the file is meant to be versioned with Git by anyone who cares, and duplicating that
 inside the product would add retention management to solve a solved problem.
+
+## The panel is generated, not transcribed
+
+[[src/vigia_eew/notify/config_panel.py#describe]] walks the configuration models and the type of
+each field chooses its control; the constraints already on the field do the validating.
+
+Forty-odd controls written by hand is forty-odd chances for a field added to the model never to
+reach the interface, and nobody finds out until a user cannot find the option. Generated, a new
+field appears by itself — and one whose shape the generator does not understand raises by name
+rather than disappearing from the panel. See ADR-020.
+
+The cost is real and declared: a few fields have a closed domain the schema does not express —
+language, log level, timezone — and they carry a control listed in `CHOICES`. The coverage test
+accepts those because they are declared, not because they were forgotten.
+
+### Deciding and displaying are separate on purpose
+
+`PanelModel` holds no widgets. Which controls exist, what a value means, whether it validates and
+what will be written are decided without a display, and therefore tested without one;
+`ConfigPanel` is the widget tree and decides nothing.
+
+Validation runs the section's own model over what the panel holds, so the rule lives in exactly
+one place. A failure that names a field lands on that field. One that names none — the severity
+thresholds, where neither value is wrong on its own — belongs to the section, which is why
+CA-108.4 exists as a criterion separate from CA-108.3.
