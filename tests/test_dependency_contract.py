@@ -166,3 +166,23 @@ def test_compatibility_is_verified_on_two_versions() -> None:
     workflow = CI_WORKFLOW.read_text()
     assert RUNTIME_FLOOR in workflow
     assert "3.14" in workflow
+
+
+def _declared_ranges() -> dict[str, str]:
+    """The runtime dependency ranges, keyed by lowercase package name."""
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    ranges = {}
+    for spec in config["project"]["dependencies"]:
+        name = re.split(r"[<>=!~\[]", spec, maxsplit=1)[0].strip()
+        ranges[name.lower()] = spec[len(name) :].strip()
+    return ranges
+
+
+def test_the_pillow_floor_is_its_security_floor() -> None:
+    """CA-101.3: the floor no longer admits versions with published advisories.
+
+    Pillow>=10.0 admitted 34 known advisories. The lockfile resolved a clean
+    version, but the range is the only thing the published package declares,
+    so it is what anyone installing from PyPI actually gets bounded by.
+    """
+    assert _declared_ranges()["pillow"] == ">=12.3.0,<13"

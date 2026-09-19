@@ -35,7 +35,8 @@ dependencies = [
     "platformdirs>=4.0",       # per-OS state/config paths (RF-06/RF-10)
     "tzdata>=2024.1",          # America/Caracas zone on Win/macOS (RF-18/RNF-12)
     "pystray>=0.19",           # system tray icon (RF-34/ADR-012)
-    "Pillow>=10.0",            # tray icon image, pystray requirement (RF-34)
+    "Pillow>=12.3.0,<13",      # tray icon image, pystray requirement (RF-34). Floor is the
+                               # security floor: >=10.0 admitted 34 published advisories
     "textual>=0.60",           # headless TUI dashboard (RF-36/ADR-013)
 ]
 

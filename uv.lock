@@ -1481,7 +1481,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
-    { name = "pillow", specifier = ">=10.0" },
+    { name = "pillow", specifier = ">=12.3.0,<13" },
     { name = "pip-audit", marker = "extra == 'security'", specifier = ">=2.7" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
