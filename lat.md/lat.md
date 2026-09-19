@@ -1,0 +1,8 @@
+This directory defines the high-level concepts, business logic, and architecture of this project using markdown. It is managed by [lat.md](https://www.npmjs.com/package/lat.md) — a tool that anchors source code to these definitions. Install the `lat` command with `npm i -g lat.md` and run `lat --help`.
+
+- [[architecture]] — why the agent is one process per machine, push-primary with polling backup, and where the "impossible to ignore" guarantee stops (Wayland).
+- [[ingestion]] — the four upstream sources, what gap each one closes, and why their polling strategies deliberately differ.
+- [[pipeline]] — normalize → filter → dedup: the ordering invariant, the block-list country filter, local-day freshness, and heuristic cross-source identity.
+- [[notification]] — the non-dismissable alert contract, one-alert-at-a-time, pause semantics, and the best-effort tray icon.
+- [[state]] — what survives a restart and why, prune-on-register and its known limitation, and one-shot reference-point resolution.
+- [[conventions]] — the invariants that hold everywhere: UTC datetimes, fail-safe degradation, dependency injection, language policy, and the quality gate.

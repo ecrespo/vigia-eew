@@ -14,6 +14,7 @@ that `lat.md/` exists.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,6 +48,28 @@ def _headings(document: Path) -> set[str]:
         for line in document.read_text().splitlines()
         if line.startswith("#")
     }
+
+
+def test_the_intent_layer_ships_with_the_repository() -> None:
+    """The layer the backlinks point at has to travel with them.
+
+    `lat.md/` was gitignored, so every check built on it -- these
+    assertions and `lat check` in CI -- passed on the machine that had the
+    files and had nothing to read anywhere else. Verified by cloning: the
+    resolution test below fails in a fresh clone of the ignored tree.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files", "lat.md"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert "lat.md/lat.md" in tracked, "the intent layer is not versioned"
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", "lat.md/lat.md"], cwd=REPO_ROOT, capture_output=True
+    )
+    assert ignored.returncode != 0, ".gitignore still excludes the intent layer"
 
 
 def test_the_three_decisions_are_linked_from_the_code() -> None:
