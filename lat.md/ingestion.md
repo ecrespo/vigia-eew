@@ -74,3 +74,29 @@ FUNVISIS events are Venezuela-only, so for a non-Venezuelan user they simply fal
 
 No source-aware logic exists in [[src/vigia_eew/pipeline/filter.py#GeoFilter]], and none should be
 added — the radius check already expresses the intent.
+
+## Priority ranks data, never alerts
+
+Each source declares a `priority` in its own section of `config.toml`, and
+[[src/vigia_eew/ingest/registry.py#SourceSpec]] reads it through the same accessor that answers
+`enabled` — one place per source, so the two cannot come to disagree.
+
+Smaller is better and the numbers need not be consecutive, so reordering four networks in the
+panel does not force renumbering all of them. A source that declares none is ranked after the ones
+that do, in registry order, which is what makes a `config.toml` from v0.6.0 mean exactly what it
+used to.
+
+Three things priority deliberately does not do, and each one is a decision rather than an
+omission:
+
+- **It does not decide whether to alert.** That stays with the filter. A lowest-priority network
+  that reports an earthquake nobody else catalogued still alerts on it — which is the entire
+  reason the Venezuelan national network is one of the four.
+- **It does not change the order or the concurrency of the queries.** The supervisor registers
+  tasks in registry order and they run independently; serialising them by priority would delay
+  the alert to gain nothing.
+- **It does not exclude an unranked source.** Unranked means unranked, not off. `enabled` is the
+  flag that decides existence, and it is a separate field for that reason.
+
+What it does decide is [[lat.md/pipeline#Processing pipeline#Deduplication]]: whose magnitude,
+epicentre and depth survive when the same earthquake arrives twice. See ADR-026.

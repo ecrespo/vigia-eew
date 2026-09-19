@@ -30,6 +30,15 @@ def config_file(tmp_path: Path) -> Path:
     return path
 
 
+#: The shipped template's comment lines. CA-108.5 cites 46, measured on
+#: `c3a2c29`; documenting the fields v1.0 added -- network priority, and the
+#: history retention of F6 -- moved the figure, which is the point of writing
+#: them. What the criterion actually demands is that a save preserve them, and
+#: that is asserted by comparing before with after. The literal stays so the
+#: template losing its documentation is a failure rather than a smaller number.
+TEMPLATE_COMMENT_LINES = 59
+
+
 def _comment_lines(path: Path) -> list[str]:
     return [line for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("#")]
 
@@ -40,7 +49,7 @@ def _comment_lines(path: Path) -> list[str]:
 def test_saving_one_field_keeps_every_comment(config_file: Path) -> None:
     """The 46 comment lines are the user's in-line help; a save must not cost them."""
     before = _comment_lines(config_file)
-    assert len(before) == 46, "the shipped template no longer carries its 46 comment lines"
+    assert len(before) == TEMPLATE_COMMENT_LINES, "the shipped template lost documentation"
 
     writer = ConfigWriter(config_file)
     writer.load()
@@ -113,7 +122,7 @@ def test_writing_with_no_file_yet_starts_from_the_template(tmp_path: Path) -> No
     writer.load()
     writer.save({"filter.min_magnitude": 3.5})
 
-    assert len(_comment_lines(path)) == 46
+    assert len(_comment_lines(path)) == TEMPLATE_COMMENT_LINES
     assert load_config(path).filter.min_magnitude == 3.5
 
 

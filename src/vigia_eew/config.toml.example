@@ -35,6 +35,16 @@ country = "auto"
 today_only = true
 
 [sources.emsc]
+# `priority` decides WHOSE DATA PREVAILS when the same earthquake arrives through
+# more than one network: the magnitude, epicentre and depth you are shown come from
+# the highest-priority network that reported it, not from whichever one was fastest.
+# Smaller is better, and the numbers need not be consecutive. A network with no
+# priority declared ranks after the ones that have it and still alerts on its own,
+# so leaving these commented out -- the default -- keeps the behaviour of v0.6.0.
+# Example: to prefer FUNVISIS's revised magnitude over a global network's automatic
+# one for local earthquakes, give FUNVISIS the lowest number. The tray's
+# "Configuration…" entry edits all of this without opening the file.
+# priority = 2
 enabled = true
 url = "wss://www.seismicportal.eu/standing_order/websocket"
 ping_interval_s = 15      # mandatory keepalive (RF-02)
@@ -42,6 +52,7 @@ ping_timeout_s = 20
 backoff_max_s = 60        # cap of the exponential reconnection backoff (RF-03)
 
 [sources.usgs]
+# priority = 3   # see [sources.emsc] above
 enabled = true
 url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
 poll_interval_s = 60      # low-frequency backup (RF-05)
@@ -54,6 +65,7 @@ timeout_s = 15
 # uses). FUNVISIS only reports Venezuelan events, so for users elsewhere they simply
 # fall outside `radius_km` and are ignored. Only earthquakes appearing *after* the
 # agent starts are alerted (the batch already published at startup is not).
+# priority = 1   # see [sources.emsc] above
 enabled = true
 # NOTE: plain HTTP — FUNVISIS offers no valid HTTPS. The data is public; there is no
 # encrypted channel available, so this is polled over http://.
@@ -67,6 +79,7 @@ timeout_s = 15
 # single provider's outage or missed catalog entry, with no API key. Polled every 60 s
 # like the USGS backup; the response is parsed as pipe-delimited text (format=text),
 # not GeoJSON (RF-39).
+# priority = 4   # see [sources.emsc] above
 enabled = true
 url = "https://geofon.gfz.de/fdsnws/event/1/query"
 poll_interval_s = 60

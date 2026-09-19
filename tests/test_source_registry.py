@@ -123,7 +123,7 @@ def test_a_new_source_needs_only_its_own_declaration(tmp_path) -> None:
     spec = SourceSpec(
         source="TESTNET",  # type: ignore[arg-type]
         task_name="testnet",
-        is_enabled=lambda cfg: True,
+        settings_of=lambda cfg: cfg.sources_emsc,
         make_task=lambda ctx: lambda: asyncio.sleep(0),
         to_fields=to_fields,
     )

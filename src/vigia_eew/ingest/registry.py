@@ -29,7 +29,7 @@ from vigia_eew.ingest import RawMessage, rest_funvisis, rest_geofon, rest_usgs, 
 
 if TYPE_CHECKING:
     from vigia_eew.agent_state import AgentState
-    from vigia_eew.config import Settings
+    from vigia_eew.config import Settings, SourceSettings
     from vigia_eew.models import Source
     from vigia_eew.state import StateStore
 
@@ -67,7 +67,9 @@ class SourceSpec:
     Attributes:
         source: the value that appears in `RawMessage.source` and in the event.
         task_name: the name the supervisor reports it under.
-        is_enabled: reads the source's own `enabled` flag out of the settings.
+        settings_of: finds this source's own section of the configuration.
+            One accessor rather than one per question, so that `enabled` and
+            `priority` cannot come to disagree about which section they read.
         make_task: builds the supervised coroutine factory from the context.
         to_fields: translates a raw payload into the internal contract's
             fields -- the anti-corruption layer for this source's format.
@@ -75,9 +77,17 @@ class SourceSpec:
 
     source: Source
     task_name: str
-    is_enabled: Callable[[Settings], bool]
+    settings_of: Callable[[Settings], SourceSettings]
     make_task: Callable[[IngestContext], TaskFactory]
     to_fields: Callable[[RawMessage], dict[str, Any]]
+
+    def is_enabled(self, cfg: Settings) -> bool:
+        """Whether this source runs at all (RF-12)."""
+        return self.settings_of(cfg).enabled
+
+    def priority(self, cfg: Settings) -> int | None:
+        """Declared preference between sources, or None when the file declares none."""
+        return self.settings_of(cfg).priority
 
 
 def _emsc_task(ctx: IngestContext) -> TaskFactory:
@@ -115,28 +125,28 @@ SOURCE_REGISTRY: tuple[SourceSpec, ...] = (
     SourceSpec(
         source="EMSC",
         task_name="ws",
-        is_enabled=lambda cfg: cfg.sources_emsc.enabled,
+        settings_of=lambda cfg: cfg.sources_emsc,
         make_task=_emsc_task,
         to_fields=ws_emsc.to_fields,
     ),
     SourceSpec(
         source="USGS",
         task_name="rest",
-        is_enabled=lambda cfg: cfg.sources_usgs.enabled,
+        settings_of=lambda cfg: cfg.sources_usgs,
         make_task=_usgs_task,
         to_fields=rest_usgs.to_fields,
     ),
     SourceSpec(
         source="FUNVISIS",
         task_name="funvisis",
-        is_enabled=lambda cfg: cfg.sources_funvisis.enabled,
+        settings_of=lambda cfg: cfg.sources_funvisis,
         make_task=_funvisis_task,
         to_fields=rest_funvisis.to_fields,
     ),
     SourceSpec(
         source="GEOFON",
         task_name="geofon",
-        is_enabled=lambda cfg: cfg.sources_geofon.enabled,
+        settings_of=lambda cfg: cfg.sources_geofon,
         make_task=_geofon_task,
         to_fields=rest_geofon.to_fields,
     ),
@@ -166,3 +176,42 @@ def validate_registry(registry: tuple[SourceSpec, ...] = SOURCE_REGISTRY) -> Non
     missing = INGESTED_SOURCES - {spec.source for spec in registry}
     if missing:
         raise UnknownSource(f"source spec missing from the registry: {', '.join(sorted(missing))}")
+
+
+def ordered_sources(
+    cfg: Settings, registry: tuple[SourceSpec, ...] = SOURCE_REGISTRY
+) -> tuple[SourceSpec, ...]:
+    """The sources in the order of preference the configuration declares.
+
+    Ranked sources first, ascending; the rest after them, in the order the
+    registry declares them. That is what makes a `config.toml` from v0.6.0 --
+    which declares no priorities at all -- mean exactly what it used to
+    (CA-110.6).
+
+    This is **not** the order the sources are queried in. Serialising the
+    queries by priority would delay the alert, so the supervisor keeps
+    registering them in registry order and they stay concurrent and
+    independent (ADR-026, CA-110.7).
+    """
+    ranked = sorted(
+        enumerate(registry),
+        key=lambda pair: (
+            pair[1].priority(cfg) is None,
+            pair[1].priority(cfg) or 0,
+            pair[0],
+        ),
+    )
+    return tuple(spec for _index, spec in ranked)
+
+
+def priority_rank(
+    cfg: Settings, registry: tuple[SourceSpec, ...] = SOURCE_REGISTRY
+) -> dict[str, int]:
+    """Each source's position in the preference order; smaller wins.
+
+    Dense on purpose. The deduplicator compares two sources and needs an
+    answer for both, whatever gaps the user left between the numbers they
+    typed -- and a source with no declared priority still has to be
+    comparable to one that has.
+    """
+    return {spec.source: position for position, spec in enumerate(ordered_sources(cfg, registry))}

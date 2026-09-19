@@ -47,26 +47,43 @@ class Filter(BaseModel):
     today_only: bool = True
 
 
-class EMSCSource(BaseModel):
-    """EMSC WebSocket parameters (RF-01, RF-02, RF-03)."""
+class SourceSettings(BaseModel):
+    """What every seismic source declares, whatever protocol it speaks (REQ-ING-011).
+
+    `enabled` decides whether the source runs at all; `priority` decides
+    **whose data prevails** when the same earthquake arrives through more
+    than one of them. The two are deliberately separate questions: a network
+    of the lowest priority still alerts on an earthquake only it catalogued,
+    which is the reason the local network exists (ADR-026).
+
+    `priority` is optional because a `config.toml` written before v1.0
+    declares none. Undeclared means unranked, not excluded -- those sources
+    sort after the ranked ones, in the order the registry declares them.
+    Smaller is better, and the numbers need not be consecutive.
+    """
 
     enabled: bool = True
+    priority: int | None = Field(default=None, ge=1)
+
+
+class EMSCSource(SourceSettings):
+    """EMSC WebSocket parameters (RF-01, RF-02, RF-03)."""
+
     url: str = "wss://www.seismicportal.eu/standing_order/websocket"
     ping_interval_s: int = Field(default=15, gt=0)
     ping_timeout_s: int = Field(default=20, gt=0)
     backoff_max_s: int = Field(default=60, gt=0)
 
 
-class USGSSource(BaseModel):
+class USGSSource(SourceSettings):
     """USGS FDSN backup parameters (RF-05, RF-06)."""
 
-    enabled: bool = True
     url: str = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
 
 
-class FUNVISISSource(BaseModel):
+class FUNVISISSource(SourceSettings):
     """FUNVISIS polling parameters — **Venezuela-only** local coverage (RF-38).
 
     FUNVISIS (the Venezuelan national seismic network) publishes the ~20 most recent
@@ -75,13 +92,12 @@ class FUNVISISSource(BaseModel):
     The endpoint is **plain HTTP** (FUNVISIS offers no valid HTTPS); the data is public.
     """
 
-    enabled: bool = True
     url: str = "http://www.funvisis.gob.ve/maravilla.json"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
 
 
-class GEOFONSource(BaseModel):
+class GEOFONSource(SourceSettings):
     """GEOFON FDSN polling parameters — independent global-network source (RF-39).
 
     GEOFON (operated by the GFZ German Research Centre for Geosciences, Potsdam) exposes a
@@ -91,7 +107,6 @@ class GEOFONSource(BaseModel):
     as **pipe-delimited text** (`format=text`), not GeoJSON (API-SPEC §4).
     """
 
-    enabled: bool = True
     url: str = "https://geofon.gfz.de/fdsnws/event/1/query"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
