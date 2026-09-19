@@ -39,6 +39,16 @@ jobs:
       - uses: ./.github/actions/setup-python-env
       - run: uv run mypy src
 
+  boundaries:
+    name: Import boundaries (import-linter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      # Declared in pyproject.toml [tool.importlinter] (REQ-OBS-005, ADR-003).
+      # The graph is acyclic today; this is what stops the first cycle.
+      - run: uv run lint-imports
+
   test:
     name: Tests (pytest + coverage)
     runs-on: ubuntu-latest

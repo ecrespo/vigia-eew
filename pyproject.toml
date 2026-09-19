@@ -57,6 +57,7 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
     "pre-commit>=3.7",
+    "import-linter>=2.0",
 ]
 # Native packaging (Phase 8, RF-28..RF-30): only needed when building binaries
 # with `packaging/build_*.{sh,ps1}`, not for development or installing from PyPI.
@@ -97,6 +98,65 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = "pystray"
 ignore_missing_imports = true  # no published stubs/py.typed (RF-34)
+
+# --- Fronteras de importación (REQ-OBS-005, ADR-003) ---
+# El grafo a nivel de archivo tiene 0 ciclos hoy. Estos contratos no arreglan un
+# ciclo: impiden el primero. Se verifican con `lint-imports` en el gate.
+
+[tool.importlinter]
+root_package = "vigia_eew"
+
+# Capas, de arriba abajo. Una capa solo puede importar las que tiene debajo, y los
+# módulos separados por "|" están en la misma capa: tampoco pueden importarse entre
+# sí. Un ciclo entre dos capas exige exactamente la importación hacia arriba que
+# este contrato prohíbe (CA-103.5).
+[[tool.importlinter.contracts]]
+name = "Layered architecture"
+type = "layers"
+layers = [
+    "vigia_eew.cli",
+    "vigia_eew.app",
+    "vigia_eew.tui | vigia_eew.tray",
+    "vigia_eew.notify | vigia_eew.autostart",
+    "vigia_eew.pipeline",
+    "vigia_eew.ingest",
+    "vigia_eew.simulation",
+    "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf",
+    "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env",
+]
+
+# Lo que el pipeline decide no puede depender de cómo se presenta. Redundante con
+# las capas, y deliberadamente: CA-103.4 pide que el fallo nombre el contrato, y
+# "prohibido" dice qué importación sobra mucho más directo que un orden de capas.
+[[tool.importlinter.contracts]]
+name = "The pipeline does not know about presentation"
+type = "forbidden"
+source_modules = ["vigia_eew.pipeline"]
+forbidden_modules = ["vigia_eew.notify"]
+
+# Una fuente de datos no sabe qué se hace con lo que entrega. Es lo que permite
+# añadir una fuente sin leer el resto del sistema (REQ-ING-009, F3).
+[[tool.importlinter.contracts]]
+name = "Ingestion knows nothing downstream"
+type = "forbidden"
+source_modules = ["vigia_eew.ingest"]
+forbidden_modules = [
+    "vigia_eew.pipeline",
+    "vigia_eew.notify",
+    "vigia_eew.app",
+    "vigia_eew.cli",
+]
+
+# Los tres adaptadores —entrada, presentación y sistema operativo— no se conocen.
+# Quien toque uno no necesita entender los otros dos.
+[[tool.importlinter.contracts]]
+name = "The adapters are independent of one another"
+type = "independence"
+modules = [
+    "vigia_eew.ingest",
+    "vigia_eew.notify",
+    "vigia_eew.autostart",
+]
 
 [tool.bandit]
 # SAST gate (security.yml). Only the shipped source is scanned (`-r src`); tests are

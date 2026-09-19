@@ -48,6 +48,13 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: import-linter
+        name: import-linter (boundaries)
+        entry: uv run --extra dev --extra security lint-imports
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: bandit
         name: bandit (SAST)
         entry: uv run --extra dev --extra security bandit -r src --severity-level=medium
