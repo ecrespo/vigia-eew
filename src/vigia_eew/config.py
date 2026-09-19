@@ -208,24 +208,40 @@ def seed_config_if_missing(
     return target
 
 
-def _map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
-    """Translates TOML section names to `Settings` fields.
+#: Where each `Settings` field lives in the TOML file. The four sources are
+#: nested as `[sources.emsc]` and friends but flat in `Settings`, to avoid an
+#: intermediate submodel; every other section is named the same in both.
+#: Declared once because two directions now depend on it -- reading
+#: (`map_toml_keys`) and writing (`config_writer`) -- and a mapping that
+#: disagrees with itself would write a key the loader then ignores.
+SECTION_PATHS: dict[str, tuple[str, ...]] = {
+    field: (
+        ("sources", field.removeprefix("sources_")) if field.startswith("sources_") else (field,)
+    )
+    for field in (
+        "reference",
+        "filter",
+        "sources_emsc",
+        "sources_usgs",
+        "sources_funvisis",
+        "sources_geofon",
+        "dedup",
+        "severity",
+        "notification",
+        "logging",
+    )
+}
 
-    In the TOML file the sources are nested as `[sources.emsc]` / `[sources.usgs]`,
-    but in `Settings` they're called `sources_emsc` / `sources_usgs` to avoid an
-    intermediate submodel. This function bridges that gap without losing validation.
-    """
+
+def map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
+    """Translates TOML section names to `Settings` fields (see `SECTION_PATHS`)."""
     result = dict(data)
     sources = result.pop("sources", None)
-    if isinstance(sources, dict):
-        if "emsc" in sources:
-            result["sources_emsc"] = sources["emsc"]
-        if "usgs" in sources:
-            result["sources_usgs"] = sources["usgs"]
-        if "funvisis" in sources:
-            result["sources_funvisis"] = sources["funvisis"]
-        if "geofon" in sources:
-            result["sources_geofon"] = sources["geofon"]
+    if not isinstance(sources, dict):
+        return result
+    for field, path in SECTION_PATHS.items():
+        if len(path) == 2 and path[1] in sources:
+            result[field] = sources[path[1]]
     return result
 
 
@@ -270,7 +286,7 @@ def load_config(path: Path | str | None = None) -> Settings:
 
     with open(effective_path, "rb") as fh:
         data = tomllib.load(fh)
-    return Settings(**_map_toml_keys(data))
+    return Settings(**map_toml_keys(data))
 
 
 def has_manual_reference(path: Path | str | None = None) -> bool:

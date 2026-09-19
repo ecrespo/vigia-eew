@@ -4,5 +4,6 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[ingestion]] — the four upstream sources, what gap each one closes, and why their polling strategies deliberately differ.
 - [[pipeline]] — normalize → filter → dedup: the ordering invariant, the block-list country filter, local-day freshness, and heuristic cross-source identity.
 - [[notification]] — the non-dismissable alert contract, one-alert-at-a-time, pause semantics, and the best-effort tray icon.
+- [[configuration]] — why the file stayed read-only for six versions, what the writer refuses to do, and why only changed fields are written.
 - [[state]] — what survives a restart and why, prune-on-register and its known limitation, and one-shot reference-point resolution.
 - [[conventions]] — the invariants that hold everywhere: UTC datetimes, fail-safe degradation, dependency injection, language policy, and the quality gate.

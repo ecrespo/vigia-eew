@@ -57,6 +57,9 @@ dependencies = [
     "Pillow>=12.3.0,<13",         # tray icon image, pystray requirement (RF-34). Floor
                                   # is the security floor: >=10.0 admitted 34 advisories
     "textual>=8.2,<9",            # headless TUI dashboard (RF-36/ADR-013)
+    "tomlkit>=0.13.3,<0.14",      # config writing that preserves the file's 46 comment
+                                  # lines (REQ-CFG-009/ADR-019). `tomllib` stays the
+                                  # reader -- this is imported only on the write path
 ]
 
 [project.urls]
@@ -147,7 +150,7 @@ layers = [
     "vigia_eew.pipeline",
     "vigia_eew.ingest",
     "vigia_eew.simulation",
-    "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf",
+    "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf | vigia_eew.config_writer",
     "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env",
 ]
 

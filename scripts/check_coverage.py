@@ -8,9 +8,11 @@ the total stays up while the code that decides whether to wake someone at
 The thresholds are not a ranking of how much anyone cares about a module.
 They follow what a gap in each one costs:
 
-- **pipeline, state** -- decide whether an earthquake is alerted at all, and
-  remember what was already alerted. A gap here is a missed alert or a
-  duplicate one, and neither is visible until it happens for real.
+- **pipeline, state, config_writer** -- decide whether an earthquake is
+  alerted at all, remember what was already alerted, and write the file that
+  says where the user lives. A gap in the first two is a missed alert or a
+  duplicate one; a gap in the third is a `config.toml` the agent cannot start
+  from. None of the three is visible until it happens for real.
 - **ingest** -- adapters over four external formats. A gap costs one source
   while three others still feed the pipeline (RNF-04).
 - **notify, autostart, tray, tui** -- bind to a toolkit, an OS service
@@ -32,7 +34,7 @@ from pathlib import Path
 
 #: (path prefixes, minimum percent covered -- lines and branches together).
 THRESHOLDS: tuple[tuple[tuple[str, ...], float], ...] = (
-    (("vigia_eew/pipeline/", "vigia_eew/state.py"), 85.0),
+    (("vigia_eew/pipeline/", "vigia_eew/state.py", "vigia_eew/config_writer.py"), 85.0),
     (("vigia_eew/ingest/",), 70.0),
     (
         (
