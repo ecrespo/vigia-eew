@@ -239,12 +239,17 @@ def is_duplicate(ev, recent, alerted_ids):
 - **Consequences**: a single, well-bounded integration point; coordinated shutdown of both loops.
 
 ### ADR-007 — Config in `config.toml` (pydantic) + `uv`/hatchling tooling
+- **Status**: **Amended by ADR-019** (2026-09-19, constitutional amendment E-02). The read path,
+  the TOML file as the source of truth and the absence of a database all still hold; the
+  read-only consequence below does not.
 - **Context**: structured config (nested severities) and modern tooling.
 - **Decision**: **`config.toml`** read with `tomllib` (stdlib 3.11+) and validated by
   **pydantic** (RF-24); the project is managed with **uv**; built with **hatchling** (RF-27).
 - **Alternatives considered and rejected**: `.env` (awkward for nested structures); setuptools
   (more verbose).
-- **Consequences**: `tomllib` is read-only (writing config isn't needed in v1).
+- **Consequences**: `tomllib` is read-only. *That was true when it was written and stopped
+  being true the moment the product offered a panel to edit the file from; the write path is
+  ADR-019. Amending it was the right call -- ignoring it would have been the cheap one.*
 
 ### ADR-008 — No central relay in v1 (one agent per machine)
 - **Context**: avoiding a single point of failure (RNF-02); simplicity for v1.
@@ -263,6 +268,11 @@ def is_duplicate(ev, recent, alerted_ids):
 - **Consequences**: minimal dependencies, idiomatic with asyncio.
 
 ### ADR-010 — Decoupled presentation frontend via D-Bus + optional GNOME Shell extension
+- **Status**: **Amended 2026-09-19** — accepted, not superseded. The content does not change; the
+  state does. It had been accepted and uncoded since v0.1.0, and v1.0 turns it into work with a
+  phase, tasks and acceptance criteria (F4, HU-106). One real change: declaring the *scope* of the
+  alert guarantee is now an independent capability that lands whether or not the Wayland spike
+  succeeds, so the product stops promising more than it delivers either way.
 - **Context**: the core "impossible to ignore" guarantee (OBJ-1, RF-15/16/19) depends on
   *topmost* + focus stealing + no window decoration. Under **Wayland** (GNOME's default today),
   an X11/XWayland app like **Tkinter** **cannot** reliably force `-topmost`, `focus_force`, or
@@ -658,6 +668,41 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   pruned until the next `register()` — harmless (no unbounded growth risk in that scenario, since
   nothing is being added either) but worth noting for anyone tempted to rely on `state.json` being
   tightly pruned at all times rather than "pruned whenever it grows."
+
+### ADR-019 — `tomlkit` for the config write path, `tomllib` stays the reader
+- **Status**: Accepted 2026-09-19. Amends ADR-007. Enables REQ-CFG-009..012 (F5).
+- **Context**: the configuration panel (RF/REQ-GUI-001..005) saves changes into a file carrying
+  **46 lines of comments** that are the user's inline help, and that the user also edits by hand.
+- **Decision**: **`tomlkit`** on the write path only. `tomllib` remains the reader, so the agent's
+  startup path is untouched and `tomlkit` is imported only when something is being saved.
+- **Alternatives considered and rejected**: `tomli-w` (does not preserve comments -- the first
+  save would delete all 46); re-serializing from the pydantic models (same loss, plus section
+  order); a side-car file merged on read (two sources of truth, contradicts REQ-GUI-005);
+  switching format to one with a stdlib writer (loses readability and comments).
+- **Consequences**: one new dependency, the only one the configuration epic introduces. Writing is
+  validate-then-write, by temp file and rename, with a backup: Art. 3 does not allow a half-written
+  config to be the thing the agent reads next boot.
+
+### ADR-025 — SQLite for the history, JSON for the operational state
+- **Status**: Accepted 2026-09-19. Constitutional amendment E-05. Enables REQ-HIS-001..006 (F6).
+- **Context**: the history (B-41) has to answer queries by date range, magnitude, distance and
+  network. The constitution said *"no database"*, on the grounds that *"state is a few KB in
+  memory queried by membership"*.
+- **Decision**: **SQLite for the history**, in its own file beside the state. **The operational
+  state stays in JSON, with no exception.**
+- **Why the original argument does not cover this case**: it is literally true of the operational
+  state and literally false of the history -- tens of thousands of rows a year, queried by range
+  rather than by membership. A JSON file that must be loaded whole to filter by date is the reason
+  databases exist.
+- **Alternatives considered and rejected**: growing JSON/JSONL (whole-file load, no indexes); one
+  file per month (hand-rolled partitioning, still no index on magnitude or distance); a
+  client-server engine (a service to administer inside a single-process desktop product); storing
+  it in the state JSON (mixes the alert hot path with query data, which is exactly what E-05
+  avoids).
+- **Consequences**: **zero new dependencies** -- `sqlite3` ships with Python, which is what makes
+  the amendment defensible. Writing stays off the hot path (REQ-HIS-002: a history failure must
+  not stop an alert). One more file to back up, in the same per-platform directory as the state,
+  and migrations to maintain via `PRAGMA user_version`, applied in a transaction at open.
 
 ## 12. Traceability
 

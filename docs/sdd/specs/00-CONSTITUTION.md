@@ -1,6 +1,6 @@
 # Constitución — Vigía-eew
 
-> Versión 1.0 · Ratificada: 2026-09-06 · Última enmienda: —
+> Versión 1.0 · Ratificada: 2026-09-06 · Última enmienda: 2026-09-19 (E-01..E-06)
 > Ámbito: repositorio `ecrespo/vigia-eew`, todas las versiones a partir de la v2.
 > Base empírica: `docs/reverse-sdd/`, `docs/code-audit/`, `docs/arch-eval/`.
 
@@ -96,29 +96,44 @@ Decidido; no se rediscute por feature.
 
 | Área | Decisión | Mínimo |
 |---|---|---|
-| Lenguaje | Python | **≥ 3.12** (el piso 3.11 existía solo por `tomllib`) |
+| Lenguaje | Python | **≥ 3.13** (enmendado, E-01: 3.12 está en *security-only*) |
 | Concurrencia | asyncio, un proceso por máquina | — |
-| Validación y config | pydantic sobre `tomllib` (config de solo lectura) | pydantic ≥ 2.13 |
+| Validación y config | pydantic sobre `tomllib` para leer; `tomlkit` **para escribir** (enmendado, E-02) | pydantic ≥ 2.13 |
 | HTTP / WebSocket | `httpx` async / `websockets` | httpx ≥ 0.28, websockets ≥ 16 |
-| Persistencia | JSON atómico en disco vía `platformdirs`. **Sin base de datos** | — |
+| Persistencia | JSON atómico vía `platformdirs` para el **estado operativo**; SQLite (stdlib) para el **histórico** (enmendado, E-05) | — |
 | UI escritorio | Tkinter (stdlib) + `pystray` para bandeja | — |
 | UI terminal | Textual | ≥ 8.2 |
 | Empaquetado | hatchling (wheel/PyPI) + PyInstaller (binarios) | — |
 | Gestor de proyecto | `uv`, **con `uv.lock` versionado** | — |
 | Calidad | ruff, mypy `strict`, pytest, bandit, pip-audit, gitleaks, semgrep, trivy, import-linter | — |
-| Contenedores | **Ninguno.** Es un agente de escritorio | — |
+| Contenedores | **Ninguno para el producto** — es un agente de escritorio. Permitidos en desarrollo y build (enmendado, E-03) | — |
 
 **Regla de versiones:** todo rango de dependencia DEBERÁ llevar techo superior (`>=X,<Y`) y el
 lockfile DEBERÁ estar versionado. *Racional: hoy hay saltos mayores entre rango declarado y
 versión resuelta — `websockets` 12→16, `textual` 0.60→8.2 (`docs/code-audit/` §7).*
+**Excepción nombrada (E-04):** `tzdata` queda exento del techo superior. Son datos de la IANA, no
+una API: su versión mayor es el año de publicación, y fijarle techo congelaría las reglas horarias.
+
+**Destinos de red (E-06, regla nueva):** los destinos externos a los que el agente se conecta
+DEBERÁN estar declarados. Introducir uno nuevo exige enmienda. *Racional: hasta la v0.6.0 los
+destinos eran los cuatro catálogos sísmicos; el mapa del histórico añade un proveedor de teselas,
+y esa clase de decisión no debe entrar sin quedar registrada.*
 
 ---
 
 ## Enmiendas
 
+Origen y argumento completo de cada una: [`docs/v1/00-ENMIENDAS-CONSTITUCION.md`](../../v1/00-ENMIENDAS-CONSTITUCION.md).
+
 | Fecha | Artículo | Cambio | Razón | Aprobado por |
 |---|---|---|---|---|
-| — | — | Ratificación inicial v1.0 | — | pendiente |
+| 2026-09-06 | Ratificación | Ratificación inicial v1.0 | — | Mantenedor |
+| 2026-09-19 | Stack · Lenguaje | Piso Python ≥ 3.12 → **≥ 3.13** (E-01) | 3.12 en *security-only*; ver `PAQUETERIA-VERSIONADO.md` §2 | Mantenedor (D-3) |
+| 2026-09-19 | Stack · Config | Config de solo lectura → **escribible** con `tomlkit` (E-02) | Panel gráfico de configuración; enmienda ADR-007 | Mantenedor |
+| 2026-09-19 | Stack · Contenedores | "Ninguno" → **ninguno para el producto**; permitidos en desarrollo y build (E-03) | Devcontainer (B-34) y build con glibc fijada (B-23) | Mantenedor |
+| 2026-09-19 | Regla de versiones | Excepción nombrada: `tzdata` sin techo superior (E-04) | Son datos IANA, no una API | Mantenedor |
+| 2026-09-19 | Stack · Persistencia | "Sin base de datos" → **solo para el estado operativo**; SQLite para el histórico (E-05) | El histórico exige consultas por rango que un JSON no da; SQLite es stdlib | Mantenedor |
+| 2026-09-19 | Stack · Destinos de red *(regla nueva)* | Los destinos externos se declaran; uno nuevo exige enmienda (E-06) | El mapa introduce un proveedor de teselas | Mantenedor |
 
 ---
 
