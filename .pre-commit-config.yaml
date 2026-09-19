@@ -41,6 +41,13 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: ruff-format
+        name: ruff (format)
+        entry: uv run --extra dev --extra security ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: mypy
         name: mypy (strict)
         entry: uv run --extra dev --extra security mypy src

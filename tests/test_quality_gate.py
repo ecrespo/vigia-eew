@@ -70,3 +70,19 @@ def test_fast_batch_leaves_out_the_slow_tests() -> None:
     # ...while the pure logic that the commit gate exists to protect stays in.
     assert "test_dedup.py" in collected
     assert "test_filter.py" in collected
+
+
+def test_format_rule_is_in_the_commit_gate() -> None:
+    """CA-102.3: an unformatted file is rejected before the commit exists.
+
+    In the hook, not only in CI: a rule that only fires after the push has
+    already let the diff it was meant to prevent into the branch.
+    """
+    hooks = (REPO_ROOT / ".pre-commit-config.yaml").read_text()
+    assert "ruff format --check" in hooks
+
+
+def test_format_rule_is_in_continuous_integration() -> None:
+    """CA-102.3: and in CI, so a bypassed hook is still caught."""
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "ruff format --check" in ci
