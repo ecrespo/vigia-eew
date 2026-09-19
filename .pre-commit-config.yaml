@@ -64,11 +64,11 @@ repos:
 
       # Dimension 2 of Article 8, on both axes. lizard counts structure and
       # length; flake8's CCR001 counts what a reader has to hold in their head,
-      # which is the part that actually hurts. Ceiling starts at 16 because
-      # rest_geofon._process_text is exactly 16 -- T-127 brings it to 12.
+      # which is the part that actually hurts. 12 is the audit's target, reached
+      # by T-127 once the GEOFON row parser and the CLI dispatch came apart.
       - id: cognitive-complexity
-        name: cognitive complexity (CCR001, max 16)
-        entry: uv run --with flake8 --with flake8-cognitive-complexity flake8 --select=CCR001 --max-cognitive-complexity=16 src/
+        name: cognitive complexity (CCR001, max 12)
+        entry: uv run --with flake8 --with flake8-cognitive-complexity flake8 --select=CCR001 --max-cognitive-complexity=12 src/
         language: system
         pass_filenames: false
         always_run: true

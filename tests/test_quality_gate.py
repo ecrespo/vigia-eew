@@ -117,14 +117,12 @@ def test_cognitive_complexity_is_measured_by_the_gate() -> None:
 
 
 def test_the_complexity_ceiling_is_the_one_the_audit_declared() -> None:
-    """The threshold starts at 16 because two functions are already there.
+    """12, the audit's target, reached once T-127 split the two offenders.
 
-    16 is `rest_geofon._process_text` exactly, so the gate holds the line
-    without blocking on work that belongs to T-127. Lowering it to 12 is
-    that task's job, and this assertion makes the change deliberate rather
-    than incidental.
+    Pinned so that raising it is a deliberate edit with a reason, rather
+    than the thing somebody does to get a build green.
     """
-    assert "--max-cognitive-complexity=16" in _gate_text()
+    assert "--max-cognitive-complexity=12" in _gate_text()
 
 
 def test_duplication_runs_where_its_cost_belongs() -> None:

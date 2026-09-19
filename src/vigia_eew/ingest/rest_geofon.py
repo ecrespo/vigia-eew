@@ -29,7 +29,7 @@ The HTTP client (`httpx`) and `sleep` are injected so it's testable without netw
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -109,8 +109,25 @@ class GEOFONPoller(FDSNPoller[GEOFONSource]):
             self._log.warning("geofon_body_not_text")
             return None
 
-        columns: list[str] | None = None
         max_time: int | None = None
+        for feature in self._rows(text):
+            if not _is_earthquake(feature):
+                continue
+            await self._output.put(RawMessage(source="GEOFON", action="create", feature=feature))
+            moment = _time_ms(feature)
+            if moment is not None and (max_time is None or moment > max_time):
+                max_time = moment
+        return max_time
+
+    def _rows(self, text: str) -> Iterator[dict[str, str]]:
+        """Yields one `{column: value}` dict per data row (API-SPEC §4.3).
+
+        Split out from the enqueueing loop because they answer different
+        questions: this one is "what does the body say", the other is "what do
+        we do about it". Parsing a corrupt row is also far easier to test
+        without an event loop and a queue standing in the way.
+        """
+        columns: list[str] | None = None
         for line in text.splitlines():
             row = line.strip()
             if not row:
@@ -120,23 +137,17 @@ class GEOFONPoller(FDSNPoller[GEOFONSource]):
                 columns = [c.strip() for c in row.lstrip("#").split("|")]
                 continue
             if columns is None:
-                # A data row before any header: the shape is unknown, skip the batch.
+                # A data row before any header: the shape is unknown, so the
+                # rest of the batch cannot be trusted either.
                 self._log.warning("geofon_no_header")
-                return max_time
+                return
             values = row.split("|")
             if len(values) != len(columns):
                 self._log.warning(
                     "geofon_malformed_row expected=%d got=%d", len(columns), len(values)
                 )
                 continue
-            feature = {col: val.strip() for col, val in zip(columns, values, strict=True)}
-            if not _is_earthquake(feature):
-                continue
-            await self._output.put(RawMessage(source="GEOFON", action="create", feature=feature))
-            moment = _time_ms(feature)
-            if moment is not None and (max_time is None or moment > max_time):
-                max_time = moment
-        return max_time
+            yield {col: val.strip() for col, val in zip(columns, values, strict=True)}
 
 
 def _is_earthquake(feature: dict[str, str]) -> bool:

@@ -65,7 +65,7 @@ jobs:
       - name: Cognitive complexity
         run: >-
           uv run --with flake8 --with flake8-cognitive-complexity
-          flake8 --select=CCR001 --max-cognitive-complexity=16 src/
+          flake8 --select=CCR001 --max-cognitive-complexity=12 src/
       - name: Structural complexity and length
         run: uv run --with lizard lizard src/ --CCN 15 --length 200 -w
       - name: Duplication
