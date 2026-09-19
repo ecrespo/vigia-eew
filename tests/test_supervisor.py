@@ -101,3 +101,28 @@ async def test_clean_stop_cancels_live_tasks():
     await asyncio.wait_for(run_task, timeout=1.0)
 
     assert cancelled.is_set()  # clean shutdown: the live task was cancelled (RNF-04)
+
+
+async def test_a_stop_requested_before_run_is_honoured() -> None:
+    """A stop that arrives before the supervisor starts must not be lost (REQ-OPS-002).
+
+    `Application` publishes its loop and supervisor and only then calls
+    `run()`. A quit landing in that gap reaches `request_stop` through
+    `call_soon_threadsafe`, which the loop runs before the coroutine's first
+    step -- so `run()` used to clear the very event that had just been set
+    and then wait for it forever. Same failure as the race T-119 closed, one
+    step further along: a stop lost to ordering.
+    """
+    sup = Supervisor(handle_signals=False)
+    started = []
+    sup.add("ws", lambda: _never(started))
+
+    sup.request_stop()
+    await asyncio.wait_for(sup.run(), timeout=1.0)
+
+    assert started == [], "a task ran despite the stop preceding the run"
+
+
+async def _never(started: list[str]) -> None:
+    started.append("ws")
+    await asyncio.sleep(3600)
