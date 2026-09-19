@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from vigia_eew import geocode, geoloc, tray
-from vigia_eew.agent_state import AgentState
+from vigia_eew.agent_state import AgentRuntime, AgentState
 from vigia_eew.config import ReferencePoint, Settings, default_config_path
 from vigia_eew.i18n import resolve_locale
 from vigia_eew.ingest import RawMessage
@@ -51,6 +51,13 @@ from vigia_eew.supervisor import Supervisor
 _WindowFactory = Callable[[AlertData, SeverityLevel, Callable[[], None]], Any]
 
 
+#: How long shutdown waits for the worker to publish its runtime. The worker
+#: normally gets there in milliseconds; this is the budget for the case where
+#: the quit lands inside the publication window, not for a worker that hung.
+#: The `join` that follows has its own, longer one.
+_RUNTIME_READY_S = 2.0
+
+
 class Application:
     """Builds and runs the Vigía agent (full mode or `--simulate`)."""
 
@@ -67,8 +74,7 @@ class Application:
         self.cfg = cfg
         self.state = state or StateStore()
         self._log = logger or logging.getLogger("vigia_eew.app")
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._sup: Supervisor | None = None
+        self._runtime = AgentRuntime()
         self._root: Any = None
         self._ctrl: AlertController | None = None
         self._exit_on_drain = False
@@ -287,8 +293,9 @@ class Application:
             threading.Thread(target=sound.play, args=(severity,), daemon=True).start()
 
         def publish_toast(ev: SeismicEvent) -> None:
-            if loop_mode and self._loop is not None:
-                asyncio.run_coroutine_threadsafe(toaster.notify(ev), self._loop)
+            worker_loop = self._runtime.loop if loop_mode else None
+            if worker_loop is not None:
+                asyncio.run_coroutine_threadsafe(toaster.notify(ev), worker_loop)
             else:
                 threading.Thread(
                     target=lambda: asyncio.run(toaster.notify(ev)), daemon=True
@@ -340,7 +347,6 @@ class Application:
             on_update=ctrl.enqueue,
         )
         sup = self._build_supervisor(raw_queue, processor)
-        self._sup = sup
         tui_app.bind_supervisor(sup)
         return ctrl
 
@@ -407,7 +413,6 @@ class Application:
     def _run_loop(self, bridge: AsyncioTkBridge) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        self._loop = loop
         raw_queue: asyncio.Queue[RawMessage] = asyncio.Queue()
         processor = Processor(
             raw_queue,
@@ -418,7 +423,9 @@ class Application:
             on_update=bridge.publish,
         )
         sup = self._build_supervisor(raw_queue, processor)
-        self._sup = sup
+        # Both at once: the gap between publishing the loop and publishing the
+        # supervisor was the race itself (ADR-002).
+        self.publish_runtime(loop, sup)
         try:
             loop.run_until_complete(sup.run())
         except Exception as exc:  # noqa: BLE001 - log any loop failure
@@ -426,12 +433,23 @@ class Application:
         finally:
             loop.close()
 
-    def _stop(self, thread: threading.Thread) -> None:
+    def publish_runtime(self, loop: asyncio.AbstractEventLoop, sup: Supervisor) -> None:
+        """Hands the worker's loop and supervisor to the threads that read them."""
+        self._runtime.publish(loop, sup)
+
+    def _stop(self, thread: threading.Thread, *, runtime_timeout: float = _RUNTIME_READY_S) -> None:
         """Coordinated shutdown: stops the tray icon, the supervisor, and the asyncio thread."""
         if self._tray_icon is not None:
             self._tray_icon.stop()
-        if self._loop is not None and self._sup is not None:
-            self._loop.call_soon_threadsafe(self._sup.request_stop)
+        runtime = self._runtime.await_ready(runtime_timeout)
+        if runtime is None:
+            # The worker never published: it died before assembling the
+            # pipeline, or the quit beat it to the first statement. Nothing to
+            # cancel, and saying so beats a silent five-second join.
+            self._log.warning("stop_before_runtime_ready timeout=%.1fs", runtime_timeout)
+        else:
+            loop, sup = runtime
+            loop.call_soon_threadsafe(sup.request_stop)
         thread.join(timeout=5.0)
         if self._root is not None:
             try:
