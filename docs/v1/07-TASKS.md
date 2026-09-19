@@ -302,7 +302,7 @@
 
 ## Fase 4 · La promesa del producto
 
-### [ ] T-130 · Declarar el alcance de la garantía de alerta
+### [x] 2026-09-19 T-130 · Declarar el alcance de la garantía de alerta
 - **Qué**: matriz de entornos —dónde la presentación por encima de todo está garantizada y dónde
   no— en la documentación **y en el estado del agente**, con detección de entorno degradable.
 - **REQ**: REQ-ALE-003 · **CA**: CA-106.1, CA-106.2, CA-106.3
@@ -313,7 +313,7 @@
 - **Nota**: **es independiente del resultado del spike.** Si T-131 concluye que no es viable, esta
   tarea sigue siendo obligatoria — es lo único que impide que el producto siga prometiendo de más.
 
-### [ ] T-131 · Spike de presentación bajo Wayland
+### [x] 2026-09-19 T-131 · Spike de presentación bajo Wayland
 - **Qué**: verificar experimentalmente si la presentación garantizada es alcanzable por el camino de
   ADR-010, con un veredicto escrito: viable, viable con condiciones, o no viable.
 - **REQ**: prepara REQ-ALE-004 · **CA**: —
@@ -321,15 +321,15 @@
 - **Done**: documento de veredicto con la evidencia que lo sostiene.
 - **Nota**: **tiene derecho a decir que no.** Un spike que solo puede concluir que sí no es un spike.
 
-### [ ] T-132 · Presentación bajo Wayland `[!]`
+### [~] T-132 · Presentación bajo Wayland — **fuera del corte de la v1.0.0**
 - **Qué**: el frontend de presentación con caída automática al camino existente.
 - **REQ**: REQ-ALE-004 · **CA**: CA-106.4, CA-106.5, CA-106.6, CA-106.7
 - **Depende de**: T-131 con veredicto favorable, y **D-1**
 - **Done**: la alerta se presenta por encima de las demás ventanas en Wayland; el fallo del servicio
   cae al camino existente sin perder el evento.
-- **Estado**: **bloqueada** hasta que existan D-1 y el veredicto de T-131.
+- **Estado**: **fuera del corte** desde el 2026-09-19. El veredicto de T-131 existe ([10-SPIKE-WAYLAND](10-SPIKE-WAYLAND.md): *viable con condiciones*) y **D-1 resolvió `[SHOULD]`**. No se implementa en la v1.0.0. El hallazgo que decidió: GNOME no implementa `zwlr_layer_shell_v1`, así que no hay vía de cliente y la única es una extensión de GNOME Shell — que aun implementada dejaría la promesa «funciona en Wayland» falsa en KDE, sway y el resto. Queda como mejora posterior, sin atar el release.
 
-### [ ] T-133 · Smoke del binario producido
+### [x] 2026-09-19 T-133 · Smoke del binario producido
 - **Qué**: el pipeline ejecuta cada binario en modo simulación y comprueba que presenta y acusa una
   alerta antes de publicar.
 - **REQ**: REQ-OPS-008 · **CA**: CA-107.3, CA-107.4
@@ -337,7 +337,7 @@
 - **Depende de**: T-108
 - **Done**: un binario al que le falta un recurso detiene la publicación.
 
-### [ ] T-134 · Construcción de Linux sobre base fijada **[P]**
+### [x] 2026-09-19 T-134 · Construcción de Linux sobre base fijada **[P]**
 - **Qué**: declarar la imagen base con versión para el binario de Linux.
 - **REQ**: REQ-OPS-009 · **CA**: CA-107.5, CA-107.6
 - **Archivos**: `.github/workflows/build.yml`
@@ -564,6 +564,7 @@ T-138 es el corte del release.
 | 2026-09-19 | **F1 · T-111 a T-114** | ✅ 4/4 | Piso a Python 3.13 en los 5 sitios (E-01), matriz 3.13+3.14 en CI, devcontainer y `CONTRIBUTING.md`. Re-bloqueo limpio: el lockfile pierde 355 líneas de marcadores de 3.11/3.12. **Suite verificada en las dos versiones de verdad, no solo en configuración**: 389 passed en 3.13 y en 3.14. Las 3 pruebas de GUI real pasan bajo Xvfb. No verificado: la imagen del devcontainer no se construyó (Docker no corre en la suite) — falta hacerlo una vez en máquina limpia antes del release |
 | 2026-09-19 | **F2 · T-115 a T-120** | ✅ 6/6 | Pisos y techos en los 9 rangos, `pip` ≥ 26.2, gate de resolución mínima, carrera de apagado cerrada y gate de duplicación/complejidad. **Gate completo: las 8 dimensiones del Art. 8.** 402 passed, sin `xfail` (T-119 lo retiró). Dos desviaciones registradas: T-117 tuvo que subir los pisos además de poner techos (tras T-111 siete no resolvían), y T-119 necesitó un segundo commit — `Supervisor.run()` descartaba una parada previa. Verificado rompiendo cada gate a propósito |
 | 2026-09-19 | **F3 · T-121 a T-129** | ✅ 9/9 | Registro declarativo de fuentes (`ingest/registry.py`, cada fuente dueña de su traducción), `wiring.py` separando composición de orquestación (**`app.py`: fan-out 22→8, 450→272 líneas**), correlación punta a punta con enlace en la deduplicación, contrato de hilos, lote P3 (**duplicación en `src/`: 0 clones, 0 %**), complejidad ≤ 12 y backlinks verificados. 432 passed, gate completo en verde. Dos hallazgos: `lat check` no valida enlaces dentro de `.py` (cubierto por `tests/test_backlinks.py`), y 17 pruebas de composición se movieron con la composición |
+| 2026-09-19 | **F4 · T-130, T-131, T-133, T-134** | ✅ 4/5 · T-132 fuera del corte | Alcance de la garantía declarado en README + bandeja + log; spike de Wayland con veredicto medido en GNOME Shell 50.1; smoke del binario en los 3 jobs de empaquetado; base de Linux fijada a `ubuntu-22.04`. **D-1 resuelta: `[SHOULD]`**, T-132 fuera del corte. Evidencia decisiva del spike: Mutter no anuncia `zwlr_layer_shell_v1` → ningún cliente puede cumplir la garantía en GNOME, con ningún toolkit. Desviación: ENTER pasa a acusar la alerta Tk (paridad con la TUI, CA-106.7, y es lo que permite conducir el smoke sin puntero) |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—

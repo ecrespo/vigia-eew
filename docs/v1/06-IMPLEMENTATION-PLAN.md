@@ -334,9 +334,9 @@ No es "todas las fases hechas": es esta lista.
 | 3 | Ningún rango declarado admite una versión con avisos conocidos | F2 | ✅ 2026-09-19 |
 | 4 | El gate mide las ocho dimensiones del Art. 8 | F0 + F2 | ✅ 2026-09-19 |
 | 5 | El apagado es determinista, demostrado por un test que antes fallaba | F0 + F2 | ✅ 2026-09-19 |
-| 6 | **El alcance de la garantía de alerta está declarado** | F4 | ⬜ |
-| 7 | **La garantía se cumple bajo Wayland, o D-1 la degradó a recomendación** | F4 | ⬜ |
-| 8 | Ningún binario se publica sin haberse ejecutado | F4 | ⬜ |
+| 6 | **El alcance de la garantía de alerta está declarado** | F4 | ✅ 2026-09-19 |
+| 7 | **La garantía se cumple bajo Wayland, o D-1 la degradó a recomendación** | F4 | ✅ 2026-09-19 · D-1 la degradó a `[SHOULD]` |
+| 8 | Ningún binario se publica sin haberse ejecutado | F4 | ✅ 2026-09-19 |
 | 9 | **El usuario configura el agente sin editar un archivo, y decide qué red manda** | F5 | ⬜ |
 | 10 | **El agente conserva un histórico consultable de lo que evaluó, con el motivo de cada descarte** | F6 + F7 | ⬜ |
 

@@ -345,7 +345,7 @@ No son código y **bloquean ítems del backlog**. Ninguna puede tomarse por defe
 
 | ID | Decisión | Bloquea | Por qué no la decido yo |
 |---|---|---|---|
-| **D-1** | ¿La alerta bajo Wayland bloquea el release de la v2? | B-19, B-20 | Define si REQ-ALE-004 es `[MUST]` o `[SHOULD]`, y con ello el alcance de la fase de mayor riesgo. Es el hallazgo A-01 del Analyze |
+| ~~**D-1**~~ **resuelta 2026-09-19: `[SHOULD]`, no bloquea** | ¿La alerta bajo Wayland bloquea el release? | B-19, B-20 | Define si REQ-ALE-004 es `[MUST]` o `[SHOULD]`, y con ello el alcance de la fase de mayor riesgo. Es el hallazgo A-01 del Analyze |
 | **D-2** | ¿Qué se hace con `pystray`? Mantener con riesgo aceptado / migrar / retirar la bandeja donde no funciona | informa B-02, B-23, B-36 | 1.085 días sin publicar, y es quien arrastra Pillow al árbol. Si la bandeja se retira en Linux, el panel de B-36 necesita otra vía de acceso |
 | **D-3** | ¿Se enmienda la constitución a Python ≥ 3.13? | formaliza B-04, B-34 | Cambiar una restricción de stack exige enmienda con changelog, según la propia constitución |
 | **D-4** | ¿Se adopta este backlog como fuente única, retirando las listas de los cinco planes? | la gobernanza del resto | Si no, hay dos sitios donde marcar un ítem como hecho, y divergen |

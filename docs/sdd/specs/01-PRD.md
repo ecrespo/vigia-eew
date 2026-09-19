@@ -60,12 +60,19 @@ escritorio donde REQ-ALE-001 está garantizado, y DEBERÁ nombrar explícitament
 
 *Racional: Art. 1 de la constitución. Hoy la promesa se hace sin acotar el entorno.*
 
-### REQ-ALE-004 `[MUST]` — Presentación bajo Wayland *(opcional por entorno)* · **NUEVO en v2**
-DONDE el entorno de escritorio sea Wayland, EL SISTEMA DEBERÁ presentar la alerta mediante un
+### REQ-ALE-004 `[SHOULD]` — Presentación bajo Wayland *(opcional por entorno)*
+DONDE el entorno de escritorio sea Wayland, EL SISTEMA DEBERÍA presentar la alerta mediante un
 mecanismo que el compositor honre (servicio D-Bus con extensión de shell, o equivalente nativo),
 cumpliendo REQ-ALE-001.
 → Diseño: ADR-010 de `docs/TECHNICAL-DESIGN.md` (especificado, nunca implementado) y
 [Tech Design v2 §4](03-TECHNICAL-DESIGN.md).
+
+> **Degradado de `[MUST]` a `[SHOULD]` el 2026-09-19 por la decisión D-1**, con el veredicto de
+> [10-SPIKE-WAYLAND](../../v1/10-SPIKE-WAYLAND.md) delante. Razón: GNOME no implementa
+> `zwlr_layer_shell_v1`, así que la única vía es una extensión de GNOME Shell —y aun
+> implementándola, «la alerta funciona en Wayland» seguiría siendo falso en KDE, sway y cualquier
+> otro escritorio. Cumplirlo no haría verdadera la frase que promete. **Queda fuera del corte de la
+> v1.0.0**; el alcance real lo declara REQ-ALE-003, que sí está implementado.
 
 ### REQ-ALE-005 `[MUST]` — Una alerta a la vez *(por estado)*
 MIENTRAS haya una alerta en pantalla, EL SISTEMA DEBERÁ encolar las siguientes en orden de llegada

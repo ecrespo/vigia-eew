@@ -50,7 +50,7 @@ la fase, la tarea y el test que los cierran.
 | REQ | Capacidad | Especificado desde | Fase | Ítem |
 |---|---|---|---|---|
 | [REQ-ALE-003](../sdd/specs/01-PRD.md) `[MUST]` | Declaración de alcance bajo Wayland | PRD base | F4 | B-19 |
-| [REQ-ALE-004](../sdd/specs/01-PRD.md) `[MUST]`\* | Presentación bajo Wayland | **ADR-010, v0.1.0** | F4 | B-20 |
+| [REQ-ALE-004](../sdd/specs/01-PRD.md) `[SHOULD]`\* | Presentación bajo Wayland | **ADR-010, v0.1.0** | ~~F4~~ **fuera del corte** | B-20 |
 | [REQ-ING-009](../sdd/specs/01-PRD.md) `[MUST]` | Registro declarativo de fuentes | PRD base · ADR-001 | F3 | B-18, B-21 |
 | [REQ-OPS-002](../sdd/specs/01-PRD.md) `[MUST]` | Apagado limpio **y determinista** | Reforzado en este ciclo | F0, F2 | B-07, B-08 |
 | [REQ-OPS-003](../sdd/specs/01-PRD.md) `[MUST]` | Estado compartido declarado | PRD base · Art. 6 | F3 | B-24 |
@@ -61,10 +61,12 @@ la fase, la tarea y el test que los cierran.
 | [REQ-OBS-004](../sdd/specs/01-PRD.md) `[MUST]` | Separación de pruebas por tipo | PRD base | F0 | B-11 |
 | [REQ-OBS-005](../sdd/specs/01-PRD.md) `[MUST]` | Fronteras verificadas por herramienta | PRD base · Art. 5 | F0 | B-06 |
 
-\* **REQ-ALE-004 es el único requisito cuyo grado depende de una decisión pendiente (D-1).** Si D-1
-lo confirma `[MUST]`, la v1.0.0 no se publica sin presentación bajo Wayland. Si lo degrada a
-`[SHOULD]`, se publica con la limitación declarada por REQ-ALE-003. **No se puede decidir por
-defecto**: cambia el criterio de corte del release.
+\* **REQ-ALE-004 era el único requisito cuyo grado dependía de una decisión pendiente (D-1).
+Resuelta el 2026-09-19: `[SHOULD]`, fuera del corte de la v1.0.0.** El mantenedor decidió con el
+veredicto de [10-SPIKE-WAYLAND](10-SPIKE-WAYLAND.md) delante, cuyo hallazgo decisivo es que GNOME
+no implementa `zwlr_layer_shell_v1`: no existe vía de cliente, la única es una extensión de GNOME
+Shell, y aun así la promesa seguiría siendo falsa fuera de GNOME. La v1.0.0 se publica con la
+limitación declarada y visible por REQ-ALE-003, implementado en T-130.
 
 ---
 
