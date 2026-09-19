@@ -16,6 +16,18 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETUP_ENV_ACTION = REPO_ROOT / ".github" / "actions" / "setup-python-env" / "action.yml"
+SECURITY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "security.yml"
+
+#: Resolved only on macOS or Windows, so a Linux-only audit never sees them
+#: (docs/code-audit/analysis/deps-omitidas-plataforma.txt).
+PLATFORM_ONLY_PACKAGES = (
+    "colorama",
+    "pyobjc-core",
+    "pyobjc-framework-cocoa",
+    "pyobjc-framework-quartz",
+    "pywin32-ctypes",
+    "rubicon-objc",
+)
 
 # Every assertion here reads the working tree through git or off disk.
 pytestmark = pytest.mark.integration
@@ -71,3 +83,26 @@ def test_ci_cache_workaround_comment_is_gone() -> None:
     """
     action = SETUP_ENV_ACTION.read_text()
     assert "gitignored" not in action
+
+
+def test_the_platform_only_packages_are_in_the_lockfile() -> None:
+    """CA-101.8: the six packages a Linux-only audit cannot reach are real.
+
+    If the lockfile stopped resolving them the gap would close by accident,
+    and the audit matrix below would be guarding nothing.
+    """
+    lockfile = (REPO_ROOT / "uv.lock").read_text()
+    for package in PLATFORM_ONLY_PACKAGES:
+        assert f'name = "{package}"' in lockfile
+
+
+def test_composition_is_audited_on_every_platform() -> None:
+    """CA-101.8: each platform is audited on its own runner.
+
+    Six of the fifteen runtime packages only resolve on macOS or Windows.
+    Auditing from Linux alone reports nine and calls it the tree.
+    """
+    workflow = SECURITY_WORKFLOW.read_text()
+    audit_job = workflow.split("pip-audit:", 1)[1].split("\n  # ", 1)[0]
+    for runner in ("ubuntu-latest", "macos-latest", "windows-latest"):
+        assert runner in audit_job

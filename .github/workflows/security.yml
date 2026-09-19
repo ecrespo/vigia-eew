@@ -60,9 +60,18 @@ jobs:
           retention-days: 7
 
   # ── SCA: dependency CVEs ──────────────────────────────────
+  # Six of the fifteen runtime packages only resolve on macOS or Windows
+  # (colorama, pywin32-ctypes, rubicon-objc and the three pyobjc-*). Auditing
+  # from Linux alone reports nine of them and calls that the tree, which is the
+  # declared SCA gap behind REQ-DEP-008. Each platform now resolves and audits
+  # its own dependency set on its own runner.
   pip-audit:
-    name: pip-audit (SCA)
-    runs-on: ubuntu-latest
+    name: pip-audit (SCA, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python-env
@@ -71,11 +80,14 @@ jobs:
       - run: uv run pip-audit --skip-editable
       - name: pip-audit JSON report
         if: always()
+        # bash on all three: the default shell on the Windows runner is pwsh,
+        # whose redirection writes UTF-16 and produces an unreadable report.
+        shell: bash
         run: uv run pip-audit --skip-editable --format=json > pip-audit-report.json || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pip-audit-report
+          name: pip-audit-report-${{ matrix.os }}
           path: pip-audit-report.json
           retention-days: 7
 
