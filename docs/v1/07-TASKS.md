@@ -122,7 +122,7 @@
 
 ## Fase 1 · Runtime y contribución
 
-### [ ] T-111 · Subir el runtime a Python 3.13
+### [x] 2026-09-19 T-111 · Subir el runtime a Python 3.13
 - **Qué**: `requires-python`, `target-version` de ruff, `python_version` de mypy y **los tres sitios**
   de `build.yml`; retirar los clasificadores de 3.11 y 3.12.
 - **REQ**: REQ-DEP-004 · **CA**: CA-101.5
@@ -132,14 +132,14 @@
   changelog declara el cambio de requisito.
 - **Vuelta atrás**: `git revert`. Al ser metadatos y CI, sin lógica, lo deshace por completo.
 
-### [ ] T-112 · Matriz de versiones en integración
+### [x] 2026-09-19 T-112 · Matriz de versiones en integración
 - **Qué**: matriz con 3.13 y 3.14 en `ci.yml`, que hoy no fija ninguna versión.
 - **REQ**: REQ-DEP-007 · **CA**: CA-101.6
 - **Archivos**: `.github/workflows/ci.yml`
 - **Depende de**: T-111
 - **Done**: la suite completa pasa en ambas versiones.
 
-### [ ] T-113 · Entorno de desarrollo en contenedor
+### [x] 2026-09-19 T-113 · Entorno de desarrollo en contenedor
 - **Qué**: definición de contenedor con el intérprete exigido, el gestor, **las bibliotecas de
   sistema de Tk** y un display virtual; comando posterior a la creación que sincroniza dependencias
   e instala los hooks.
@@ -150,7 +150,7 @@
   nada; un commit que viola el gate se rechaza; `VIGIA_GUI_TESTS=1 pytest` ejecuta y pasa las 3
   pruebas de interfaz real.
 
-### [ ] T-114 · Guía de contribución **[P]**
+### [x] 2026-09-19 T-114 · Guía de contribución **[P]**
 - **Qué**: el gate de tres comandos, la convención de commits y **el enlace a la constitución**.
 - **REQ**: REQ-DEV-004 · **CA**: CA-109.5
 - **Archivos**: `CONTRIBUTING.md`, `README.md`
@@ -550,6 +550,7 @@ T-138 es el corte del release.
 | Fecha | Tareas | Resultado | Notas |
 |---|---|---|---|
 | 2026-09-19 | **F0 · T-101 a T-110** | ✅ 10/10 | Rama `feature/v1.0.0`, base `1911339`. Un commit por tarea, TDD en las ocho que admiten prueba. Gate completo en verde: 375 pruebas (1 `xfail` estricto, el de T-103), ruff, formato, mypy `strict`, 4 contratos de importación, cobertura por grupo y recursos de empaquetado. Lote rápido: 353 en 1,29 s. Dos decisiones: T-105 se confirmó con `--no-verify` porque no puede pasar el hook que introduce, y el test de T-103 quedó `xfail(strict=True)` para no dejar el gate rojo dos fases; `strict` fuerza retirar el marcador cuando T-119 lo arregle |
+| 2026-09-19 | **F1 · T-111 a T-114** | ✅ 4/4 | Piso a Python 3.13 en los 5 sitios (E-01), matriz 3.13+3.14 en CI, devcontainer y `CONTRIBUTING.md`. Re-bloqueo limpio: el lockfile pierde 355 líneas de marcadores de 3.11/3.12. **Suite verificada en las dos versiones de verdad, no solo en configuración**: 389 passed en 3.13 y en 3.14. Las 3 pruebas de GUI real pasan bajo Xvfb. No verificado: la imagen del devcontainer no se construyó (Docker no corre en la suite) — falta hacerlo una vez en máquina limpia antes del release |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
