@@ -53,11 +53,30 @@ class Processor:
 
     async def process_one(self, msg: RawMessage) -> None:
         """Processes a single raw message applying normalize->filter->dedup."""
+        # The journey's first entry. Here rather than in each of the four
+        # adapters: one place that every arrival passes through, whichever
+        # network it came from, is what the source registry made possible and
+        # what stops this from being a fifth thing to remember per source.
+        self._log.info(
+            "event_received trace=%s source=%s action=%s", msg.trace_id, msg.source, msg.action
+        )
         ev = self._normalizer.normalize(msg)
         if ev is None:
             return
-        if not self._filter.accepts(ev):
-            self._log.debug("event_filtered id=%s distance=%.0f", ev.id, ev.distance_km)
+        verdict = self._filter.verdict(ev)
+        if not verdict.accepted:
+            # At INFO, not DEBUG: "why was I not warned about that one?" is the
+            # question this line exists to answer, and it cannot answer it from
+            # a log level nobody runs with (REQ-OBS-002).
+            self._log.info(
+                "event_filtered trace=%s id=%s source=%s reason=%s mag=%.1f distance=%.0f",
+                ev.trace_id,
+                ev.id,
+                ev.source,
+                verdict.reason,
+                ev.magnitude,
+                ev.distance_km,
+            )
             return
         result = self._dedup.classify(ev)
         if result == "new":

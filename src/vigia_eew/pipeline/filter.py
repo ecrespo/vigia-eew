@@ -23,12 +23,25 @@ silently dropped real alert. The clock is injected for deterministic tests.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from vigia_eew.config import Filter
 from vigia_eew.models import SeismicEvent
 from vigia_eew.timeutil import Clock, default_clock, local_date
 
 _CountryOf = Callable[[float, float], str | None]
+
+
+@dataclass(frozen=True, slots=True)
+class FilterVerdict:
+    """Whether the event is alertable, and which check said otherwise.
+
+    `reason` is one of "radius", "magnitude", "country" or "freshness", and is
+    None when the event was accepted.
+    """
+
+    accepted: bool
+    reason: str | None
 
 
 class GeoFilter:
@@ -50,12 +63,26 @@ class GeoFilter:
         self._now = now
 
     def accepts(self, ev: SeismicEvent) -> bool:
-        """True if the event passes the radius, magnitude, country, and freshness checks."""
-        if ev.distance_km > self._cfg.radius_km or ev.magnitude < self._cfg.min_magnitude:
-            return False
+        """True if the event passes the radius, magnitude, country and freshness checks."""
+        return self.verdict(ev).accepted
+
+    def verdict(self, ev: SeismicEvent) -> FilterVerdict:
+        """The same decision, with the name of the check that rejected it.
+
+        "Filtered out" answers the wrong question. The one people ask is *why*
+        they were not warned, and radius, magnitude, country and freshness are
+        four very different answers -- one of them is a misconfigured home
+        location and another is a working filter doing its job (REQ-OBS-002).
+        """
+        if ev.distance_km > self._cfg.radius_km:
+            return FilterVerdict(False, "radius")
+        if ev.magnitude < self._cfg.min_magnitude:
+            return FilterVerdict(False, "magnitude")
         if not self._passes_country(ev):
-            return False
-        return self._passes_freshness(ev)
+            return FilterVerdict(False, "country")
+        if not self._passes_freshness(ev):
+            return FilterVerdict(False, "freshness")
+        return FilterVerdict(True, None)
 
     def _passes_country(self, ev: SeismicEvent) -> bool:
         """Reject only if the event is positively inside another country (RF-37)."""

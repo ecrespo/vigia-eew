@@ -52,6 +52,11 @@ class SeismicEvent(BaseModel):
     """Normalized seismic event that flows between the agent's layers (RF-07)."""
 
     id: str
+    #: Correlation id of the arrival this event came from (REQ-OBS-002,
+    #: ADR-021). Internal only -- invariant I-4 keeps it out of every outgoing
+    #: request. Defaulted so that constructing an event by hand, as the
+    #: simulation and the tests do, does not have to invent one.
+    trace_id: str = ""
     source: Source
     magnitude: float
     mag_type: str

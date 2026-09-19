@@ -48,23 +48,26 @@ class Normalizer:
         """Normalizes a raw message into a `SeismicEvent`; returns None if invalid."""
         try:
             fields = spec_for(msg.source, self._registry).to_fields(msg)
-            return self._build(fields, msg.action)
+            return self._build(fields, msg.action, msg.trace_id)
         except UnknownSource:
             # Composition validates the registry (`validate_registry`), so
             # reaching this means a message arrived from something that was
             # never wired -- worth a warning, not worth stopping the pipeline.
-            self._log.warning("normalize_unknown_source source=%s", msg.source)
+            self._log.warning(
+                "normalize_unknown_source trace=%s source=%s", msg.trace_id, msg.source
+            )
             return None
         except (KeyError, TypeError, ValueError, ValidationError) as exc:
             self._log.warning(
-                "normalize_discarded source=%s type=%s detail=%s",
+                "normalize_discarded trace=%s source=%s type=%s detail=%s",
+                msg.trace_id,
                 msg.source,
                 type(exc).__name__,
                 exc,
             )
             return None
 
-    def _build(self, fields: dict[str, Any], action: str) -> SeismicEvent:
+    def _build(self, fields: dict[str, Any], action: str, trace_id: str) -> SeismicEvent:
         distance = haversine_km(
             self._reference.lat, self._reference.lon, fields["lat"], fields["lon"]
         )
@@ -74,6 +77,7 @@ class Normalizer:
         valid_action: Action = "update" if action == "update" else "create"
         return SeismicEvent(
             **fields,
+            trace_id=trace_id,
             distance_km=distance,
             severity=severity,
             action=valid_action,
