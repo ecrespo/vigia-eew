@@ -183,3 +183,36 @@ def test_smoke_window_height_fits_the_content():
     window_height = int(root.geometry().split("+")[0].split("x")[1])
     assert window_height >= root.winfo_reqheight()
     w.acknowledge()
+
+
+def test_return_acknowledges_like_the_button():
+    """CA-106.7: ENTER acknowledges in both frontends, not only in the TUI.
+
+    It is also what lets the release pipeline drive a real alert with a
+    keystroke instead of a pointer (REQ-OPS-008), and what makes the alert
+    usable without a mouse.
+    """
+    root = _FakeRoot()
+    acknowledged: list[int] = []
+
+    configure_undismissable(
+        root,
+        on_close_attempt=lambda: None,
+        on_acknowledge=lambda: acknowledged.append(1),
+    )
+
+    for key in ("<Return>", "<KP_Enter>"):
+        assert key in root.binds, f"{key} is not bound"
+    root.binds["<Return>"](object())
+    assert acknowledged == [1]
+
+
+def test_escape_still_does_not_acknowledge():
+    """The only way out is the acknowledgement; Escape is not a shortcut to it."""
+    root = _FakeRoot()
+    acknowledged: list[int] = []
+    configure_undismissable(
+        root, on_close_attempt=lambda: None, on_acknowledge=lambda: acknowledged.append(1)
+    )
+    assert root.binds["<Escape>"](object()) == "break"
+    assert acknowledged == []

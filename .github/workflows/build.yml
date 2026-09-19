@@ -53,6 +53,11 @@ jobs:
           python-version: "3.13"
       - run: pip install -e ".[packaging]"
       - run: pwsh packaging/build_windows.ps1
+      # Presentation only, for the same reason as macOS. Git Bash ships with
+      # the Windows runner, so the same script serves all three.
+      - name: Smoke del binario producido
+        shell: bash
+        run: ./scripts/smoke_binary.sh dist/vigia-eew.exe
       - uses: actions/upload-artifact@v4
         with:
           name: windows-exe
@@ -69,6 +74,12 @@ jobs:
           python-version: "3.13"
       - run: pip install -e ".[packaging]"
       - run: bash packaging/build_macos.sh
+      # Presentation only: driving a keystroke into another app on a hosted
+      # macOS runner needs Accessibility permission, which CI does not have.
+      # This still catches the failure that actually shipped -- a binary that
+      # cannot start, or starts and never gets an alert on screen (CA-107.4).
+      - name: Smoke del binario producido
+        run: ./scripts/smoke_binary.sh dist/vigia-eew
       - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
@@ -97,6 +108,19 @@ jobs:
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x /usr/local/bin/linuxdeploy /usr/local/bin/appimagetool
       - run: bash packaging/build_linux.sh
+      # Nothing is published that has not been run (REQ-OPS-008). Two releases
+      # shipped broken on a resource that only went missing at *runtime*
+      # (`bdc2a9d`), and nothing noticed because nothing in the build ever ran
+      # what the build had just made.
+      #
+      # Linux is the one platform where the acknowledgement can be driven
+      # unattended, so it gets the full check: present the alert, send ENTER,
+      # require a clean exit -- and acknowledging is the only way `--simulate`
+      # exits, so the exit code *is* the assertion.
+      - name: Instalar Xvfb y xdotool (para el smoke)
+        run: sudo apt-get install -y xvfb xdotool
+      - name: Smoke del binario producido
+        run: xvfb-run -a ./scripts/smoke_binary.sh --acknowledge dist/vigia-eew
       - uses: actions/upload-artifact@v4
         with:
           name: linux-packages

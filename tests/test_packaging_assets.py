@@ -15,6 +15,7 @@ in `packaging/build_linux.sh` for the same reason.
 from __future__ import annotations
 
 import importlib.util
+import re
 import struct
 import sys
 import wave
@@ -128,3 +129,37 @@ def test_a_truncated_sound_is_reported(tmp_path: Path) -> None:
     reported = checker.problems(tmp_path)
 
     assert any("critical.wav" in problem for problem in reported)
+
+
+def test_no_binary_is_published_without_being_run() -> None:
+    """CA-107.3/CA-107.4: every packaging job runs what it just built.
+
+    Two releases shipped broken on a resource that only went missing at
+    runtime (`bdc2a9d`). Nothing noticed, because nothing in the build ever
+    ran the thing the build had made.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
+    # Jobs are the only two-space top-level keys under `jobs:`.
+    blocks = re.split(r"^  (?=\w[\w-]*:$)", workflow, flags=re.M)
+    packaging = {
+        name: block
+        for block in blocks
+        for name in ("windows", "macos", "linux")
+        if block.startswith(f"{name}:")
+    }
+    assert set(packaging) == {"windows", "macos", "linux"}
+    for name, block in packaging.items():
+        assert "smoke_binary.sh" in block, f"no smoke in the {name} job"
+
+
+def test_the_acknowledgement_half_runs_where_it_can() -> None:
+    """The full check needs a keystroke driven into the alert.
+
+    Only the Linux job can do that unattended: on hosted macOS and Windows
+    runners, injecting a key into another application needs permissions CI
+    does not have. The other two still catch a binary that cannot start,
+    which is the failure that actually shipped.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text()
+    assert workflow.count("--acknowledge") == 1
+    assert "xvfb-run -a ./scripts/smoke_binary.sh --acknowledge" in workflow
