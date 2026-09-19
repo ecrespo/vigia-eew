@@ -103,9 +103,7 @@ class GEOFONPoller:
             raise RuntimeError("GEOFONPoller requires an httpx client (injected or created).")
 
         try:
-            resp = await self._client.get(
-                self._cfg.url, params=params, timeout=self._cfg.timeout_s
-            )
+            resp = await self._client.get(self._cfg.url, params=params, timeout=self._cfg.timeout_s)
         except httpx.HTTPError as exc:
             self._log.warning("geofon_network_error type=%s detail=%s", type(exc).__name__, exc)
             return interval
@@ -159,9 +157,7 @@ class GEOFONPoller:
             feature = {col: val.strip() for col, val in zip(columns, values, strict=True)}
             if not _is_earthquake(feature):
                 continue
-            await self._output.put(
-                RawMessage(source="GEOFON", action="create", feature=feature)
-            )
+            await self._output.put(RawMessage(source="GEOFON", action="create", feature=feature))
             moment = _time_ms(feature)
             if moment is not None and (max_time is None or moment > max_time):
                 max_time = moment

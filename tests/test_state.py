@@ -23,9 +23,7 @@ def test_initial_load_is_empty(tmp_path):
 def test_round_trip_persistence(tmp_path):
     s = _store(tmp_path)
     s.load()
-    s.register_alerted(
-        AlertedId(id="us6000t8sx", source="USGS", time_utc=datetime.now(UTC))
-    )
+    s.register_alerted(AlertedId(id="us6000t8sx", source="USGS", time_utc=datetime.now(UTC)))
     s.update_usgs_cursor(1782639238852)
     s.save()
 
@@ -39,9 +37,7 @@ def test_round_trip_persistence(tmp_path):
 def test_no_realert_after_restart(tmp_path):
     s = _store(tmp_path)
     s.load()
-    s.register_alerted(
-        AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC))
-    )
+    s.register_alerted(AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC)))
     s.save()
     s2 = _store(tmp_path)
     s2.load()
@@ -62,9 +58,7 @@ def test_cursor_only_advances(tmp_path):
 def test_mark_acknowledged(tmp_path):
     s = _store(tmp_path)
     s.load()
-    s.register_alerted(
-        AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC))
-    )
+    s.register_alerted(AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC)))
     s.mark_acknowledged("abc")
     assert s.state.alerted_ids[0].acknowledged_utc is not None
 

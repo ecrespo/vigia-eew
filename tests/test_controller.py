@@ -118,9 +118,7 @@ def test_pause_and_resume_delegate_to_the_queue():
 def test_show_updates_agent_state():
     cap = _Cap()
     state = AgentState()
-    ctrl = AlertController(
-        create_window=cap.create_window, reference_name="Caracas", state=state
-    )
+    ctrl = AlertController(create_window=cap.create_window, reference_name="Caracas", state=state)
     ctrl.enqueue(_ev())
     assert state.last_alert is not None
     assert "M 6.1" in state.last_alert

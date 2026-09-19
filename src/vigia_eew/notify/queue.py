@@ -67,11 +67,7 @@ class AlertQueue:
 
     def enqueue(self, ev: SeismicEvent) -> None:
         """Enqueues an event; if it's an `update` of the one on screen, refreshes it."""
-        if (
-            ev.action == "update"
-            and self._current is not None
-            and ev.id == self._current.id
-        ):
+        if ev.action == "update" and self._current is not None and ev.id == self._current.id:
             self._current = ev
             if self._update is not None:
                 self._update(ev)

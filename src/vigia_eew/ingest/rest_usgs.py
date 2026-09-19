@@ -99,9 +99,7 @@ class RESTReconciler:
             raise RuntimeError("RESTReconciler requires an httpx client (injected or created).")
 
         try:
-            resp = await self._client.get(
-                self._cfg.url, params=params, timeout=self._cfg.timeout_s
-            )
+            resp = await self._client.get(self._cfg.url, params=params, timeout=self._cfg.timeout_s)
         except httpx.HTTPError as exc:
             self._log.warning("usgs_network_error type=%s detail=%s", type(exc).__name__, exc)
             return interval

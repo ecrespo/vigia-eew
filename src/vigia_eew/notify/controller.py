@@ -95,9 +95,7 @@ class AlertController:
         if self._toast is not None:
             self._toast(ev)
         if self._state is not None:
-            self._state.mark_last_alert(
-                f"{data.magnitude} · {data.place} · {data.local_time}"
-            )
+            self._state.mark_last_alert(f"{data.magnitude} · {data.place} · {data.local_time}")
 
     def _update(self, ev: SeismicEvent) -> None:
         if self._window is not None:

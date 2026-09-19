@@ -29,9 +29,7 @@ def _installer(tmp_path, runner):
 
 
 def test_plist_contains_label_args_and_runatload():
-    data = plistlib.loads(
-        launchagent_plist(["/usr/bin/python", "-m", "vigia_eew.cli"]).encode()
-    )
+    data = plistlib.loads(launchagent_plist(["/usr/bin/python", "-m", "vigia_eew.cli"]).encode())
     assert data["Label"] == LABEL
     assert data["ProgramArguments"] == ["/usr/bin/python", "-m", "vigia_eew.cli"]
     assert data["RunAtLoad"] is True

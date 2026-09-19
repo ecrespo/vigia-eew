@@ -194,9 +194,7 @@ async def test_connecting_marks_state_connected():
     state = AgentState()
     # Cancelled while still connected (no drop): the state must not switch to
     # "reconnecting" (that path is only hit if the connection actually closes).
-    connect = _FakeConnect(
-        [_FakeWS([json.dumps(_EMSC_MESSAGE)], error=asyncio.CancelledError())]
-    )
+    connect = _FakeConnect([_FakeWS([json.dumps(_EMSC_MESSAGE)], error=asyncio.CancelledError())])
     sleep = _ControlledSleep(break_at=1)
     ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, state=state)
 

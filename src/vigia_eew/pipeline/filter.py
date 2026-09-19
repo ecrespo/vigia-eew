@@ -59,11 +59,7 @@ class GeoFilter:
 
     def _passes_country(self, ev: SeismicEvent) -> bool:
         """Reject only if the event is positively inside another country (RF-37)."""
-        if (
-            not self._cfg.country_filter
-            or self._user_country is None
-            or self._country_of is None
-        ):
+        if not self._cfg.country_filter or self._user_country is None or self._country_of is None:
             return True
         event_country = self._country_of(ev.lat, ev.lon)
         return event_country is None or event_country == self._user_country

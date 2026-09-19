@@ -82,17 +82,13 @@ class Application:
 
     # --- Testable wiring ---
 
-    def _build_supervisor(
-        self, raw_queue: asyncio.Queue[RawMessage], processor: Any
-    ) -> Supervisor:
+    def _build_supervisor(self, raw_queue: asyncio.Queue[RawMessage], processor: Any) -> Supervisor:
         """Registers the agent's tasks based on the enabled sources (RNF-04)."""
         sup = Supervisor(handle_signals=False)  # signals are handled by the main thread
         if self.cfg.sources_emsc.enabled:
             sup.add(
                 "ws",
-                lambda: WSIngestor(
-                    self.cfg.sources_emsc, raw_queue, state=self._agent_state
-                ).run(),
+                lambda: WSIngestor(self.cfg.sources_emsc, raw_queue, state=self._agent_state).run(),
             )
         if self.cfg.sources_usgs.enabled:
             sup.add(
@@ -220,11 +216,7 @@ class Application:
 
     def _edit_config(self) -> None:
         """Tray icon callback: opens `config.toml` with the OS's associated app (RF-34)."""
-        path = (
-            Path(self._config_path)
-            if self._config_path is not None
-            else default_config_path()
-        )
+        path = Path(self._config_path) if self._config_path is not None else default_config_path()
         tray.open_config(path)
 
     def _after_acknowledge(self, _ev: SeismicEvent) -> None:
@@ -326,9 +318,7 @@ class Application:
             threading.Thread(target=sound.play, args=(severity,), daemon=True).start()
 
         play_sound_fn = play_sound if self.cfg.notification.sound else None
-        ctrl = self._build_controller(
-            create_window, play_sound=play_sound_fn, publish_toast=None
-        )
+        ctrl = self._build_controller(create_window, play_sound=play_sound_fn, publish_toast=None)
         tui_app.bind_controller(ctrl)
         return ctrl
 

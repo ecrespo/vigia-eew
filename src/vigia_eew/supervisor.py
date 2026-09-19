@@ -94,9 +94,7 @@ class Supervisor:
                 break
             attempt += 1
             wait = self._backoff(attempt)
-            self._log.info(
-                "task_restarting name=%s attempt=%d wait_s=%.1f", name, attempt, wait
-            )
+            self._log.info("task_restarting name=%s attempt=%d wait_s=%.1f", name, attempt, wait)
             await self._sleep(wait)
 
     def _backoff(self, attempt: int) -> float:

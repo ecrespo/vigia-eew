@@ -61,9 +61,7 @@ class Deduplicator:
         lifetime. `prune()` previously existed but was never invoked from any run path.
         """
         self._state.prune()
-        self._state.register_alerted(
-            AlertedId(id=ev.id, source=ev.source, time_utc=ev.time_utc)
-        )
+        self._state.register_alerted(AlertedId(id=ev.id, source=ev.source, time_utc=ev.time_utc))
         self._state.add_signature(ev.signature())
         self._state.save()
 

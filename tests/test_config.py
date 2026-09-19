@@ -77,9 +77,7 @@ def test_geofon_source_defaults():
 
 def test_geofon_source_loaded_from_toml(tmp_path):
     path = tmp_path / "config.toml"
-    path.write_text(
-        "[sources.geofon]\nenabled = false\npoll_interval_s = 90\n", encoding="utf-8"
-    )
+    path.write_text("[sources.geofon]\nenabled = false\npoll_interval_s = 90\n", encoding="utf-8")
     cfg = load_config(path)
     assert cfg.sources_geofon.enabled is False
     assert cfg.sources_geofon.poll_interval_s == 90
@@ -87,9 +85,7 @@ def test_geofon_source_loaded_from_toml(tmp_path):
 
 def test_country_filter_loaded_from_toml(tmp_path):
     path = tmp_path / "config.toml"
-    path.write_text(
-        '[filter]\ncountry_filter = true\ncountry = "VE"\n', encoding="utf-8"
-    )
+    path.write_text('[filter]\ncountry_filter = true\ncountry = "VE"\n', encoding="utf-8")
     cfg = load_config(path)
     assert cfg.filter.country_filter is True
     assert cfg.filter.country == "VE"
