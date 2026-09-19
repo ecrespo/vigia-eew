@@ -38,7 +38,7 @@ from typing import Any
 import httpx
 
 from vigia_eew.config import Filter, GEOFONSource, ReferencePoint
-from vigia_eew.ingest import RawMessage
+from vigia_eew.ingest import RawMessage, mapping
 from vigia_eew.state import StateStore
 from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
 
@@ -206,3 +206,26 @@ def _retry_after_seconds(headers: Any, *, default: float) -> float:
         return max(default, float(raw))
     except (TypeError, ValueError):
         return default
+
+
+def to_fields(msg: RawMessage) -> dict[str, Any]:
+    """Translates a GEOFON text row into the internal contract (API-SPEC §4.3).
+
+    The poller has already split the `format=text` row into a
+    `{column: value}` dict keyed by the FDSN header names, so every value is
+    a string and the numbers are coerced here.
+    """
+    f = msg.feature
+    return {
+        "id": str(f["EventID"]),
+        "source": "GEOFON",
+        "magnitude": float(f["Magnitude"]),
+        "mag_type": str(f["MagType"]),
+        "place": mapping.clean_text(f.get("EventLocationName")),
+        "region": None,  # GEOFON exposes no separate region; place carries the location.
+        "lat": float(f["Latitude"]),
+        "lon": float(f["Longitude"]),
+        "depth_km": float(f["Depth/km"]),
+        "time_utc": mapping.parse_iso(f["Time"]),
+        "lastupdate_utc": None,
+    }

@@ -32,7 +32,7 @@ from typing import Any
 import httpx
 
 from vigia_eew.config import FUNVISISSource
-from vigia_eew.ingest import RawMessage
+from vigia_eew.ingest import RawMessage, mapping
 
 _SleepFn = Callable[[float], Any]
 
@@ -131,3 +131,28 @@ def _funvisis_id(feature: dict[str, Any]) -> str:
     lat = p.get("lat", "?")
     lon = p.get("long", "?")
     return f"funvisis-{date}-{time}-{lat}-{lon}".replace(" ", "")
+
+
+def to_fields(msg: RawMessage) -> dict[str, Any]:
+    """Translates a FUNVISIS payload into the internal contract (API-SPEC §5.1).
+
+    `maravilla.json` reuses the fields of an unrelated template: `phone` is
+    the magnitude, `phoneFormatted` the depth (`"32.0 km"`), `city` the local
+    time (`"09:39"`), `postalCode` the local date (`"05-07-2026"`) and
+    `address` the place. Times are Venezuelan local and converted to UTC.
+    """
+    p = msg.feature["properties"]
+    coords = msg.feature["geometry"]["coordinates"]
+    return {
+        "id": str(msg.feature["id"]),
+        "source": "FUNVISIS",
+        "magnitude": float(p["phone"]),
+        "mag_type": "ml",  # FUNVISIS reports no magnitude type; assume local (ML).
+        "place": mapping.clean_text(p.get("address")),
+        "region": p.get("country"),
+        "lat": float(coords[1]),
+        "lon": float(coords[0]),
+        "depth_km": mapping.parse_km(p["phoneFormatted"]),
+        "time_utc": mapping.venezuela_time(p["postalCode"], p["city"]),
+        "lastupdate_utc": None,
+    }

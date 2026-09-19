@@ -32,7 +32,7 @@ from typing import Any
 import httpx
 
 from vigia_eew.config import Filter, ReferencePoint, USGSSource
-from vigia_eew.ingest import RawMessage
+from vigia_eew.ingest import RawMessage, mapping
 from vigia_eew.state import StateStore
 from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
 
@@ -170,3 +170,26 @@ def _time_ms(feature: dict[str, Any]) -> int | None:
         return None
     time_value = properties.get("time")
     return time_value if isinstance(time_value, int) else None
+
+
+def to_fields(msg: RawMessage) -> dict[str, Any]:
+    """Translates a USGS Feature into the internal contract (API-SPEC §5.1).
+
+    USGS uses camelCase `magType`, epoch-millisecond timestamps, the id on
+    the Feature itself, and coordinates as `[lon, lat, depth]`.
+    """
+    p = msg.feature["properties"]
+    coords = msg.feature["geometry"]["coordinates"]
+    return {
+        "id": str(msg.feature["id"]),
+        "source": "USGS",
+        "magnitude": float(p["mag"]),
+        "mag_type": str(p["magType"]),
+        "place": p.get("place"),
+        "region": None,  # USGS exposes no Flynn region; deriving it is out of v1 scope.
+        "lat": float(coords[1]),
+        "lon": float(coords[0]),
+        "depth_km": float(coords[2]),
+        "time_utc": mapping.epoch_ms_to_utc(p["time"]),
+        "lastupdate_utc": mapping.epoch_ms_optional(p.get("updated")),
+    }

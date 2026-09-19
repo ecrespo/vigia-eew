@@ -1,0 +1,168 @@
+"""Declarative registry of the agent's sources (REQ-ING-009, ADR-022).
+
+Adding a source used to mean three separate edits in three different shapes:
+a branch in the normalizer's `if source ==` ladder, a factory inside
+`Application._build_supervisor`, and whatever else happened to enumerate the
+four. Nothing enforced that you found all of them, and nothing complained if
+you did not -- the agent started, looked healthy, and was blind in one
+direction.
+
+A source is now one declaration: what it is called, when it is enabled, how
+to run it, and how to translate what it produces. The translation lives with
+the source module itself (`ws_emsc.to_fields`, and so on), because that is
+where the foreign vocabulary is already understood; the registry only points
+at it.
+
+`SIMULATED` is deliberately absent. It is a source of the domain model but
+not an ingested one -- `simulation.py` injects it for `--simulate` and there
+is nothing to poll.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from vigia_eew.ingest import RawMessage, rest_funvisis, rest_geofon, rest_usgs, ws_emsc
+
+if TYPE_CHECKING:
+    from vigia_eew.agent_state import AgentState
+    from vigia_eew.config import Settings
+    from vigia_eew.models import Source
+    from vigia_eew.state import StateStore
+
+#: A supervised task: a no-argument factory producing the coroutine to run.
+TaskFactory = Callable[[], Awaitable[Any]]
+
+
+class UnknownSource(LookupError):
+    """A source with no entry in the registry.
+
+    Raised at composition rather than swallowed per message: an agent running
+    with one of its four networks quietly missing is the failure this exists
+    to prevent.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class IngestContext:
+    """Everything a source needs in order to be built.
+
+    Bundled rather than passed one argument at a time so that adding a
+    dependency does not change five call sites and four signatures.
+    """
+
+    cfg: Settings
+    state: StateStore
+    queue: asyncio.Queue[RawMessage]
+    agent_state: AgentState | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SourceSpec:
+    """One source, declared once.
+
+    Attributes:
+        source: the value that appears in `RawMessage.source` and in the event.
+        task_name: the name the supervisor reports it under.
+        is_enabled: reads the source's own `enabled` flag out of the settings.
+        make_task: builds the supervised coroutine factory from the context.
+        to_fields: translates a raw payload into the internal contract's
+            fields -- the anti-corruption layer for this source's format.
+    """
+
+    source: Source
+    task_name: str
+    is_enabled: Callable[[Settings], bool]
+    make_task: Callable[[IngestContext], TaskFactory]
+    to_fields: Callable[[RawMessage], dict[str, Any]]
+
+
+def _emsc_task(ctx: IngestContext) -> TaskFactory:
+    return lambda: ws_emsc.WSIngestor(ctx.cfg.sources_emsc, ctx.queue, state=ctx.agent_state).run()
+
+
+def _usgs_task(ctx: IngestContext) -> TaskFactory:
+    return lambda: rest_usgs.RESTReconciler(
+        ctx.cfg.sources_usgs,
+        ctx.cfg.reference,
+        ctx.cfg.filter,
+        ctx.state,
+        ctx.queue,
+        timezone=ctx.cfg.notification.timezone,
+    ).run()
+
+
+def _funvisis_task(ctx: IngestContext) -> TaskFactory:
+    return lambda: rest_funvisis.FUNVISISPoller(ctx.cfg.sources_funvisis, ctx.queue).run()
+
+
+def _geofon_task(ctx: IngestContext) -> TaskFactory:
+    return lambda: rest_geofon.GEOFONPoller(
+        ctx.cfg.sources_geofon,
+        ctx.cfg.reference,
+        ctx.cfg.filter,
+        ctx.state,
+        ctx.queue,
+        timezone=ctx.cfg.notification.timezone,
+    ).run()
+
+
+#: Registration order is the order the supervisor reports tasks in.
+SOURCE_REGISTRY: tuple[SourceSpec, ...] = (
+    SourceSpec(
+        source="EMSC",
+        task_name="ws",
+        is_enabled=lambda cfg: cfg.sources_emsc.enabled,
+        make_task=_emsc_task,
+        to_fields=ws_emsc.to_fields,
+    ),
+    SourceSpec(
+        source="USGS",
+        task_name="rest",
+        is_enabled=lambda cfg: cfg.sources_usgs.enabled,
+        make_task=_usgs_task,
+        to_fields=rest_usgs.to_fields,
+    ),
+    SourceSpec(
+        source="FUNVISIS",
+        task_name="funvisis",
+        is_enabled=lambda cfg: cfg.sources_funvisis.enabled,
+        make_task=_funvisis_task,
+        to_fields=rest_funvisis.to_fields,
+    ),
+    SourceSpec(
+        source="GEOFON",
+        task_name="geofon",
+        is_enabled=lambda cfg: cfg.sources_geofon.enabled,
+        make_task=_geofon_task,
+        to_fields=rest_geofon.to_fields,
+    ),
+)
+
+#: Sources the agent ingests. `SIMULATED` is excluded by design, see the module
+#: docstring; keeping the set explicit is what lets `validate_registry` tell a
+#: deliberate absence from a forgotten one.
+INGESTED_SOURCES: frozenset[str] = frozenset({"EMSC", "USGS", "FUNVISIS", "GEOFON"})
+
+
+def spec_for(source: str, registry: tuple[SourceSpec, ...] = SOURCE_REGISTRY) -> SourceSpec:
+    """The spec for `source`, or `UnknownSource` naming it."""
+    for spec in registry:
+        if spec.source == source:
+            return spec
+    raise UnknownSource(f"no source spec registered for {source!r}")
+
+
+def validate_registry(registry: tuple[SourceSpec, ...] = SOURCE_REGISTRY) -> None:
+    """Fails composition if an ingested source has no spec.
+
+    Called while wiring the agent, not per message. A missing spec would
+    otherwise surface as events silently discarded by the normalizer, which
+    looks like a quiet network rather than a broken build.
+    """
+    missing = INGESTED_SOURCES - {spec.source for spec in registry}
+    if missing:
+        raise UnknownSource(f"source spec missing from the registry: {', '.join(sorted(missing))}")

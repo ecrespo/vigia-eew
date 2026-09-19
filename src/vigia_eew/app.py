@@ -29,10 +29,7 @@ from vigia_eew.agent_state import AgentRuntime, AgentState
 from vigia_eew.config import ReferencePoint, Settings, default_config_path
 from vigia_eew.i18n import resolve_locale
 from vigia_eew.ingest import RawMessage
-from vigia_eew.ingest.rest_funvisis import FUNVISISPoller
-from vigia_eew.ingest.rest_geofon import GEOFONPoller
-from vigia_eew.ingest.rest_usgs import RESTReconciler
-from vigia_eew.ingest.ws_emsc import WSIngestor
+from vigia_eew.ingest.registry import SOURCE_REGISTRY, IngestContext, validate_registry
 from vigia_eew.logging_conf import configure_logging
 from vigia_eew.models import SeismicEvent, SeverityLevel
 from vigia_eew.notify.controller import AlertController
@@ -89,42 +86,22 @@ class Application:
     # --- Testable wiring ---
 
     def _build_supervisor(self, raw_queue: asyncio.Queue[RawMessage], processor: Any) -> Supervisor:
-        """Registers the agent's tasks based on the enabled sources (RNF-04)."""
+        """Registers the agent's tasks from the source registry (RNF-04, REQ-ING-009).
+
+        Every enabled source contributes one supervised task, in registration
+        order. Adding a network does not come back here.
+        """
+        validate_registry()
+        ctx = IngestContext(
+            cfg=self.cfg,
+            state=self.state,
+            queue=raw_queue,
+            agent_state=self._agent_state,
+        )
         sup = Supervisor(handle_signals=False)  # signals are handled by the main thread
-        if self.cfg.sources_emsc.enabled:
-            sup.add(
-                "ws",
-                lambda: WSIngestor(self.cfg.sources_emsc, raw_queue, state=self._agent_state).run(),
-            )
-        if self.cfg.sources_usgs.enabled:
-            sup.add(
-                "rest",
-                lambda: RESTReconciler(
-                    self.cfg.sources_usgs,
-                    self.cfg.reference,
-                    self.cfg.filter,
-                    self.state,
-                    raw_queue,
-                    timezone=self.cfg.notification.timezone,
-                ).run(),
-            )
-        if self.cfg.sources_funvisis.enabled:
-            sup.add(
-                "funvisis",
-                lambda: FUNVISISPoller(self.cfg.sources_funvisis, raw_queue).run(),
-            )
-        if self.cfg.sources_geofon.enabled:
-            sup.add(
-                "geofon",
-                lambda: GEOFONPoller(
-                    self.cfg.sources_geofon,
-                    self.cfg.reference,
-                    self.cfg.filter,
-                    self.state,
-                    raw_queue,
-                    timezone=self.cfg.notification.timezone,
-                ).run(),
-            )
+        for spec in SOURCE_REGISTRY:
+            if spec.is_enabled(self.cfg):
+                sup.add(spec.task_name, spec.make_task(ctx))
         sup.add("pipeline", lambda: processor.run())
         return sup
 
