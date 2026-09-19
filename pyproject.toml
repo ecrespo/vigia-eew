@@ -26,18 +26,37 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
-# Dependencias de runtime (ver IMPLEMENTATION-PLAN §5).
+# Runtime dependencies (see IMPLEMENTATION-PLAN §5).
+#
+# Every range is bounded above (REQ-DEP-005, CA-101.7): without a ceiling, `uv lock`
+# adopts a new major the moment it is published and nobody decides anything. The
+# project already lived that -- the declared floors had drifted four majors behind
+# the resolved version for websockets and eight for textual.
+#
+# The ceiling sits where the package is allowed to break: the next major for a 1.0+
+# package, the next *minor* for a 0.x one, because that is where 0.x breaks. `<1` on
+# httpx 0.28 would be a ceiling in name only.
+#
+# Floors were raised with the ceilings, which the plan did not anticipate: after
+# T-111 moved the runtime to >=3.13, the old floors no longer *resolve* -- Pillow
+# 10.0.0 and pydantic-core 2.16.1 fall back to building from source and fail. The
+# numbers used are the minimums the constitution's stack table already declares.
+# Verified: `uv sync --resolution lowest-direct` installs exactly these floors and
+# `pip-audit` reports nothing against that tree.
 dependencies = [
-    "websockets>=12.0",        # EMSC WS with native keepalive (RF-01/ADR-009)
-    "httpx>=0.27",             # async USGS REST (RF-05/ADR-009)
-    "pydantic>=2.6",           # model and config validation (RF-07/RF-24)
-    "desktop-notifier>=5.0",   # cross-platform toast (RF-14)
-    "platformdirs>=4.0",       # per-OS state/config paths (RF-06/RF-10)
-    "tzdata>=2024.1",          # America/Caracas zone on Win/macOS (RF-18/RNF-12)
-    "pystray>=0.19",           # system tray icon (RF-34/ADR-012)
-    "Pillow>=12.3.0,<13",      # tray icon image, pystray requirement (RF-34). Floor is the
-                               # security floor: >=10.0 admitted 34 published advisories
-    "textual>=0.60",           # headless TUI dashboard (RF-36/ADR-013)
+    "websockets>=16.0,<17",       # EMSC WS with native keepalive (RF-01/ADR-009)
+    "httpx>=0.28,<0.29",          # async USGS REST (RF-05/ADR-009)
+    "pydantic>=2.13,<3",          # model and config validation (RF-07/RF-24)
+    "desktop-notifier>=6.0,<7",   # cross-platform toast (RF-14)
+    "platformdirs>=4.3,<5",       # per-OS state/config paths (RF-06/RF-10)
+    "tzdata>=2024.1",             # America/Caracas zone on Win/macOS (RF-18/RNF-12).
+                                  # No ceiling, by amendment E-04: IANA data, not an
+                                  # API -- its major is the publication year, so a
+                                  # ceiling would freeze the timezone rules themselves
+    "pystray>=0.19.5,<0.20",      # system tray icon (RF-34/ADR-012)
+    "Pillow>=12.3.0,<13",         # tray icon image, pystray requirement (RF-34). Floor
+                                  # is the security floor: >=10.0 admitted 34 advisories
+    "textual>=8.2,<9",            # headless TUI dashboard (RF-36/ADR-013)
 ]
 
 [project.urls]

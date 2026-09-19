@@ -182,6 +182,15 @@
 - **Archivos**: `pyproject.toml`, `uv.lock`
 - **Depende de**: T-111
 - **Done**: 8 de 9 rangos con techo; un `uv lock` no adopta una mayor nueva sin cambio explícito.
+- **Desviación (2026-09-19), registrada según la nota de cierre de este archivo**: la tarea preveía
+  *solo* techos. Al ejecutarla se descubrió que, tras T-111 subir el runtime a `>=3.13`, **siete de
+  los nueve pisos ya no resuelven**: `uv sync --resolution lowest-direct` intenta compilar Pillow
+  10.0.0 y pydantic-core 2.16.1 desde fuente y falla. Sin corregirlos, T-118 no podría existir —
+  su gate fallaría por error de compilación, no por aviso. Los pisos se suben en esta misma tarea,
+  a los mínimos que **la tabla de stack de la constitución ya declaraba** (pydantic ≥ 2.13,
+  httpx ≥ 0.28, websockets ≥ 16, textual ≥ 8.2); los tres restantes se fijaron empíricamente al
+  mínimo que resuelve y audita limpio. La especificación decía menos de lo necesario, no algo
+  distinto: el techo sin piso resoluble no cumple REQ-DEP-005.
 
 ### [ ] T-118 · Gate de resolución mínima
 - **Qué**: resolver también con la versión mínima que cada rango permite, y auditar ese árbol en CI.

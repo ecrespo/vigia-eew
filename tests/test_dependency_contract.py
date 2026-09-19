@@ -208,3 +208,41 @@ def test_pip_is_past_the_arbitrary_write_advisory() -> None:
     precisely where a package is installed from an index.
     """
     assert _locked_version("pip") >= (26, 2)
+
+
+#: Amendment E-04. IANA data, not an API: its major version is the year of
+#: publication, so a ceiling would freeze the timezone rules themselves.
+CEILING_EXEMPT = {"tzdata"}
+
+
+def test_every_range_has_a_ceiling_except_the_declared_exemption() -> None:
+    """CA-101.7: eight of the nine ranges are bounded above.
+
+    Without one, `uv lock` adopts a new major the moment it is published
+    and nobody decides anything. The project already lived that: the
+    declared floors and the resolved versions had drifted by four majors
+    for websockets and by eight for textual.
+    """
+    ranges = _declared_ranges()
+    unbounded = {name for name, spec in ranges.items() if "<" not in spec}
+    assert unbounded == CEILING_EXEMPT
+    assert len(ranges) - len(CEILING_EXEMPT) == 8
+
+
+def test_each_ceiling_is_the_next_breaking_version() -> None:
+    """CA-101.7: the ceiling sits where the package is allowed to break.
+
+    For a 1.0+ package that is the next major. For a 0.x package it is the
+    next *minor*, because that is where 0.x breaks -- `<1` on httpx 0.28
+    would be a ceiling in name only.
+    """
+    for name, spec in _declared_ranges().items():
+        if name in CEILING_EXEMPT:
+            continue
+        floor = re.search(r">=([\d.]+)", spec).group(1).split(".")
+        ceiling = re.search(r"<([\d.]+)", spec).group(1).split(".")
+        if floor[0] == "0":
+            expected = ["0", str(int(floor[1]) + 1)]
+        else:
+            expected = [str(int(floor[0]) + 1)]
+        assert ceiling == expected, f"{name}{spec}: expected ceiling <{'.'.join(expected)}"

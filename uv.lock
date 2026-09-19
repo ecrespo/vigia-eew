@@ -1477,24 +1477,24 @@ security = [
 [package.metadata]
 requires-dist = [
     { name = "bandit", marker = "extra == 'security'", specifier = ">=1.8" },
-    { name = "desktop-notifier", specifier = ">=5.0" },
-    { name = "httpx", specifier = ">=0.27" },
+    { name = "desktop-notifier", specifier = ">=6.0,<7" },
+    { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "pillow", specifier = ">=12.3.0,<13" },
     { name = "pip-audit", marker = "extra == 'security'", specifier = ">=2.7" },
-    { name = "platformdirs", specifier = ">=4.0" },
+    { name = "platformdirs", specifier = ">=4.3,<5" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
-    { name = "pydantic", specifier = ">=2.6" },
+    { name = "pydantic", specifier = ">=2.13,<3" },
     { name = "pyinstaller", marker = "extra == 'packaging'", specifier = ">=6.0" },
-    { name = "pystray", specifier = ">=0.19" },
+    { name = "pystray", specifier = ">=0.19.5,<0.20" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
-    { name = "textual", specifier = ">=0.60" },
+    { name = "textual", specifier = ">=8.2,<9" },
     { name = "tzdata", specifier = ">=2024.1" },
-    { name = "websockets", specifier = ">=12.0" },
+    { name = "websockets", specifier = ">=16.0,<17" },
 ]
 provides-extras = ["dev", "packaging", "security"]
 
