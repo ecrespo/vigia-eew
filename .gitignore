@@ -25,9 +25,6 @@ report.xml
 pip-audit-report.json
 trivy-fs.json
 
-# uv
-uv.lock
-
 # IDE
 .idea/
 .vscode/
