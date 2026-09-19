@@ -14,8 +14,9 @@ They follow what a gap in each one costs:
   the first two is a missed alert or a duplicate one; in the third, a
   `config.toml` the agent cannot start from; in the fourth, a migration that
   loses somebody's history. None of them is visible until it happens for real.
-- **ingest** -- adapters over four external formats. A gap costs one source
-  while three others still feed the pipeline (RNF-04).
+- **ingest, tiles** -- adapters over somebody else's service. A gap costs one
+  source while three others still feed the pipeline (RNF-04), or it costs the
+  map while the list it sits on keeps working (REQ-MAP-002).
 - **notify, autostart, tray, tui** -- bind to a toolkit, an OS service
   manager or a display. Much of what is left uncovered cannot be exercised
   without the real thing; the opt-in GUI smokes cover that part.
@@ -44,7 +45,7 @@ THRESHOLDS: tuple[tuple[tuple[str, ...], float], ...] = (
         ),
         85.0,
     ),
-    (("vigia_eew/ingest/",), 70.0),
+    (("vigia_eew/ingest/", "vigia_eew/tiles.py"), 70.0),
     (
         (
             "vigia_eew/notify/",

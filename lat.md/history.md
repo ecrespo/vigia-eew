@@ -112,3 +112,44 @@ them. Prose about the map is fine; an import of it is not.
 
 Both views read **one** query object. The list owns it and the map reads it, so a filter cannot
 come to mean two different things in two views of one history.
+
+## Tiles are fetched only because somebody is looking at a map
+
+[[src/vigia_eew/tiles.py#TileClient]] is the only place in the agent that contacts the tile
+provider, and nothing constructs one except the map window.
+
+Amendment E-06 is what makes that worth enforcing rather than intending. Until v1.0 the agent
+talked to seismic sources and, once, to a geolocation service; a map adds a **new kind of
+destination**, and the amendment bounds it to the time the map is on screen.
+
+So the bound is structural, not behavioural: a test walks every import in the package and fails if
+any module other than the map imports the tile client. "No requests while closed" is a property of
+who can call this at all — and a second caller added in a year is exactly what would break it
+quietly.
+
+### The cost that cannot be engineered away is declared instead
+
+While the map is open, the provider can infer roughly which area the user is looking at.
+
+The cache reduces it and fetching on demand bounds it. Neither removes it, and pretending
+otherwise would be worse than saying so — see ADR-027 and E-06.
+
+### What the provider is owed
+
+Every request identifies the application, its version and a contact, because the tile usage policy
+asks for it and an anonymous client is blocked. `© OpenStreetMap contributors` is on screen
+wherever a tile is.
+
+A viewport asks for the tiles it shows and no others: no speculative ring, no neighbouring zoom
+levels, no prefetching. Tiles off the edge of the grid are left out rather than requested — there
+is no tile x=-1, and asking for one is a 404 the provider counts against this client.
+
+### The cache is a cache, and the difference matters
+
+It lives in the platform's **cache** directory, not the data one, because losing it costs a
+download while losing [[lat.md/state#Persisted state]] costs a repeated alert. The user, or the
+operating system, can clear it without consequence.
+
+It is bounded and least-recently-used, so it cannot grow into somebody's disk. A failure is never
+cached as an answer: caching "no" would leave a zone blank long after the network came back, which
+looks exactly like a map that is simply broken.
