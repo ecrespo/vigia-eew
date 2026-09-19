@@ -414,7 +414,7 @@
 
 ## Fase 6 · Histórico persistente
 
-### [ ] T-142 · Esquema y almacén del histórico
+### [x] 2026-09-19 T-142 · Esquema y almacén del histórico
 - **Qué**: tabla `events` con sus cinco índices, versión en `PRAGMA user_version` y migración
   aplicada en transacción al abrir.
 - **REQ**: REQ-HIS-003 · **CA**: CA-111.6
@@ -425,7 +425,7 @@
 - **Nota**: probado sobre archivo SQLite real. Las migraciones fallan en los detalles del motor, no
   en la lógica.
 
-### [ ] T-143 · Registro de veredictos desde el pipeline
+### [x] 2026-09-19 T-143 · Registro de veredictos desde el pipeline
 - **Qué**: cada evento evaluado se registra con su veredicto y, si fue descartado, su motivo; los
   duplicados quedan enlazados con la fila que prevaleció.
 - **REQ**: REQ-HIS-001, REQ-HIS-002, REQ-HIS-006 · **CA**: CA-111.1, 111.2, 111.3, 111.4, 111.5, 111.9
@@ -436,13 +436,17 @@
 - **Nota**: es el criterio que protege el Art. 1. Si esta tarea puede hacer fallar una alerta, está
   mal hecha.
 
-### [ ] T-144 · Retención y poda **[P]**
+### [x] 2026-09-19 T-144 · Retención y poda **[P]**
 - **Qué**: retención configurable con valor por defecto declarado, y poda de lo anterior.
 - **REQ**: REQ-HIS-004 · **CA**: CA-111.7
 - **Archivos**: `src/vigia_eew/history.py`, `src/vigia_eew/config.py`
 - **Depende de**: T-142
 - **Done**: con retención de un día, las entradas anteriores desaparecen y las posteriores
   permanecen.
+- **Valor por defecto declarado**: **90 días**, y declarado como estimación. La poda ocurre **al
+  abrir el archivo**, no en una tarea periódica: el histórico solo crece mientras el agente corre,
+  así que acotarlo en cada arranque es equivalente y con mucha menos maquinaria — el mismo
+  argumento que `state.py` ya zanjó para la poda al registrar.
 - **Nota**: el volumen estimado —decenas de miles de filas al año— es **una estimación, no una
   medición**. Medir en el primer uso real y ajustar el valor por defecto con el dato.
 
@@ -574,6 +578,7 @@ T-138 es el corte del release.
 | 2026-09-19 | **F3 · T-121 a T-129** | ✅ 9/9 | Registro declarativo de fuentes (`ingest/registry.py`, cada fuente dueña de su traducción), `wiring.py` separando composición de orquestación (**`app.py`: fan-out 22→8, 450→272 líneas**), correlación punta a punta con enlace en la deduplicación, contrato de hilos, lote P3 (**duplicación en `src/`: 0 clones, 0 %**), complejidad ≤ 12 y backlinks verificados. 432 passed, gate completo en verde. Dos hallazgos: `lat check` no valida enlaces dentro de `.py` (cubierto por `tests/test_backlinks.py`), y 17 pruebas de composición se movieron con la composición |
 | 2026-09-19 | **F4 · T-130, T-131, T-133, T-134** | ✅ 4/5 · T-132 fuera del corte | Alcance de la garantía declarado en README + bandeja + log; spike de Wayland con veredicto medido en GNOME Shell 50.1; smoke del binario en los 3 jobs de empaquetado; base de Linux fijada a `ubuntu-22.04`. **D-1 resuelta: `[SHOULD]`**, T-132 fuera del corte. Evidencia decisiva del spike: Mutter no anuncia `zwlr_layer_shell_v1` → ningún cliente puede cumplir la garantía en GNOME, con ningún toolkit. Desviación: ENTER pasa a acusar la alerta Tk (paridad con la TUI, CA-106.7, y es lo que permite conducir el smoke sin puntero) |
 | 2026-09-19 | **F5 · T-135 a T-137, T-139 a T-141** | ✅ 6/6 | Escritor de configuración con `tomlkit` (ADR-019): preserva los comentarios, escribe por temporal y renombrado con respaldo previo, detecta la edición externa por huella y valida **antes** de tocar el disco. Panel **generado desde el esquema** (ADR-020), 43 campos en 10 secciones, con la validación de sección para la regla entre umbrales. Prioridad por fuente y deduplicador que **conserva el mejor, no el primero**. 539 passed con las pruebas de GUI real incluidas (Xvfb), gate completo en verde. Dos desviaciones registradas en T-135 y T-136, ambas por cifras de la especificación que se movieron al documentar los campos nuevos. **Hallazgo aparte:** `lat.md/` estaba en `.gitignore`, así que `tests/test_backlinks.py` y `lat check` leían archivos que solo existían en la máquina que los escribió — verificado clonando; corregido y con guarda propia |
+| 2026-09-19 | **F6 · T-142 a T-144** | ✅ 3/3 | `history.py`: una fila por **llegada evaluada**, con el motivo de cada descarte. SQLite (E-05, ADR-025) con `PRAGMA user_version`, migraciones en transacción y los cinco índices; tiempos en ISO-8601 (el orden lexicográfico es el cronológico) y `distance_km` almacenada, no recalculada. `HistoryWriter` mantiene la escritura **fuera** del camino llegada→presentación: cola, tarea supervisada e hilo de trabajo. Lo mejor-esfuerzo se verifica en tres niveles: almacén que no abre, escritura que falla, registrador que lanza — ninguno cuesta una alerta. Retención configurable, 90 días por defecto **declarado como estimación**. 575 passed (con GUI real bajo Xvfb), 568 también en 3.13; binario reconstruido y smoke completo `--acknowledge` en verde con `tomlkit` y `sqlite3` empaquetados. **Hallazgo:** la suite escribía un `history.sqlite3` real en el directorio de datos del desarrollador — el mismo descuido que `conftest.py` ya evitaba un directorio más allá; corregido. **Condición de corte 10 sigue abierta**: F6 entrega el almacén, F7 la vista consultable |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
