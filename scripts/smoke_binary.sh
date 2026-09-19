@@ -56,9 +56,19 @@ fi
 # name -- it is found by having focus, not by title. ENTER acknowledges
 # (configure_undismissable), and acknowledging is the only way `--simulate`
 # exits, so a clean exit *is* the assertion.
-xdotool key --clearmodifiers Return 2>/dev/null
-
-for _ in $(seq 40); do kill -0 "$PID" 2>/dev/null || break; sleep 0.25; done
+#
+# Sent repeatedly rather than once, because `alert_presented` is logged when
+# the controller creates the window and the window takes focus a moment
+# later -- under Xvfb, with no window manager arbitrating, sometimes several
+# moments later. A single keystroke into that gap goes nowhere and the smoke
+# fails on a binary that is fine. Observed: two runs of the same binary, one
+# pass and one failure. Extra keystrokes after the window is gone land on the
+# root window and do nothing, so retrying costs nothing and removes the race.
+for _ in $(seq 40); do
+    kill -0 "$PID" 2>/dev/null || break
+    xdotool key --clearmodifiers Return 2>/dev/null
+    sleep 0.25
+done
 if kill -0 "$PID" 2>/dev/null; then
     echo "FAIL: the alert was presented but never acknowledged; the agent did not exit" >&2
     kill -9 "$PID" 2>/dev/null

@@ -133,6 +133,16 @@ Saving from the panel preserves every comment in the file, keeps the previous ve
 `config.toml.bak`, and refuses to overwrite an edit you made elsewhere while it was open.
 **Changes apply when the agent restarts** — the configuration is read once, at startup.
 
+**"History…"** opens the record of every earthquake the agent evaluated — alerted or discarded,
+and *why* it was discarded — as a filterable table with a map beside it. It is a local SQLite
+file that never leaves your machine; entries older than `[history] retention_days` (90 by
+default) are removed when the agent starts, and `enabled = false` turns the whole thing off.
+
+The map draws tiles from OpenStreetMap, **only while it is open**, and caches them so a zone you
+have already looked at is not requested again. While it is open the provider can infer roughly
+which area you are looking at; with no connection and nothing cached the map says it is
+unavailable and the table carries on working.
+
 **Most useful settings** (see `config.toml.example` for the full schema):
 
 ```toml

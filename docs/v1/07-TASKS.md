@@ -454,7 +454,7 @@
 
 ## Fase 7 · Listado y mapa del histórico
 
-### [ ] T-145 · Consulta del histórico
+### [x] 2026-09-19 T-145 · Consulta del histórico
 - **Qué**: filtros por rango de fechas, magnitud, distancia, veredicto y red, con orden y paginación.
 - **REQ**: REQ-HIS-005 · **CA**: CA-111.8
 - **Archivos**: `src/vigia_eew/history.py`
@@ -462,7 +462,7 @@
 - **Done**: una consulta por magnitud mínima y rango de fechas devuelve exactamente las entradas que
   cumplen ambos criterios.
 
-### [ ] T-146 · Vista de listado
+### [x] 2026-09-19 T-146 · Vista de listado
 - **Qué**: tabla con los sismos del histórico, ordenable y filtrable, con el motivo de descarte
   visible.
 - **REQ**: REQ-HIS-005 · **CA**: CA-111.8
@@ -472,7 +472,7 @@
 - **Nota**: **esta tarea entrega el valor completo del histórico.** El mapa añade lectura geográfica
   encima; si hubiera que recortar alcance, se recorta el mapa, no esto.
 
-### [ ] T-147 · Cliente de teselas con caché
+### [x] 2026-09-19 T-147 · Cliente de teselas con caché
 - **Qué**: descarga bajo demanda desde OpenStreetMap, caché en el directorio de caché por plataforma
   con desalojo, cliente identificado y proveedor inyectable.
 - **REQ**: REQ-MAP-001, REQ-MAP-005 · **CA**: CA-112.1, 112.3, 112.8
@@ -480,8 +480,11 @@
 - **Depende de**: T-133 *(el smoke del binario debe existir antes de meter Pillow↔Tk en el empaquetado)*
 - **Done**: **con el mapa cerrado no hay una sola petición** al proveedor; una zona ya visitada no se
   vuelve a solicitar; las pruebas corren sin red con el proveedor simulado.
+- **Cómo se verifica lo primero**: por **quién puede llamar**, no observando tráfico. Una prueba
+  recorre los imports del paquete y falla si algún módulo que no sea el mapa importa el cliente de
+  teselas. Un segundo llamador añadido dentro de un año es justo lo que lo rompería en silencio.
 
-### [ ] T-148 · Mapa sobre lienzo Tk
+### [x] 2026-09-19 T-148 · Mapa sobre lienzo Tk
 - **Qué**: composición de teselas, símbolos escalados por magnitud, distinción entre alertados y
   descartados, leyenda y **atribución visible**.
 - **REQ**: REQ-MAP-002, REQ-MAP-003, REQ-MAP-005 · **CA**: CA-112.2, 112.4, 112.5, 112.7
@@ -489,8 +492,15 @@
 - **Depende de**: T-146, T-147
 - **Done**: sin red y sin caché el mapa se declara no disponible **y el listado sigue funcionando**;
   la atribución "© OpenStreetMap contributors" es visible.
+- **Decisión propia**: sin teselas **tampoco se dibujan los símbolos**. Un punto en un píxel sin
+  geografía debajo es un dibujo de ninguna parte con aspecto de mapa; decir que el mapa no está
+  disponible es la respuesta honesta, y el listado ya está en pantalla respondiendo la pregunta.
+- **Riesgo de empaquetado verificado**: `PIL.ImageTk` y la extensión `_imagingtk` **sí** quedan en
+  el binario (comprobado en el TOC de PyInstaller). **Lo que el smoke no cubre**: su ruta de
+  ejecución. El binario solo expone `--simulate`, que no abre el mapa, así que la evidencia es
+  estática más la prueba de GUI real fuera del binario. Candidato para F8.
 
-### [ ] T-149 · Filtros compartidos entre listado y mapa
+### [x] 2026-09-19 T-149 · Filtros compartidos entre listado y mapa
 - **Qué**: un solo conjunto de filtros que gobierna las dos vistas.
 - **REQ**: REQ-MAP-004 · **CA**: CA-112.6
 - **Depende de**: T-148
@@ -579,6 +589,7 @@ T-138 es el corte del release.
 | 2026-09-19 | **F4 · T-130, T-131, T-133, T-134** | ✅ 4/5 · T-132 fuera del corte | Alcance de la garantía declarado en README + bandeja + log; spike de Wayland con veredicto medido en GNOME Shell 50.1; smoke del binario en los 3 jobs de empaquetado; base de Linux fijada a `ubuntu-22.04`. **D-1 resuelta: `[SHOULD]`**, T-132 fuera del corte. Evidencia decisiva del spike: Mutter no anuncia `zwlr_layer_shell_v1` → ningún cliente puede cumplir la garantía en GNOME, con ningún toolkit. Desviación: ENTER pasa a acusar la alerta Tk (paridad con la TUI, CA-106.7, y es lo que permite conducir el smoke sin puntero) |
 | 2026-09-19 | **F5 · T-135 a T-137, T-139 a T-141** | ✅ 6/6 | Escritor de configuración con `tomlkit` (ADR-019): preserva los comentarios, escribe por temporal y renombrado con respaldo previo, detecta la edición externa por huella y valida **antes** de tocar el disco. Panel **generado desde el esquema** (ADR-020), 43 campos en 10 secciones, con la validación de sección para la regla entre umbrales. Prioridad por fuente y deduplicador que **conserva el mejor, no el primero**. 539 passed con las pruebas de GUI real incluidas (Xvfb), gate completo en verde. Dos desviaciones registradas en T-135 y T-136, ambas por cifras de la especificación que se movieron al documentar los campos nuevos. **Hallazgo aparte:** `lat.md/` estaba en `.gitignore`, así que `tests/test_backlinks.py` y `lat check` leían archivos que solo existían en la máquina que los escribió — verificado clonando; corregido y con guarda propia |
 | 2026-09-19 | **F6 · T-142 a T-144** | ✅ 3/3 | `history.py`: una fila por **llegada evaluada**, con el motivo de cada descarte. SQLite (E-05, ADR-025) con `PRAGMA user_version`, migraciones en transacción y los cinco índices; tiempos en ISO-8601 (el orden lexicográfico es el cronológico) y `distance_km` almacenada, no recalculada. `HistoryWriter` mantiene la escritura **fuera** del camino llegada→presentación: cola, tarea supervisada e hilo de trabajo. Lo mejor-esfuerzo se verifica en tres niveles: almacén que no abre, escritura que falla, registrador que lanza — ninguno cuesta una alerta. Retención configurable, 90 días por defecto **declarado como estimación**. 575 passed (con GUI real bajo Xvfb), 568 también en 3.13; binario reconstruido y smoke completo `--acknowledge` en verde con `tomlkit` y `sqlite3` empaquetados. **Hallazgo:** la suite escribía un `history.sqlite3` real en el directorio de datos del desarrollador — el mismo descuido que `conftest.py` ya evitaba un directorio más allá; corregido. **Condición de corte 10 sigue abierta**: F6 entrega el almacén, F7 la vista consultable |
+| 2026-09-19 | **F7 · T-145 a T-149** | ✅ 5/5 | Consulta del histórico con filtros que combinan en AND, orden por columna y paginación — sin SQL construido en ningún punto: filtros estáticos con valores ligados y el orden como búsqueda en una tabla de sentencias. Listado con el **motivo** de cada descarte en palabras (es/en), mapa de OpenStreetMap bajo demanda con caché LRU fuera del directorio de estado, y **un solo filtro gobernando las dos vistas**. 663 passed con las pruebas de ventana real incluidas. Verificado rompiendo: AND→OR (5 fallos), caché desactivada y anillo de prefetch (4 fallos), control ausente en el panel (nombra las 4 rutas). **Tres hallazgos:** (1) `ImageTk.PhotoImage` sin `master` se liga al intérprete equivocado —`image "pyimage2" doesn't exist`— y solo aparece con dos raíces Tk; (2) **la suite descargaba teselas reales de OpenStreetMap** (12 archivos en `~/.cache/vigia-eew/`), ahora aislada y con guarda propia; (3) el smoke del binario era **intermitente** —una sola pulsación de ENTER contra una ventana que aún no tenía foco—, corregido y verificado 5 veces seguidas. El CI pasa a ejecutar las pruebas de ventana real: ya instalaba Xvfb, y `config_panel` sube de 66 % a 91 % medido |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—
