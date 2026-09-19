@@ -156,11 +156,16 @@ async def test_quit_binding_requests_stop_and_exits():
 
 
 async def test_quit_without_supervisor_exits_cleanly():
+    """In simulate mode nothing is bound, and `q` must still exit.
+
+    "Does not raise" was the old assertion, and a binding that did nothing at
+    all passed it. What matters is that the app is actually gone afterwards.
+    """
     app = VigiaTuiApp(state=AgentState())
     async with app.run_test() as pilot:
         await pilot.press("q")
         await pilot.pause()
-    # no supervisor bound (simulate mode); q must still exit without raising
+        assert not app.is_running
 
 
 async def test_on_start_runs_after_mount():

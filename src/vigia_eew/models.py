@@ -35,6 +35,19 @@ def _require_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC)
 
 
+def _require_aware_utc(value: datetime) -> datetime:
+    """Same as `_require_utc` for a field that cannot be None.
+
+    Written as a check rather than an `assert`: assertions are removed by
+    `python -O`, and this one is the last thing standing between a naive
+    datetime and the freshness rules that decide whether to alert.
+    """
+    validated = _require_utc(value)
+    if validated is None:  # pragma: no cover - a required field is never None
+        raise ValueError("a required timestamp cannot be None")
+    return validated
+
+
 def classify_severity(magnitude: float, info_max: float, warning_max: float) -> SeverityLevel:
     """Classifies the severity of an earthquake by its magnitude (RF-13).
 
@@ -108,9 +121,7 @@ class EventSignature(BaseModel):
     @field_validator("time_utc")
     @classmethod
     def _validate_utc(cls, v: datetime) -> datetime:
-        validated = _require_utc(v)
-        assert validated is not None  # time_utc is required here
-        return validated
+        return _require_aware_utc(v)
 
 
 class AlertedId(BaseModel):
@@ -140,9 +151,7 @@ class DetectedLocation(BaseModel):
     @field_validator("detected_utc")
     @classmethod
     def _validate_utc(cls, v: datetime) -> datetime:
-        validated = _require_utc(v)
-        assert validated is not None  # detected_utc is required here
-        return validated
+        return _require_aware_utc(v)
 
 
 class AppState(BaseModel):

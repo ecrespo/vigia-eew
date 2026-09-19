@@ -29,18 +29,16 @@ The HTTP client (`httpx`) and `sleep` are injected so it's testable without netw
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
-from vigia_eew.config import Filter, GEOFONSource, ReferencePoint
+from vigia_eew.config import GEOFONSource
 from vigia_eew.ingest import RawMessage, mapping
-from vigia_eew.state import StateStore
-from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
+from vigia_eew.ingest.fdsn import FDSNPoller
+from vigia_eew.timeutil import floor_starttime_ms
 
 _SleepFn = Callable[[float], Any]
 
@@ -49,33 +47,10 @@ _SleepFn = Callable[[float], Any]
 _KM_PER_DEGREE = 111.195
 
 
-class GEOFONPoller:
+class GEOFONPoller(FDSNPoller[GEOFONSource]):
     """Polls GEOFON `fdsnws-event` (text format) with a persisted cursor; emits `RawMessage`."""
 
-    def __init__(
-        self,
-        cfg: GEOFONSource,
-        reference: ReferencePoint,
-        filter_cfg: Filter,
-        state: StateStore,
-        output: asyncio.Queue[RawMessage],
-        *,
-        client: httpx.AsyncClient | None = None,
-        sleep: _SleepFn = asyncio.sleep,
-        timezone: str = "UTC",
-        now: Clock = default_clock,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        self._cfg = cfg
-        self._reference = reference
-        self._filter = filter_cfg
-        self._state = state
-        self._output = output
-        self._client = client
-        self._sleep = sleep
-        self._timezone = timezone
-        self._now = now
-        self._log = logger or logging.getLogger("vigia_eew.ingest.geofon")
+    LOGGER_NAME = "vigia_eew.ingest.geofon"
 
     def _build_params(self, cursor_ms: int | None) -> dict[str, Any]:
         """Builds the FDSN query parameters (API-SPEC §4.2)."""
@@ -162,14 +137,6 @@ class GEOFONPoller:
             if moment is not None and (max_time is None or moment > max_time):
                 max_time = moment
         return max_time
-
-    async def run(self) -> None:
-        """Perpetual polling loop. Only exits when cancelled."""
-        if self._client is None:
-            self._client = httpx.AsyncClient()
-        while True:
-            wait = await self.poll_once()
-            await self._sleep(wait)
 
 
 def _is_earthquake(feature: dict[str, str]) -> bool:

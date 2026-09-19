@@ -64,5 +64,18 @@ def test_uninstall_unloads_and_removes(tmp_path):
     assert any("unload" in c for c in runner.cmds)
 
 
-def test_uninstall_without_install_does_not_fail(tmp_path):
-    _installer(tmp_path, _Runner()).uninstall()  # must not raise
+def test_uninstall_without_install_is_a_no_op(tmp_path):
+    """Uninstalling what was never installed leaves nothing behind and asks launchd nothing.
+
+    "Does not raise" was the old assertion, and an empty `uninstall()` passed
+    it just as well.
+    """
+    runner = _Runner()
+    installer = _installer(tmp_path, runner)
+
+    installer.uninstall()
+
+    assert not installer.path.exists()
+    # launchctl is still asked to unload -- unloading something absent is
+    # harmless and is what makes the uninstall idempotent.
+    assert runner.cmds == [["launchctl", "unload", "-w", str(installer.path)]]
