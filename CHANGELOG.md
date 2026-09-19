@@ -4,6 +4,19 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [Sin publicar]
+
+### Changed
+- **BREAKING — minimum Python is now 3.13** (`requires-python = ">=3.13"`, REQ-DEP-004).
+  3.12 entered *security-only* maintenance: it still receives security patches but no
+  longer receives bug fixes, which is not a runtime a project about to call itself 1.0.0
+  should be declaring as its floor. Ratified as constitutional amendment E-01
+  (`docs/sdd/specs/00-CONSTITUTION.md`). **Installs on 3.11 or 3.12 will now be refused by
+  the resolver**; users on those versions must upgrade their interpreter. This is the
+  moment to do it -- after a 1.0.0 the same change would require a major version.
+  The declaration is now consistent across all five places it lives: `requires-python`,
+  ruff's `target-version`, mypy's `python_version` and the three binary build jobs.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added

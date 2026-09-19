@@ -9,7 +9,9 @@ in this suite.
 
 from __future__ import annotations
 
+import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETUP_ENV_ACTION = REPO_ROOT / ".github" / "actions" / "setup-python-env" / "action.yml"
 SECURITY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "security.yml"
+BUILD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "build.yml"
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+
+#: Amendment E-01. 3.12 entered security-only, so the floor declared by a
+#: project about to call itself 1.0.0 would be a runtime that no longer
+#: receives bug fixes.
+RUNTIME_FLOOR = "3.13"
 
 #: Resolved only on macOS or Windows, so a Linux-only audit never sees them
 #: (docs/code-audit/analysis/deps-omitidas-plataforma.txt).
@@ -106,3 +115,54 @@ def test_composition_is_audited_on_every_platform() -> None:
     audit_job = workflow.split("pip-audit:", 1)[1].split("\n  # ", 1)[0]
     for runner in ("ubuntu-latest", "macos-latest", "windows-latest"):
         assert runner in audit_job
+
+
+def test_the_runtime_floor_is_declared_once_per_place() -> None:
+    """CA-101.5: pyproject, ruff and mypy declare the same floor.
+
+    Three declarations of the same fact drift apart silently: ruff and mypy
+    keep linting against a grammar and a stdlib the project no longer
+    supports, and nothing fails to say so.
+    """
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    major, minor = RUNTIME_FLOOR.split(".")
+
+    assert config["project"]["requires-python"] == f">={RUNTIME_FLOOR}"
+    assert config["tool"]["ruff"]["target-version"] == f"py{major}{minor}"
+    assert config["tool"]["mypy"]["python_version"] == RUNTIME_FLOOR
+
+
+def test_no_classifier_advertises_an_unsupported_runtime() -> None:
+    """CA-101.5: the package does not claim a version it no longer supports.
+
+    A classifier is what PyPI shows and what a resolver reads; leaving 3.11
+    there invites an install that `requires-python` will then refuse.
+    """
+    config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    classifiers = config["project"]["classifiers"]
+    assert "Programming Language :: Python :: 3.11" not in classifiers
+    assert "Programming Language :: Python :: 3.12" not in classifiers
+    assert f"Programming Language :: Python :: {RUNTIME_FLOOR}" in classifiers
+
+
+def test_the_three_build_jobs_pin_the_declared_floor() -> None:
+    """CA-101.5: the three binaries are built on the runtime the project declares.
+
+    These three live in a CI file nobody opens while editing pyproject.toml,
+    which is exactly why they were still on 3.11.
+    """
+    workflow = BUILD_WORKFLOW.read_text()
+    pinned = re.findall(r'python-version: "([^"]+)"', workflow)
+    assert len(pinned) == 3, f"expected three build jobs, found {len(pinned)}"
+    assert set(pinned) == {RUNTIME_FLOOR}
+
+
+def test_compatibility_is_verified_on_two_versions() -> None:
+    """CA-101.6: the suite runs on the floor and on the version above it.
+
+    A floor verified on one interpreter is a floor nobody has tested moving
+    off, which is how the next bump becomes a surprise.
+    """
+    workflow = CI_WORKFLOW.read_text()
+    assert RUNTIME_FLOOR in workflow
+    assert "3.14" in workflow

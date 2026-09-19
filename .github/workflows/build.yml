@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - run: pip install -e ".[packaging]"
       - run: pwsh packaging/build_windows.ps1
       - uses: actions/upload-artifact@v4
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - run: pip install -e ".[packaging]"
       - run: bash packaging/build_macos.sh
       - uses: actions/upload-artifact@v4
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - run: pip install -e ".[packaging]"
       - name: Instalar fpm (empaquetado .deb/.rpm)
         run: |

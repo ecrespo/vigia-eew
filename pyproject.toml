@@ -11,7 +11,7 @@ name = "vigia-eew"
 version = "0.6.0"                       # semantic versioning (RF-27)
 description = "Real-time desktop seismic alert agent, impossible to ignore (EMSC push + USGS backup)."
 readme = "README.md"
-requires-python = ">=3.11"             # uses stdlib tomllib (RNF-11)
+requires-python = ">=3.13"             # amendment E-01: 3.12 is security-only (RNF-11)
 license = { file = "LICENSE" }
 authors = [{ name = "Ernesto Crespo", email = "ecrespo@gmail.com" }]
 keywords = ["earthquake", "sismo", "alerta", "eew", "emsc", "usgs", "venezuela"]
@@ -21,9 +21,8 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
 
@@ -91,13 +90,13 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
 warn_unused_ignores = true
 
