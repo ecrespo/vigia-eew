@@ -103,6 +103,7 @@ class GEOFONPoller(FDSNPoller[GEOFONSource]):
             self._state.save()
         return interval
 
+    # @lat: [[ingestion#Ingestion sources#GEOFON — an independent global network, USGS's sibling#Why GEOFON parses pipe-delimited text, not GeoJSON]]  # noqa: E501 - a heading path is one token and does not wrap
     async def _process_text(self, text: Any) -> int | None:
         """Parses the pipe-delimited body, enqueues events; returns the max origin time (ms)."""
         if not isinstance(text, str):

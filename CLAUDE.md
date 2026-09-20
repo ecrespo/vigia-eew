@@ -11,6 +11,48 @@ REST polling as backups — global redundancy and Venezuela-only local coverage)
 radius/magnitude. Single process per machine, no single point of failure (each machine runs
 its own agent).
 
+## Knowledge layers — query these before grepping
+
+Three context layers. **`lat.md/` ships with the repository; the other two are local**
+and build once per machine (commands below). They exist so you don't rediscover the
+codebase on every task.
+
+1. **Intent — `lat.md/`** (**versioned, hand-authored, does not regenerate**). Why the
+   code is the way it is: design decisions, domain rules, rejected alternatives. Run
+   `lat search "<topic>"` **before** changing behavior — several constants that look
+   arbitrary (dedup thresholds, the block-list country filter, the local-day boundary)
+   are deliberate. `lat check` must pass before a task is done; it validates every
+   `[[link]]` and every `# @lat:` backlink in the source.
+   It is versioned because the code links into it and the gate resolves those links:
+   `tests/test_backlinks.py` fails when a link points at a section that is not there,
+   and it cannot tell "renamed" from "absent" if the directory does not ship. That
+   reverses `e2b83ca`, which un-tracked it when `lat check` — which skips silently on
+   an absent directory — was the only consumer. See the note in `.gitignore`.
+2. **Structure — `.codegraph/`** (local, self-maintaining). What the code is:
+   `codegraph query <sym>`, `codegraph callers/callees <sym>`, `codegraph impact <sym>`
+   before any non-trivial edit, `codegraph explore <area>` to orient. Never grep for
+   definitions or callers when this is present.
+3. **Meaning — `graphify-out/`** (local, gitignored). How it fits together across code
+   *and* docs: `graphify query "<question>"`, `graphify path "A" "B"`,
+   `graphify explain "X"`. `GRAPH_REPORT.md` is a one-page orientation. Edges are
+   tagged EXTRACTED (explicit in source) vs INFERRED (resolved) — verify INFERRED
+   against CodeGraph before trusting it.
+
+Layers 2 and 3 rebuild themselves from the AST; **`lat.md/` is maintained by hand and
+cannot be rebuilt**. If you make a non-obvious design decision, add or update its
+section and link the code with `[[src/path.py#Symbol]]` plus a `# @lat: [[section-id]]`
+comment at the code site. Both directions are checked: `lat check` validates the links
+that run from the layer into the code, and `tests/test_backlinks.py` validates the ones
+written inside the code — in both shapes, which is how eight `# @lat:` comments were
+found pointing at sections that had been renamed.
+
+```bash
+npm i -g @colbymchenry/codegraph lat.md && uv tool install graphifyy   # one-time
+codegraph init        # build .codegraph/ — tree-sitter, zero LLM tokens
+graphify update .     # build graphify-out/ — AST only, zero LLM tokens
+lat check             # validate the intent layer (finishing gate)
+```
+
 ## Commands
 
 ```bash

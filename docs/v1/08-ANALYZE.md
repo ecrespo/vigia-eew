@@ -229,6 +229,27 @@ debilitarlo.
 
 ---
 
+### V-11 · El inventario del kit de análisis contó un entorno virtual 🟡
+
+**Qué se observó.** `docs/reverse-sdd/analysis/inventory.md` declara **251.255 líneas de Python** y
+dos manifiestos, uno de ellos `.venv_sandbox/lib/python3.10/site-packages/pkg_resources/tests/...`.
+La generación recorrió un `.venv_sandbox/` que estaba en el árbol.
+
+**Qué implica y qué no.** Las cifras de **volumen** de `inventory.*` y `gaps.md` están infladas.
+Los informes que se apoyan en el grafo de dependencias y en el análisis por archivo
+—`01-INFORME-EVALUACION.md`, `01-INFORME-AUDITORIA.md`, que son los que este kit cita— tienen su
+alcance en `src/` y no lo están. Se detectó al resolver el merge con `develop`, cuya copia
+independiente del mismo kit mide 9.197 líneas sobre el mismo código.
+
+**Por qué se registra en vez de arreglarse aquí.** Regenerar el kit cambiaría cifras que 49 tareas
+citan por su identificador (`P1-1`, `P3-4`, la duplicación del 0,95 %). Eso es trabajo con su propia
+verificación, no un arreglo al paso durante una resolución de conflictos.
+
+**Qué hacer.** Regenerar el kit sobre un árbol limpio después del corte y comparar: si los hallazgos
+por archivo se mantienen, lo único que cambia son los recuentos.
+
+---
+
 ## 4. Resultado por categoría del checklist
 
 ### Cobertura — ✅ con salvedad declarada

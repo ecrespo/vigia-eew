@@ -24,4 +24,11 @@ full history; see docs/code-audit/01-INFORME-AUDITORIA.md.
 paths = [
   '''docs/code-audit/analysis/detect-secrets\.json''',
   '''docs/code-audit/analysis/detect-secrets-history\.json''',
+  # Same category, arrived with the merge of `develop`: gitleaks' own report
+  # from that audit. Its single finding is a SHA-256 *content digest* out of
+  # `graphify-out/cache/stat-index.json` -- a cache index keyed by file hash,
+  # in a directory that is not even versioned. The generic-api-key rule matches
+  # it on entropy alone, which is the report being scanned as though it were
+  # the thing it reports on.
+  '''docs/code-audit/analysis/gitleaks-worktree\.json''',
 ]

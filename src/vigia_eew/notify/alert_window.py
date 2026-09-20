@@ -35,6 +35,7 @@ def take_focus(root: Any) -> None:
     root.focus_force()
 
 
+# @lat: [[notification#Non-dismissable alert contract]]
 def configure_undismissable(
     root: Any,
     *,

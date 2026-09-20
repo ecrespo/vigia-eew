@@ -1,0 +1,23 @@
+Semgrep 1.173.0 — INSTALADO PERO NO EJECUTABLE EN ESTE ENTORNO
+==============================================================
+Comando intentado:
+  semgrep scan --config=p/python --config=p/secrets --config=p/owasp-top-ten \
+    --metrics=off --json -o docs/code-audit/analysis/semgrep.json src/
+
+Error (extracto real):
+  requests.exceptions.ProxyError: HTTPSConnectionPool(host='semgrep.dev', port=443):
+  Max retries exceeded with url: /c/p/python
+  (Caused by ProxyError('Unable to connect to proxy',
+   OSError('Tunnel connection failed: 403 Forbidden')))
+
+Confirmado contra el estado del proxy del entorno ($HTTPS_PROXY/__agentproxy/status):
+  {"kind":"connect_rejected",
+   "detail":"gateway answered 403 to CONNECT (policy denial or upstream failure)",
+   "host":"semgrep.dev:443"}
+
+Causa: los rulesets p/* se descargan del registry de semgrep.dev, bloqueado por la
+politica de red de este entorno de auditoria. NO es un problema del repositorio.
+
+Mitigacion existente en el repo: .github/workflows/security.yml ejecuta semgrep en
+cada PR a main, y .pre-commit-config.yaml lo ejecuta en pre-push. La dimension 5
+(SAST) queda cubierta por bandit en esta auditoria + semgrep en CI.

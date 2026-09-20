@@ -112,6 +112,7 @@ class Deduplicator:
                 return DedupVerdict(result, linked, signature.event_id or None)
         return DedupVerdict("new", None)
 
+    # @lat: [[state#Pruning happens where the state grows]]
     def register(self, ev: SeismicEvent, *, superseding: str | None = None) -> None:
         """Marks an event as alerted (id + signature) and persists the state (RF-10).
 
@@ -143,6 +144,7 @@ class Deduplicator:
             return False
         return self._rank[arriving] < self._rank[alerted]
 
+    # @lat: [[pipeline#Deduplication]]
     def _matches(self, ev: SeismicEvent, signature: EventSignature) -> bool:
         """True if `ev` and `signature` are the same earthquake per the heuristic (RF-09)."""
         distance = haversine_km(ev.lat, ev.lon, signature.lat, signature.lon)

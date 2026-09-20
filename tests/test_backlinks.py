@@ -29,16 +29,34 @@ EXPECTED_BACKLINKS = {
 }
 
 
-#: Anchored on `lat.md/` so that a nested type annotation -- `list[list[str]]`
-#: closes with the same two brackets -- is not mistaken for a wiki link.
+#: Two shapes reach the intent layer from the code, and both have to resolve.
+#:
+#: The long one is written inside a docstring, where the surrounding prose
+#: needs the reader to know which file is meant. It is anchored on `lat.md/`
+#: so that a nested type annotation -- `list[list[str]]` closes with the same
+#: two brackets -- is not mistaken for a wiki link.
+#:
+#: The short one is the `@lat` comment above a definition: the tool's own
+#: syntax, which takes the document name bare. Both shapes were already in this
+#: codebase and only the first was checked here, which is how eight of the
+#: eleven comments came to point at sections renamed out from under them.
+#: (Spelled without the marker on purpose -- `lat check` scans this file too,
+#: and an example in a comment is indistinguishable from a real link.)
 _BACKLINK = re.compile(r"\[\[(lat\.md/[^\]]+)\]\]")
+_AT_LAT = re.compile(r"#\s*@lat:\s*\[\[([^\]]+)\]\]")
 
 
 def _backlinks() -> list[tuple[Path, str]]:
+    """Every link from the code into the intent layer, in either shape."""
     found = []
     for module in SRC.rglob("*.py"):
-        for link in _BACKLINK.findall(module.read_text()):
+        text = module.read_text()
+        for link in _BACKLINK.findall(text):
             found.append((module, link))
+        for link in _AT_LAT.findall(text):
+            # The short form names the document without the folder, so the
+            # folder is put back before the link is resolved.
+            found.append((module, f"lat.md/{link}"))
     return found
 
 

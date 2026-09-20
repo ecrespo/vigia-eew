@@ -88,6 +88,7 @@ class GeoFilter:
             return FilterVerdict(False, "freshness")
         return FilterVerdict(True, None)
 
+    # @lat: [[pipeline#Processing pipeline#Filtering: radius, magnitude, country, freshness#Country filter is a block-list, not an allow-list]]  # noqa: E501 - a heading path is one token and does not wrap
     def _passes_country(self, ev: SeismicEvent) -> bool:
         """Reject only if the event is positively inside another country (RF-37)."""
         if not self._cfg.country_filter or self._user_country is None or self._country_of is None:
@@ -95,6 +96,7 @@ class GeoFilter:
         event_country = self._country_of(ev.lat, ev.lon)
         return event_country is None or event_country == self._user_country
 
+    # @lat: [[pipeline#Processing pipeline#Filtering: radius, magnitude, country, freshness#Freshness uses the local calendar day rather than UTC]]  # noqa: E501 - a heading path is one token and does not wrap
     def _passes_freshness(self, ev: SeismicEvent) -> bool:
         """Reject events that didn't originate on the current local day (RF-40).
 

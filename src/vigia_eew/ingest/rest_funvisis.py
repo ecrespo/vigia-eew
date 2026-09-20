@@ -82,6 +82,7 @@ class FUNVISISPoller:
         await self._process_features(features)
         return interval
 
+    # @lat: [[ingestion#Ingestion sources#FUNVISIS — Venezuela-only local coverage#Why FUNVISIS uses a seen-set instead of a cursor]]  # noqa: E501 - a heading path is one token and does not wrap
     async def _process_features(self, features: Any) -> None:
         """Emits features whose id is new; the first poll only seeds the seen-set."""
         if not isinstance(features, list):

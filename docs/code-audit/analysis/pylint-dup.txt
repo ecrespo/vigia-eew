@@ -1,0 +1,50 @@
+************* Module vigia_eew.autostart.windows_task
+src/vigia_eew/autostart/windows_task.py:1:0: R0801: Similar lines in 2 files
+==vigia_eew.ingest.rest_geofon:[68:77]
+==vigia_eew.ingest.rest_usgs:[58:67]
+        self._cfg = cfg
+        self._reference = reference
+        self._filter = filter_cfg
+        self._state = state
+        self._output = output
+        self._client = client
+        self._sleep = sleep
+        self._timezone = timezone
+        self._now = now (duplicate-code)
+src/vigia_eew/autostart/windows_task.py:1:0: R0801: Similar lines in 2 files
+==vigia_eew.ingest.rest_geofon:[165:186]
+==vigia_eew.ingest.rest_usgs:[142:158]
+            moment = _time_ms(feature)
+            if moment is not None and (max_time is None or moment > max_time):
+                max_time = moment
+        return max_time
+
+    async def run(self) -> None:
+        """Perpetual polling loop. Only exits when cancelled."""
+        if self._client is None:
+            self._client = httpx.AsyncClient()
+        while True:
+            wait = await self.poll_once()
+            await self._sleep(wait)
+
+
+def _retry_after_seconds(headers: Any, *, default: float) -> float:
+    """Reads `Retry-After` (seconds) from the headers; uses `default` if missing or invalid.""" (duplicate-code)
+src/vigia_eew/autostart/windows_task.py:1:0: R0801: Similar lines in 2 files
+==vigia_eew.ingest.rest_geofon:[206:213]
+==vigia_eew.ingest.rest_usgs:[158:169]
+    raw = headers.get("Retry-After")
+    if raw is None:
+        return default
+    try:
+        return max(default, float(raw))
+    except (TypeError, ValueError):
+        return default
+
+
+def _time_ms(feature: dict[str, Any]) -> int | None:
+    """Extracts `properties.time` (epoch ms) from a Feature, or None if not an int.""" (duplicate-code)
+
+-----------------------------------
+Your code has been rated at 9.99/10
+

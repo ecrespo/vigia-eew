@@ -92,6 +92,7 @@ class Wiring:
         if resolve_location:
             self.resolve_automatic_reference()
 
+    # @lat: [[state#Reference point resolution happens once, in the application layer]]
     def resolve_automatic_reference(self) -> None:
         """Resolves the reference point by IP when there is no manual one (RF-33)."""
         cached = self.state.cached_location()

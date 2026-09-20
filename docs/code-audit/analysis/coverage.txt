@@ -1,0 +1,50 @@
+............................................................             [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.3-final-0 ________________
+
+Name                                           Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------------------
+src/vigia_eew/__init__.py                          6      2      0      0    67%   13-14
+src/vigia_eew/agent_state.py                      24      0      0      0   100%
+src/vigia_eew/app.py                             227     80     46      6    64%   192-194, 204, 208, 210, 218->exit, 241, 269-274, 277-307, 362-368, 377-391, 395->exit, 400-416, 419-438, 442-451
+src/vigia_eew/autostart/__init__.py               29      2     10      1    92%   49-50
+src/vigia_eew/autostart/linux_systemd.py          42      0      2      0   100%
+src/vigia_eew/autostart/macos_launchagent.py      38      1      2      0    98%   42
+src/vigia_eew/autostart/windows_task.py           29      1      0      0    97%   52
+src/vigia_eew/backoff.py                          12      0      4      0   100%
+src/vigia_eew/cli.py                              49      5     18      3    88%   76-78, 98-100, 115
+src/vigia_eew/config.py                          126      0     22      0   100%
+src/vigia_eew/geo.py                              10      0      0      0   100%
+src/vigia_eew/geocode.py                          61      0     24      0   100%
+src/vigia_eew/geoloc.py                           41      1      4      0    98%   68
+src/vigia_eew/i18n.py                             30      2     10      1    92%   43->39, 47-48
+src/vigia_eew/ingest/__init__.py                  10      0      0      0   100%
+src/vigia_eew/ingest/rest_funvisis.py             70      3     18      3    93%   64, 95, 115
+src/vigia_eew/ingest/rest_geofon.py              116     13     38      9    86%   103, 124-125, 137-138, 145, 167->142, 174, 195, 198-199, 200->202, 209, 212-213
+src/vigia_eew/ingest/rest_usgs.py                 96     11     26      8    84%   99, 117-118, 136-137, 141, 144->139, 151, 161, 164-165, 172
+src/vigia_eew/ingest/ws_emsc.py                   65      1     12      2    96%   96->89, 117
+src/vigia_eew/logging_conf.py                     33      0      2      1    97%   60->69
+src/vigia_eew/models.py                           82      0      8      0   100%
+src/vigia_eew/notify/__init__.py                   1      0      0      0   100%
+src/vigia_eew/notify/alert_window.py              72     31     12      1    52%   70, 90-92, 97-165, 168-173
+src/vigia_eew/notify/controller.py                56      1     10      1    97%   66, 103->exit
+src/vigia_eew/notify/presentation.py              30      0      0      0   100%
+src/vigia_eew/notify/queue.py                     73      2     10      2    95%   77->79, 90->92, 129-130
+src/vigia_eew/notify/sound.py                     65      6     20      4    88%   65, 71, 82-85, 90
+src/vigia_eew/notify/toast.py                     32      3      2      1    88%   63-67
+src/vigia_eew/pipeline/__init__.py                 1      0      0      0   100%
+src/vigia_eew/pipeline/dedup.py                   31      0      6      0   100%
+src/vigia_eew/pipeline/filter.py                  32      0     10      0   100%
+src/vigia_eew/pipeline/normalize.py               85      5     24      5    91%   169, 186, 204, 212, 222
+src/vigia_eew/pipeline/processor.py               42      4     10      1    90%   67->exit, 77-80
+src/vigia_eew/simulation.py                       13      0      0      0   100%
+src/vigia_eew/state.py                            75      4     16      4    89%   72-76, 86->exit, 92->exit, 93->92, 110->exit
+src/vigia_eew/subprocess_env.py                   14      0      6      0   100%
+src/vigia_eew/supervisor.py                       82     19     16      3    73%   106, 113-122, 127-135
+src/vigia_eew/timeutil.py                         28      0      4      0   100%
+src/vigia_eew/tray.py                             66      3      8      2    93%   63, 136-137, 138->exit
+src/vigia_eew/tui.py                              86      1     10      1    98%   152
+------------------------------------------------------------------------------------------
+TOTAL                                           2080    201    410     59    89%
+Coverage JSON written to file docs/code-audit/analysis/coverage.json
+345 passed, 3 skipped in 7.51s

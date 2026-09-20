@@ -56,6 +56,7 @@ class AlertQueue:
         """True if presentation of new alerts is paused (RF-34)."""
         return self._paused
 
+    # @lat: [[notification#Pausing delays presentation, it never drops events]]
     def pause(self) -> None:
         """Stops showing new alerts; they keep queuing up without being lost (RF-34)."""
         self._paused = True
@@ -115,6 +116,7 @@ class AlertQueue:
         self._log.info("alert_shown id=%s", self._current.id)
 
 
+# @lat: [[architecture#Asyncio and Tkinter split across two threads]]
 class AsyncioTkBridge:
     """Thread-safe bridge from the asyncio loop to the Tkinter thread (ADR-006)."""
 
