@@ -20,6 +20,11 @@ VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('$RAIZ/pyproject.
 
 echo "== Vigía-eew $VERSION — empaquetado macOS =="
 
+# Same gate CI runs before any packaging job (REQ-OPS-007): the bundle's icon
+# is `packaging/icon.icns`, and a missing or malformed one gives an .app with
+# the generic application icon and no error anywhere.
+python3 "$RAIZ/scripts/check_packaging_assets.py" "$RAIZ"
+
 echo "-- 1/2: .app (PyInstaller) --"
 pyinstaller --noconfirm --clean --distpath "$DIST" --workpath "$RAIZ/build" \
     "$RAIZ/packaging/vigia-eew.spec"
@@ -27,8 +32,16 @@ APP="$DIST/Vigía-eew.app"
 test -d "$APP"
 
 echo "-- 2/2: .dmg --"
+# Drag-to-install layout: the .app beside a symlink to /Applications. A .dmg
+# with only the bundle in it leaves the user to find Applications themselves,
+# and an agent left running from the mounted image disappears on eject.
+STAGE="$RAIZ/build/dmg"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
 DMG="$DIST/vigia-eew-$VERSION.dmg"
 rm -f "$DMG"
-hdiutil create -volname "Vigía-eew" -srcfolder "$APP" -ov -format UDZO "$DMG"
+hdiutil create -volname "Vigía-eew" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 
 echo "== Listo: $DMG (sin firmar/notarizar — ver cabecera del script) =="

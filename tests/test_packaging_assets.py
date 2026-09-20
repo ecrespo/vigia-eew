@@ -82,7 +82,7 @@ def test_a_png_of_invalid_resolution_is_reported(tmp_path: Path) -> None:
         _wav(assets / name)
     (assets / "countries.geojson").write_text('{"type": "FeatureCollection", "features": []}')
 
-    reported = checker.problems(tmp_path)
+    reported = checker.problems(tmp_path, checker.REQUIRED)
 
     assert len(reported) == 1
     assert "tray_icon.png" in reported[0]
@@ -191,3 +191,164 @@ def test_the_declared_base_is_pinned_by_digest_or_version() -> None:
     """CA-107.6: re-running the build does not move the compatibility floor."""
     job = _job("linux")
     assert re.search(r"ubuntu-\d\d\.\d\d", job), "the base carries no version"
+
+
+# --- Launcher assets: the desktop entry and the icons it names (T-150) ---
+
+
+def _desktop(path: Path, *, icon: str = "vigia-eew", actions: str = "Settings;") -> None:
+    path.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=Vigía-eew\n"
+        "Exec=vigia-eew\n"
+        f"Icon={icon}\n"
+        "Terminal=false\n"
+        "Categories=System;Monitor;\n"
+        f"Actions={actions}\n"
+        "\n"
+        "[Desktop Action Settings]\n"
+        "Name=Settings\n"
+        "Exec=vigia-eew --settings\n",
+        encoding="utf-8",
+    )
+
+
+def test_the_desktop_entry_in_the_repository_is_valid() -> None:
+    """The entry ships as a file, not as a heredoc inside the build script."""
+    checker = _checker()
+    assert checker.desktop_problem(REPO_ROOT / "packaging" / "vigia-eew.desktop") is None
+
+
+def test_an_entry_without_the_required_keys_is_reported(tmp_path: Path) -> None:
+    """A desktop file missing `Exec` installs fine and launches nothing."""
+    checker = _checker()
+    path = tmp_path / "vigia-eew.desktop"
+    path.write_text("[Desktop Entry]\nType=Application\nName=Vigía-eew\n", encoding="utf-8")
+
+    problem = checker.desktop_problem(path)
+
+    assert problem is not None and "Exec" in problem
+
+
+def test_an_entry_naming_an_icon_nobody_installs_is_reported(tmp_path: Path) -> None:
+    """`Icon=` is a theme lookup: a name with no file behind it is a grey square."""
+    checker = _checker()
+    path = tmp_path / "vigia-eew.desktop"
+    _desktop(path, icon="vigia-eew-missing")
+
+    problem = checker.desktop_problem(path)
+
+    assert problem is not None and "vigia-eew-missing" in problem
+
+
+def test_a_declared_action_without_a_group_is_reported(tmp_path: Path) -> None:
+    """A declared action with nothing behind it is a menu item that does nothing.
+
+    The Settings action is the one door into the configuration on a session
+    where the tray menu never opens; losing it silently is the bug this
+    packaging work exists to close.
+    """
+    checker = _checker()
+    path = tmp_path / "vigia-eew.desktop"
+    _desktop(path, actions="Settings;History;")
+
+    problem = checker.desktop_problem(path)
+
+    assert problem is not None and "History" in problem
+
+
+def test_the_repository_icon_set_is_complete_and_valid() -> None:
+    """Every size the packagers install, plus the .ico and .icns, in one check."""
+    assert _checker().problems(REPO_ROOT) == []
+
+
+def test_a_truncated_ico_is_reported(tmp_path: Path) -> None:
+    checker = _checker()
+    path = tmp_path / "icon.ico"
+    path.write_bytes(b"\x00\x00\x01\x00\x07\x00")  # header promising 7 images, carrying none
+
+    assert checker.ico_problem(path) is not None
+
+
+def test_an_icns_that_lies_about_its_length_is_reported(tmp_path: Path) -> None:
+    checker = _checker()
+    path = tmp_path / "icon.icns"
+    path.write_bytes(b"icns" + struct.pack(">I", 999999) + b"ic07" + struct.pack(">I", 8))
+
+    assert checker.icns_problem(path) is not None
+
+
+# --- What the three packagers actually install (T-150) ---
+
+PACKAGING = REPO_ROOT / "packaging"
+
+
+def test_every_build_script_runs_the_asset_gate() -> None:
+    """CI gates on the resources; a local build did not, and shipped without them.
+
+    The v1.0.0 `.deb` was built on a developer machine, where nothing ran
+    `check_packaging_assets.py`, and installed a binary with no desktop entry
+    behind it.
+    """
+    for script in ("build_linux.sh", "build_macos.sh", "build_windows.ps1"):
+        assert "check_packaging_assets.py" in (PACKAGING / script).read_text(encoding="utf-8"), (
+            f"{script} packages without validating what it packages"
+        )
+
+
+def test_the_linux_packages_install_the_entry_and_the_icons() -> None:
+    """A binary in /usr/bin is not an application: nothing shows it to the user."""
+    script = (PACKAGING / "build_linux.sh").read_text(encoding="utf-8")
+    assert "/usr/share/applications/vigia-eew.desktop" in script
+    assert "usr/share/icons/hicolor/" in script
+    assert "scalable/apps/vigia-eew.svg" in script
+    assert "MAPEOS_FPM" in script, "the .rpm path installs a bare binary again"
+
+
+def test_the_deb_refreshes_the_caches_it_invalidates() -> None:
+    """An entry copied into place is invisible until the two caches are rebuilt."""
+    script = (PACKAGING / "build_linux.sh").read_text(encoding="utf-8")
+    assert "update-desktop-database" in script
+    assert "gtk-update-icon-cache" in script
+    assert "postinst" in script and "postrm" in script
+
+
+def test_the_appimage_uses_the_repository_entry_not_one_of_its_own() -> None:
+    """One mark, one entry: the heredoc and its generated placeholder are gone."""
+    script = (PACKAGING / "build_linux.sh").read_text(encoding="utf-8")
+    assert "[Desktop Entry]" not in script, "the build script draws its own entry again"
+    assert 'install -Dm 0644 "$RAIZ/packaging/vigia-eew.desktop" "$APPDIR/vigia-eew.desktop"' in (
+        script
+    )
+
+
+def test_the_spec_embeds_an_icon_on_the_platforms_that_carry_one() -> None:
+    spec = (PACKAGING / "vigia-eew.spec").read_text(encoding="utf-8")
+    assert 'icon=_ICO if sys.platform == "win32" else None' in spec
+    assert "icon=_ICNS" in spec
+    assert "CFBundleShortVersionString" in spec, "the bundle ships with no version"
+
+
+def test_the_windows_installer_offers_a_way_into_the_configuration() -> None:
+    """The Start Menu shortcut with `--settings` is the Windows desktop action."""
+    iss = (PACKAGING / "vigia-eew.iss").read_text(encoding="utf-8")
+    assert 'Parameters: "--settings"' in iss
+    assert "[Icons]" in iss and "{group}" in iss
+    assert "--uninstall-autostart" in iss, "uninstalling leaves the scheduled task behind"
+
+
+def test_the_windows_job_installs_the_compiler_the_installer_needs() -> None:
+    """Without ISCC the script skips the installer and does not fail; CI must not."""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+    job = _job("windows")
+    assert "innosetup" in job.lower()
+    assert "vigia-eew-*-setup.exe" in workflow, "the installer is built and never published"
+
+
+def test_the_desktop_entry_carries_the_settings_action() -> None:
+    """The action the launcher shows on right-click, and what GNOME search finds."""
+    entry = (PACKAGING / "vigia-eew.desktop").read_text(encoding="utf-8")
+    assert "Actions=" in entry
+    assert "[Desktop Action Settings]" in entry
+    assert "Exec=vigia-eew --settings" in entry

@@ -6,12 +6,14 @@ Compartida por los tres SO; cada `build_*.{sh,ps1}` invoca
 instalado (`uv pip install -e .` o el wheel de F8-1) — así los `assets/*.wav` se
 resuelven igual que en una instalación normal, sin asumir la disposición del checkout.
 
-No se define un icono (`icon=...`): no hay ningún asset gráfico en el repo todavía.
-Para agregar uno, colocar `packaging/icon.ico` (Windows) / `packaging/icon.icns`
-(macOS) y referenciarlo aquí.
+Los iconos los genera `packaging/make_icons.py` a partir de una sola marca:
+`packaging/icon.ico` (Windows) y `packaging/icon.icns` (macOS, hasta 1024 px para
+pantallas Retina). En Linux el icono no va dentro del binario -- va al tema
+hicolor, y lo instala `build_linux.sh`.
 """
 
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_data_files
 
@@ -21,6 +23,12 @@ block_cipher = None
 
 _PKG_DIR = os.path.dirname(vigia_eew.__file__)
 _ASSETS_DIR = os.path.join(_PKG_DIR, "assets")
+_VERSION = vigia_eew.__version__
+
+# PyInstaller only embeds an icon on the platform that understands the format:
+# `.ico` into the Windows PE resource, `.icns` into the macOS bundle.
+_ICO = os.path.join(SPECPATH, "icon.ico")
+_ICNS = os.path.join(SPECPATH, "icon.icns")
 
 # `desktop_notifier.common` carga su ícono default con
 # `importlib.resources.files("desktop_notifier.resources")` — una referencia dinámica
@@ -65,6 +73,7 @@ exe = EXE(
     a.datas,
     [],
     name="vigia-eew",
+    icon=_ICO if sys.platform == "win32" else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -81,16 +90,25 @@ exe = EXE(
 
 # macOS: además del binario onefile de arriba, produce el `.app` que `build_macos.sh`
 # empaqueta en un `.dmg` (F8-3). En Linux/Windows este bloque no se ejecuta.
-import sys  # noqa: E402 (después de las variables de PyInstaller, por claridad)
-
 if sys.platform == "darwin":
     app = BUNDLE(
         exe,
         name="Vigía-eew.app",
-        icon=None,
+        icon=_ICNS,
         bundle_identifier="com.ecrespo.vigia-eew",
+        version=_VERSION,
         info_plist={
             "NSHighResolutionCapable": True,
+            # False on purpose: the agent keeps a Dock icon and a menu-bar item.
+            # LSUIElement=True would hide it from the Dock and the app switcher,
+            # and on a machine where the tray is the only way in that is one way
+            # in fewer (the same failure the Linux desktop entry answers).
             "LSUIElement": False,
+            "CFBundleName": "Vigía-eew",
+            "CFBundleDisplayName": "Vigía-eew",
+            "CFBundleShortVersionString": _VERSION,
+            "CFBundleVersion": _VERSION,
+            "LSApplicationCategoryType": "public.app-category.utilities",
+            "NSHumanReadableCopyright": "© Ernesto Crespo · GPL-3.0-or-later",
         },
     )

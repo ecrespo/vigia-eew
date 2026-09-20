@@ -43,7 +43,7 @@ jobs:
           path: dist/*
 
   windows:
-    name: Windows .exe
+    name: Windows .exe + instalador
     runs-on: windows-latest
     needs: assets
     steps:
@@ -52,6 +52,11 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[packaging]"
+      # El instalador (accesos directos de Inicio, incluido el de configuración)
+      # necesita ISCC.exe; sin él el script produce solo el .exe y no falla, así
+      # que la ausencia pasaría inadvertida en la release.
+      - name: Instalar Inno Setup
+        run: choco install innosetup --no-progress -y
       - run: pwsh packaging/build_windows.ps1
       # Presentation only, for the same reason as macOS. Git Bash ships with
       # the Windows runner, so the same script serves all three.
@@ -61,7 +66,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-exe
-          path: dist/vigia-eew.exe
+          path: |
+            dist/vigia-eew.exe
+            dist/vigia-eew-*-setup.exe
 
   macos:
     name: macOS .dmg
