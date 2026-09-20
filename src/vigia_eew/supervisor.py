@@ -24,7 +24,7 @@ Factory = Callable[[], Awaitable[Any]]
 _SleepFn = Callable[[float], Any]
 
 
-# @lat: [[architecture#The supervisor must outlive every failure]]
+# @lat: [[architecture#Supervisor that restarts its children]]
 class Supervisor:
     """Supervises asyncio tasks, restarting them on failure; coordinated shutdown."""
 
@@ -57,12 +57,29 @@ class Supervisor:
         return [name for name, _ in self._tasks]
 
     def request_stop(self) -> None:
-        """Requests an orderly shutdown of the supervisor and its tasks."""
+        """Requests an orderly shutdown of the supervisor and its tasks.
+
+        Sticky on purpose: a supervisor that has been asked to stop stays
+        stopped, whether or not it had started yet. Nothing in the agent
+        re-runs one, and silently resuming after a stop would be worse than
+        refusing to.
+        """
         self._stop.set()
 
     async def run(self) -> None:
-        """Starts and supervises all tasks until a stop is requested."""
-        self._stop.clear()
+        """Starts and supervises all tasks until a stop is requested.
+
+        A stop requested *before* this is awaited is honoured, not discarded:
+        `Application` publishes its loop and supervisor and only then calls
+        `run()`, so a quit landing in that gap reaches `request_stop` through
+        `call_soon_threadsafe` -- which the loop runs before this coroutine's
+        first step. Clearing the event here would erase the one that had just
+        been set and then wait for it forever. Same failure as the shutdown
+        race of ADR-002, one step further along: a stop lost to ordering.
+        """
+        if self._stop.is_set():
+            self._log.info("supervisor_stopped_before_start")
+            return
         guards = [
             asyncio.create_task(self._guard(name, factory), name=name)
             for name, factory in self._tasks
@@ -95,9 +112,7 @@ class Supervisor:
                 break
             attempt += 1
             wait = self._backoff(attempt)
-            self._log.info(
-                "task_restarting name=%s attempt=%d wait_s=%.1f", name, attempt, wait
-            )
+            self._log.info("task_restarting name=%s attempt=%d wait_s=%.1f", name, attempt, wait)
             await self._sleep(wait)
 
     def _backoff(self, attempt: int) -> float:

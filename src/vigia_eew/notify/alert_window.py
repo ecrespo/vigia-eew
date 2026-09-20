@@ -35,14 +35,30 @@ def take_focus(root: Any) -> None:
     root.focus_force()
 
 
-# @lat: [[notification#The alert is not dismissable by design]]
-def configure_undismissable(root: Any, *, on_close_attempt: Callable[[], None]) -> None:
-    """Applies the undismissable window policy (RF-15, RF-16, RF-19)."""
+# @lat: [[notification#Non-dismissable alert contract]]
+def configure_undismissable(
+    root: Any,
+    *,
+    on_close_attempt: Callable[[], None],
+    on_acknowledge: Callable[[], None] | None = None,
+) -> None:
+    """Applies the undismissable window policy (RF-15, RF-16, RF-19).
+
+    Every way out of this window in one place: the X does not close it,
+    Escape does not close it, losing focus brings it back -- and ENTER
+    acknowledges, which is the only way out there is.
+    """
     root.overrideredirect(True)  # no title bar or window buttons
     root.attributes("-topmost", True)  # always above everything else
     root.protocol("WM_DELETE_WINDOW", on_close_attempt)  # the X does not close it
     root.bind("<Escape>", lambda _e: "break")  # Escape does not close it
     root.bind("<FocusOut>", lambda _e: take_focus(root))  # re-raise if it loses focus
+    if on_acknowledge is not None:
+        # ENTER acknowledges, as it does in the TUI (CA-106.7). It also makes
+        # the alert usable without a pointing device, and lets the release
+        # pipeline drive a real alert with a keystroke (REQ-OPS-008).
+        root.bind("<Return>", lambda _e: on_acknowledge())
+        root.bind("<KP_Enter>", lambda _e: on_acknowledge())
 
 
 class AlertWindow:
@@ -97,7 +113,9 @@ class AlertWindow:
         root = self._root
         color = severity_color(self._data.severity)
         root.title(f"Vigía-eew · {t('seismic_alert_title', self._locale)}")
-        configure_undismissable(root, on_close_attempt=self._close_attempt)
+        configure_undismissable(
+            root, on_close_attempt=self._close_attempt, on_acknowledge=self.acknowledge
+        )
         if self._fullscreen:
             root.attributes("-fullscreen", True)
             window_width = root.winfo_screenwidth()

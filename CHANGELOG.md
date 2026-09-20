@@ -4,6 +4,112 @@ Todas las versiones siguen [Versionado Semántico](https://semver.org/lang/es/) 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). Ver el procedimiento
 de publicación en `packaging/RELEASING.md`.
 
+## [Sin publicar]
+
+## [1.0.0] - 2026-09-19
+
+The first stable release. What makes it 1.0.0 is not the feature list: it is that
+the product now **says where its central promise holds and where it does not**, and
+that every claim in this file is checked by something that fails when it stops
+being true.
+
+### Added
+- **Configuration panel** (REQ-GUI-001..005) — every setting is reachable from the
+  tray without opening a text file: 43 fields in 11 collapsible sections, validated
+  as you type against the same schema the agent starts with, with per-section and
+  whole-file "restore defaults". The controls are **derived from the configuration
+  models**, so a field added to the code appears in the panel by itself. The menu
+  keeps **both** ways in: the panel and the file, because the file is what lets you
+  version it with Git, copy it between machines and edit it over SSH.
+- **Writable `config.toml` that survives being written** (REQ-CFG-009..012) — saving
+  preserves every comment in the file, writes through a temporary file and an atomic
+  rename with the previous version kept as `config.toml.bak`, refuses to overwrite an
+  edit made elsewhere while the panel was open, and validates before the disk is
+  touched. Only the fields actually changed are written, so `[reference]` stays absent
+  and the IP location detection keeps working.
+- **Network priority** (REQ-ING-011, REQ-PIP-010, REQ-GUI-008) — each source declares
+  a priority, ordered from a list in the panel, and when the same earthquake arrives
+  through two networks the **data of the higher-ranked one prevails**, whichever
+  arrived first. Until now the fastest network won, which is an accident of latency.
+  Priority decides whose data is shown and **never whether to alert**: a network
+  nobody ranked still alerts on an earthquake only it catalogued.
+- **Event history** (REQ-HIS-001..006) — every evaluated arrival is recorded with its
+  verdict and, for a discard, the reason: outside the radius, below the minimum
+  magnitude, another country, not from today, already reported by another network.
+  A local SQLite file that never leaves the machine, with a versioned schema that
+  migrates itself, and retention configurable (90 days by default) applied when the
+  agent starts. The history is a **consequence** of an alert, never a condition of
+  one: it is written off the path between an arrival and its presentation, and an
+  agent that cannot write its history is still an agent that alerts.
+- **History window** (REQ-HIS-005, REQ-MAP-001..005) — the record as a filterable,
+  sortable table with the reason for each discard in words, and a map of
+  OpenStreetMap tiles beside it. Symbols are sized by magnitude and alerts are told
+  apart from discards by shape as well as colour. One filter governs both views.
+  Tiles are requested **only while the map is open**, cached so a zone already
+  visited is not requested again, and the client identifies itself as the usage
+  policy requires; `© OpenStreetMap contributors` is on screen wherever a tile is.
+  With no connection and nothing cached the map says it is unavailable and the table
+  carries on working.
+- **Declared scope of the alert guarantee** (REQ-ALE-003) — the README, the tray menu
+  and the first line of the log now state whether the "impossible to ignore" alert
+  actually holds in this session. Measured, not assumed: GNOME under Wayland does not
+  advertise `zwlr_layer_shell_v1`, so **no client can keep that promise there with any
+  toolkit** (`docs/v1/10-SPIKE-WAYLAND.md`). REQ-ALE-004 is a `[SHOULD]` for that
+  reason, and `-fullscreen` is honoured today as a mitigation.
+- **ENTER acknowledges the alert** in the desktop window, as it already did in the
+  terminal frontend — and it is what lets the release pipeline drive a real alert
+  without a pointer.
+- **Declarative source registry** — adding a seismic network is one declaration that
+  carries its own translation, instead of three edits in three shapes that nothing
+  enforced you had found all of.
+- **End-to-end correlation id** — one arrival's journey through the five stages is a
+  single search in the log, and a discarded duplicate is linked to the arrival that
+  did alert.
+- **Development container and contribution guide** (REQ-DEV-001..004) — the
+  environment comes up in one step, with a virtual display for the real-window tests.
+
+### Changed
+- **BREAKING — minimum Python is now 3.13** (`requires-python = ">=3.13"`,
+  REQ-DEP-004). 3.12 entered *security-only* maintenance: it still receives security
+  patches but no longer bug fixes, which is not a runtime a project calling itself
+  1.0.0 should declare as its floor. Ratified as constitutional amendment E-01.
+  **Installs on 3.11 or 3.12 are now refused by the resolver**; this is the moment to
+  do it, since after a 1.0.0 the same change would need a major version. The
+  declaration is consistent across all five places it lives.
+- **Every dependency range is bounded above** except `tzdata`, which is exempt by
+  amendment E-04 — its major version is the year of publication, so a ceiling would
+  freeze the timezone rules themselves. The Pillow floor is its **security** floor:
+  `>=10.0` admitted 34 published advisories.
+- **`uv.lock` is versioned**, so a clean install resolves the versions that were
+  verified, and the minimum-resolution tree is audited in CI rather than only the
+  locked one.
+- **The Linux binary declares the base it is built on** (`ubuntu-22.04`, glibc 2.35)
+  instead of inheriting whatever the runner happened to be, so the compatibility
+  floor stops moving on its own.
+- **The quality gate measures all eight dimensions** it claims to: format,
+  duplication, cognitive and structural complexity, import boundaries, coverage per
+  criticality group, and the drift between the code and its recorded decisions.
+  CI also runs the **real-window tests** now, not only the headless ones.
+
+### Fixed
+- **Shutdown race** (REQ-OPS-002) — a quit arriving before the worker thread
+  published its loop and supervisor left the ingestion tasks uncancelled. Demonstrated
+  by a test written to fail first, and a second defect found only by running the
+  suite under coverage: `Supervisor.run()` discarded a stop requested before it
+  started.
+- **No binary is published without having been run** (REQ-OPS-008) — v0.1.x shipped
+  twice with a packaging resource that was missing only at runtime. Each of the three
+  build jobs now launches what it just built and requires it to present an alert;
+  on Linux it also acknowledges it and requires a clean exit.
+
+### Security
+- **`anyio` moved to 4.15.1** (REQ-DEP-003) — 4.14.1 carried CVE-2026-63374 (critical:
+  IDNA 2003 host-name encoding in `TLSStream` allows potential TLS certificate
+  spoofing), CVE-2026-64847 and CVE-2026-63349. It reaches the tree through `httpx`,
+  which is how the agent talks to three of its four seismic sources, so the TLS one is
+  squarely on the path that matters. Caught by the pre-push audit while cutting this
+  release, which is what that gate is for.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added

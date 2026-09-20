@@ -1,109 +1,118 @@
-# 00 — Inventario y curaduría de clusters
+# 00 — Inventario del repositorio
 
-> Generado por ingeniería inversa el 2026-08-16. Commit de referencia: `6e0f133`.
-> Fuentes crudas: `analysis/inventory.{json,md}` y `analysis/history.{json,md}`.
+> Ingeniería inversa ejecutada el 2026-09-06. Commit de referencia: `c3a2c29` (HEAD).
+> Fuentes brutas: `analysis/inventory.{json,md}` y `analysis/history.{json,md}`.
 
-## 1. Alcance del análisis
+## 1. Alcance de lo analizado
 
-| Dimensión | Valor |
-|---|---|
-| Commits analizados | 59 totales; 47 no-merge procesados por el script |
-| Rango temporal | 2026-06-28 → 2026-08-16 |
-| Conventional commits | 97,9 % |
-| LOC | Python 9.197 · YAML 455 · Shell 122 |
-| Tests | 348 en 35 archivos bajo `tests/` |
-| Tags git | **ninguno** — las eras se derivan por trimestre, no por release tag |
-| Autores | Ernesto Crespo (46), Claude (1) |
-
-**Nada fue truncado.** El repo está muy por debajo de los umbrales de escalado
-(>2.000 commits / >200k LOC), así que se analizó el historial completo.
-
-Este repositorio ya practica SDD hacia adelante: `docs/PRD.md`, `docs/API-SPEC.md`,
-`docs/TECHNICAL-DESIGN.md` (18 ADRs), `docs/DATA-MODEL.md` e
-`docs/IMPLEMENTATION-PLAN.md` existen y están vivos. La ingeniería inversa aquí no
-rellena un vacío documental: **valida que los specs describen el código real** y produce
-lo que faltaba — HUs con criterios de aceptación trazables a commits y tests.
-
-### Capas de conocimiento disponibles
-
-La exploración usó las tres capas ya instaladas en el repo en lugar de lectura cruda:
-`lat.md/` (intención), `.codegraph/` (estructura, 1.387 nodos) y `graphify-out/`
-(significado, 1.517 nodos). Esto es relevante para la v2: el kit de specs y las capas
-son complementarios — los specs dicen qué construir, las capas mantienen el
-entendimiento vivo después.
-
-## 2. Corrección de la clusterización automática
-
-El script agrupó por directorio dominante y **produjo clusters inservibles para HUs**:
-`dir:src/vigia_eew` acumula 17 commits que incluyen las fases 1 a 6 más el filtro de
-país — seis capacidades no relacionadas en un solo bucket.
-
-La causa es que este repo commitea **una fase completa del plan por commit**, así que el
-directorio dominante es siempre el mismo. La señal real de clustering no está en la ruta
-sino en el asunto del commit, que nombra su fase y su requisito (`Fase 3`, `RF-37`).
-Re-clusterizado sobre esa señal, la correspondencia es casi 1:1 entre commit y capacidad.
-
-**Descartados de las HUs** (se conservan en `03-EVOLUCION.md`): merges de PR (12),
-`chore: release` (10), y los commits meta `737d7fa` (artefactos SDD), `8e7b223`
-(CLAUDE.md), `230b0b8` (diseño D-Bus sin código), `e49404d` (imports absolutos) y
-`6e0f133` (capas de conocimiento).
-
-## 3. Clusters curados → HUs
-
-| HU | Capacidad | Commits | Fase original |
-|---|---|---|---|
-| HU-001 | Contrato interno de evento sísmico | `b5c5371` | Fase 1 |
-| HU-002 | Estado persistente entre reinicios | `b5c5371`, `b0f832c` | Fase 1 + 15 |
-| HU-003 | Configuración TOML validada y auto-sembrada | `b5c5371`, `a06f7a1` | Fase 1 + RF-24 |
-| HU-004 | Observabilidad: logging estructurado | `b5c5371` | Fase 1 |
-| HU-005 | Canal push EMSC en tiempo real | `fc0ca99` | Fase 2 |
-| HU-006 | Reconciliación USGS con cursor persistido | `fc0ca99` | Fase 2 |
-| HU-007 | Supervisión resiliente de tareas asyncio | `fc0ca99`, `f49d139` | Fase 2 + 7 |
-| HU-008 | Normalización multi-fuente | `b40c20b` | Fase 3 |
-| HU-009 | Filtrado por radio, magnitud y frescura | `b40c20b`, `b0f832c` | Fase 3 + 15 |
-| HU-010 | Deduplicación intra e inter-fuente | `b40c20b` | Fase 3 |
-| HU-011 | Alerta de escritorio no descartable | `fb50326`, `f90c796`, `f0960ac` | Fase 4 |
-| HU-012 | Sonido y toast nativo por severidad | `fb50326` | Fase 4 |
-| HU-013 | CLI, ensamblaje y modo simulación | `4fb49d0` | Fase 5 |
-| HU-014 | Autoarranque multiplataforma | `5b79ff1` | Fase 6 |
-| HU-015 | Empaquetado y distribución | `b6413e3`, `7b1c71c`, `c38d9f6`, `bdc2a9d`, `a02607f` | Fase 8 |
-| HU-016 | Ubicación automática por IP | `c20a59b` | Fase 9 |
-| HU-017 | Ícono de bandeja del sistema | `fb3fe14` | Fase 10 |
-| HU-018 | Internacionalización | `7f9132e` | RF-35 |
-| HU-019 | Dashboard TUI headless | `7f98980`, `651c024` | Fase 11 |
-| HU-020 | Filtro de notificación por país | `a3a4a1a` | Fase 12 |
-| HU-021 | Fuente local FUNVISIS | `10bb72d` | RF-38 |
-| HU-022 | Fuente global GEOFON | `ade1199`, `8e0064a` | Fase 14 |
-
-22 HUs para 22 capacidades. Cada commit no descartado aparece en **exactamente una** HU;
-`b5c5371`, `fc0ca99`, `b40c20b`, `fb50326` y `b0f832c` aparecen en varias porque cada uno
-entregó varias capacidades separables (verificable: cada una tiene su propio archivo de
-tests).
-
-## 4. Señales del historial que se convierten en criterios
-
-Archivos con fixes recurrentes — el skill los trata como candidatos a criterio de
-aceptación P1 y a rediseño:
-
-| Archivo | Fixes | Qué revela |
+| Dimensión | Analizado | No analizado |
 |---|---|---|
-| `packaging/build_linux.sh` | 2 | El ícono placeholder rompía AppImage/linuxdeploy dos veces seguidas (`7b1c71c`, `c38d9f6`) → el empaquetado necesita validar sus assets, no asumirlos |
-| `src/vigia_eew/notify/alert_window.py` | 2 | Dos bugs de layout seguidos (`f90c796` hora recortada, `f0960ac` contenido contra el borde) → el contenido de la alerta debe medirse, no estimarse |
-| `src/vigia_eew/tray.py` | 2 | Fallos de arranque en entornos sin display |
-| `pyproject.toml` | 2 | Dependencias faltantes en el binario congelado (`bdc2a9d`) |
+| Commits | **58 en el historial de `HEAD`**, 47 sin merges (los 11 merges son PRs `develop → main`). `git rev-list --all` da 59 al incluir las ramas `develop` y `documentation` — es la cifra que usa `docs/code-audit/` | ninguno |
+| Rango temporal | 2026-06-28 → 2026-07-17 | — |
+| Código | `src/` (4.387 LOC, 40 archivos), `tests/` (4.714 LOC, 37 archivos `.py`, de los cuales 35 son `test_*.py`), `packaging/` (85 LOC) | — |
+| Documentación | `docs/`, `ARCHITECTURE.md`, `CLAUDE.md`, `README.md`, `CHANGELOG.md` | — |
+| Assets binarios | 3 `.wav`, `tray_icon.png`, `countries.geojson` (inventariados, no decodificados) | contenido binario |
 
-Los cuatro se convirtieron en criterios de aceptación explícitos en HU-015 y HU-011.
+No hubo truncamiento: el repositorio entra completo dentro de los límites del análisis.
 
-**Hotspots** (`CHANGELOG.md` 22 toques, `pyproject.toml` 17,
-`docs/IMPLEMENTATION-PLAN.md` 14, `app.py` 11, `config.py` 10) son en su mayoría archivos
-de coordinación, no deuda: se tocan en cada fase por diseño. La excepción a vigilar es
-`app.py` — ver la nota de acoplamiento en `01-ARQUITECTURA.md` §5.
+## 2. Corrección de dos artefactos ruidosos del script
 
-## 5. Confianza del análisis
+El script de inventario recorre el árbol de trabajo completo, y en este repo eso incluye
+directorios que **no forman parte del sistema**. Las cifras crudas deben leerse corregidas:
 
-La proporción de afirmaciones marcadas `[INFERIDO]` en el kit es baja (<5 %) y se
-concentra en las **personas/roles** de las HUs, que los commits no nombran. Todo lo
-demás está anclado a código o a un hash. Las razones son favorables y poco habituales:
-el repo tiene conventional commits al 97,9 %, un test suite de 348 casos que documenta
-el comportamiento esperado, y 18 ADRs que ya registran el *porqué* con sus alternativas
-rechazadas.
+| Dato crudo del script | Realidad | Causa |
+|---|---|---|
+| Python: **251.255 LOC** | **9.186 LOC** (`src` + `tests` + `packaging`) | `.venv_sandbox/` y `.venv/` están en el árbol de trabajo pero no versionados (`.gitignore`) |
+| Manifiesto `…/my-test-package-source/setup.py` | **No es un manifiesto del proyecto** | Es data de test de `pkg_resources`, dentro de `.venv_sandbox/` |
+| Directorio de tests `…/pkg_resources/tests` | **No es del proyecto** | Ídem |
+
+El único manifiesto real es `pyproject.toml`; el único directorio de tests real es `tests/`.
+
+## 3. Origen del proyecto — verificado, no inferido
+
+Este repositorio es **greenfield**, no un fork ni un pivote de otro producto. Evidencia directa:
+
+- El commit inicial `406cde0` contiene exactamente **dos archivos**: `LICENSE` y un `README.md`
+  de 2 líneas. No hay código heredado. `[COMMITS: 406cde0]`
+- El segundo commit `737d7fa` crea los artefactos SDD desde cero (PRD, API-Spec, Technical
+  Design, Data Model, Implementation Plan) antes de escribir una sola línea de producción.
+  `[COMMITS: 737d7fa]`
+- Un único autor en los 58 commits: Ernesto Crespo.
+
+**Coincidencias superficiales que NO deben leerse como origen externo** (se dejan explícitas
+porque son la trampa natural de este repo):
+
+- `src/vigia_eew/assets/countries.geojson` es un derivado reducido de Natural Earth 1:110m,
+  generado por un script del propio repo `[VERIFY: packaging/build_countries_geojson.py:1]`.
+  No implica dependencia ni ascendencia de ningún proyecto GIS.
+- `maravilla.json` es el nombre del endpoint público de FUNVISIS que el sistema consume
+  `[VERIFY: src/vigia_eew/ingest/rest_funvisis.py:40]`, no un componente interno ni un nombre
+  clave del proyecto.
+- `.venv_sandbox/` es un entorno virtual local, no un módulo del sistema.
+- `vigia-eew-presentacion.pptx` en la raíz es material de divulgación, no un artefacto de build.
+
+## 4. Clusters de features — CURADOS
+
+El script agrupó por directorio dominante y produjo 5 clusters (`dir:(raiz)`,
+`dir:src/vigia_eew`, `dir:.github`, `dir:docs`, `dir:packaging`). Esa agrupación es inútil aquí:
+el repositorio sigue una disciplina SDD de **un commit por fase**, y casi todo el trabajo de
+producto cae en `src/vigia_eew`. Los clusters se recurraron por **capacidad entregada**, usando
+los mensajes de commit (97,9 % conventional commits) y las fases/RF que citan.
+
+| # | Cluster curado | Commits | Hashes | → HU |
+|---|---|---|---|---|
+| C-01 | Andamiaje y artefactos SDD | 4 | `406cde0`, `737d7fa`, `8e7b223`, `230b0b8` | — (ruido de producto; va a evolución) |
+| C-02 | Dominio: modelos, config, estado, logging | 1 | `b5c5371` | HU-001 |
+| C-03 | Ingesta EMSC/USGS + supervisor | 1 | `fc0ca99` | HU-002 |
+| C-04 | Pipeline normalize/filter/dedup | 1 | `b40c20b` | HU-003 |
+| C-05 | Capa de notificación + fixes de layout | 3 | `fb50326`, `f90c796`, `f0960ac` | HU-004 |
+| C-06 | CLI, ensamblaje y `--simulate` | 1 | `4fb49d0` | HU-005 |
+| C-07 | Autoarranque multiplataforma | 1 | `5b79ff1` | HU-006 |
+| C-08 | Pruebas de resiliencia e2e | 1 | `f49d139` | — (alimenta 04-MATRIZ-PRUEBAS) |
+| C-09 | Empaquetado, binarios y CI de release | 5 | `b6413e3`, `7b1c71c`, `c38d9f6`, `bdc2a9d`, `a02607f` | HU-007 |
+| C-10 | Geolocalización automática por IP | 1 | `c20a59b` | HU-008 |
+| C-11 | Ícono de bandeja | 1 | `fb3fe14` | HU-009 |
+| C-12 | Traducción a inglés + i18n | 2 | `7f9132e`, `e49404d` | HU-010 |
+| C-13 | Dashboard TUI headless | 2 | `7f98980`, `651c024` | HU-011 |
+| C-14 | Filtro de país offline | 1 | `a3a4a1a` | HU-012 |
+| C-15 | Semilla de `config.toml` | 1 | `a06f7a1` | HU-013 |
+| C-16 | Fuente FUNVISIS | 1 | `10bb72d` | HU-014 |
+| C-17 | Fuente GEOFON | 2 | `ade1199`, `8e0064a` | HU-015 |
+| C-18 | Frescura, backlog acotado y poda | 1 | `b0f832c` | HU-016 |
+| C-19 | CI, seguridad y pre-commit | 6 | `97b2a8e`, `5ee3b1d`, `f51da9c`, `27e4b45`, `0e707a1`, `559f077` | HU-017 |
+| C-20 | Releases (`chore: release vX.Y.Z`) | 9 | `92c65e5` … `bd4a555` | — (ruido; marca eras) |
+
+Cobertura: **17 HUs cubren los 18 clusters de producto**; C-01, C-08 y C-20 quedan fuera de las
+HUs por diseño y están representados en `03-EVOLUCION.md` y `04-MATRIZ-PRUEBAS.md`.
+
+## 5. Hotspots y fixes recurrentes
+
+Archivos más tocados (excluyendo documentación de proceso):
+
+| Archivo | Toques | Lectura |
+|---|---|---|
+| `CHANGELOG.md` | 22 | disciplina de release, no deuda |
+| `pyproject.toml` | 17 | crecimiento de dependencias por fase |
+| `src/vigia_eew/app.py` | 10 | **composición central** — cada feature nueva lo toca |
+| `src/vigia_eew/config.py` | 10 | ídem: cada feature añade su sección de config |
+| `src/vigia_eew/cli.py` | 9 | cada feature añade su flag |
+
+Archivos con ≥2 commits de tipo `fix` — cada uno es fuente de un criterio de aceptación P1:
+
+| Archivo | Fixes | Naturaleza |
+|---|---|---|
+| `packaging/build_linux.sh` | 2 | ícono placeholder inválido rompía AppImage `[COMMITS: 7b1c71c, c38d9f6]` |
+| `src/vigia_eew/notify/alert_window.py` | 2 | contenido recortado en la ventana de alerta `[COMMITS: f90c796, f0960ac]` |
+| `src/vigia_eew/tray.py` | 2 | rutas de config al abrir el editor `[COMMITS: fb3fe14, a06f7a1]` |
+| `pyproject.toml` | 2 | recursos faltantes en el binario congelado `[COMMITS: bdc2a9d]` |
+
+## 6. Estado de la cobertura de evidencia
+
+- **344 pruebas** en 35 archivos `test_*.py` — base primaria de los criterios de aceptación.
+- Los artefactos SDD originales (`docs/PRD.md`, `docs/TECHNICAL-DESIGN.md` con 18 ADRs) existen
+  y son de alta calidad; esta reconstrucción los **contrasta** con el código, no los copia.
+- Densidad de evidencia del kit, medida tras la pasada de validación: **699 citas `[VERIFY:]`**
+  (327 únicas, **todas verificadas** contra archivo y número de línea), **98 citas `[COMMITS:]`**
+  (39 hashes distintos, **todos existentes** en el repositorio) y solo **2 marcas `[INFERIDO]`**.
+  Ambas están en las personas/roles de HU-001 y HU-008, que los commits no nombran explícitamente.
+  Ningún área del repositorio resultó demasiado opaca para documentarse con evidencia.

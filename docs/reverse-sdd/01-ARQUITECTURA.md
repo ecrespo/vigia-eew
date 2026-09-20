@@ -1,234 +1,224 @@
-# Arquitectura — Vigía-eew
+# 01 — Arquitectura (ingeniería inversa)
 
-> Generado por ingeniería inversa el 2026-08-16. Commit de referencia: `6e0f133`.
-> Propósito: base para la reconstrucción v2. Describe lo que el código **es** hoy,
-> no lo que la documentación aspiracional dice.
+> Generado el 2026-09-06. Commit de referencia: `c3a2c29`.
+> Describe lo que el código **es** hoy, no lo que la documentación aspiracional dice.
+> Cada afirmación no trivial lleva una cita de la forma VERIFY con ruta y línea.
 
 ## 1. Vista de contexto
 
-Agente de escritorio que vigila cuatro redes sísmicas en tiempo real y muestra una alerta
-**imposible de descartar por accidente** cuando un sismo cae dentro del radio y magnitud
-configurados. Un proceso por máquina, sin componente servidor
-`[VERIFY: src/vigia_eew/app.py:54]`.
+**Propósito.** Agente de escritorio que vigila sismos en tiempo real y muestra una alerta
+**no descartable** cuando un evento cae dentro del radio y magnitud configurados. Un proceso por
+máquina, sin punto único de fallo.
 
-**Actores externos:**
+**Actores externos**
 
-| Actor | Rol | Integración | Evidencia |
+| Actor | Tipo | Integración | Evidencia |
 |---|---|---|---|
-| EMSC | Fuente push primaria | WebSocket, keepalive 15 s | `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:37]` |
-| USGS | Respaldo global | REST FDSN GeoJSON, cursor | `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:42]` |
-| GEOFON (GFZ Potsdam) | Respaldo global independiente | REST FDSN texto pipe, cursor | `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:52]` |
-| FUNVISIS | Cobertura local Venezuela | JSON estático, seen-set | `[VERIFY: src/vigia_eew/ingest/rest_funvisis.py:40]` |
-| ipapi.co | Geolocalización por IP (una vez) | REST, best-effort | `[VERIFY: src/vigia_eew/geoloc.py:39]` |
-| Usuario de escritorio | Recibe y reconoce alertas | Tkinter / TUI / bandeja | `[VERIFY: src/vigia_eew/notify/alert_window.py:48]` |
+| Usuario de escritorio | Humano | Ventana Tk / TUI / bandeja / toast | `[VERIFY: src/vigia_eew/notify/alert_window.py:47]` |
+| EMSC | Sistema consumido | WebSocket persistente (`websockets`) | `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:37]` |
+| USGS | Sistema consumido | REST FDSN GeoJSON (`httpx`), cursor persistido | `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:42]` |
+| GEOFON (GFZ Potsdam) | Sistema consumido | REST `fdsnws-event`, formato **texto** | `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:52]` |
+| FUNVISIS | Sistema consumido | JSON del mapa web, sin cursor | `[VERIFY: src/vigia_eew/ingest/rest_funvisis.py:40]` |
+| Servicio de geo-IP | Sistema consumido (opcional, una vez) | REST | `[VERIFY: src/vigia_eew/geoloc.py:39]` |
+| SO (systemd / launchd / schtasks) | Sistema consumido | subprocess | `[VERIFY: src/vigia_eew/autostart/__init__.py:1]` |
 
 ```mermaid
 graph TD
-    EMSC[EMSC WebSocket] -->|push| A[Vigía-eew]
-    USGS[USGS FDSN] -->|poll 60s| A
-    GEOFON[GEOFON FDSN] -->|poll 60s| A
-    FUNVISIS[FUNVISIS JSON] -->|poll 60s| A
-    IP[ipapi.co] -.->|una vez, si no hay config| A
-    A -->|alerta modal| U[Usuario]
-    A -->|toast + sonido| U
-    A -->|estado| FS[(state.json)]
+    EMSC[EMSC WebSocket]:::ext --> A
+    USGS[USGS FDSN REST]:::ext --> A
+    GEOFON[GEOFON fdsnws-event]:::ext --> A
+    FUNVISIS[FUNVISIS maravilla.json]:::ext --> A
+    GEOIP[Servicio geo-IP]:::ext -.una vez.-> A
+    A[Agente vigia-eew<br/>1 proceso por máquina] --> U((Usuario))
+    A --> OS[systemd / launchd / schtasks]:::ext
+    classDef ext fill:#eee,stroke:#999;
 ```
 
 ## 2. Vista de componentes
 
-### 2.1 Ingestión (`ingest/`)
-- **Responsabilidad**: hablar con cada red y emitir `RawMessage`. **No** normaliza,
-  no filtra, no decide si algo se alerta.
-- **Ubicación**: `[VERIFY: src/vigia_eew/ingest/__init__.py:18]` (contrato `RawMessage`)
-- **Salida**: `asyncio.Queue` compartida (`raw_queue`)
-- Cuatro implementaciones con dos estrategias de novedad distintas: cursor persistido
-  (USGS `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:70]`, GEOFON
-  `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:80]`) y seen-set en memoria
-  (FUNVISIS `[VERIFY: src/vigia_eew/ingest/rest_funvisis.py:86]`).
+### 2.1 Ingesta (`src/vigia_eew/ingest/`)
 
-### 2.2 Pipeline (`pipeline/`)
-- **Responsabilidad**: `RawMessage` → decisión de alertar. Encadena normalizar → filtrar
-  → deduplicar `[VERIFY: src/vigia_eew/pipeline/processor.py:54]`.
-- **Normalizer** `[VERIFY: src/vigia_eew/pipeline/normalize.py:38]`: un `_map_*` por
-  fuente (`:76` EMSC, `:92` USGS, `:109` FUNVISIS, `:131` GEOFON) que converge en
-  `_build` `[VERIFY: src/vigia_eew/pipeline/normalize.py:150]`.
-- **GeoFilter** `[VERIFY: src/vigia_eew/pipeline/filter.py:34]`: radio, magnitud, país,
-  frescura — en ese orden `[VERIFY: src/vigia_eew/pipeline/filter.py:52]`.
-- **Deduplicator** `[VERIFY: src/vigia_eew/pipeline/dedup.py:31]`: por id y por
-  heurística inter-fuente.
+Cuatro ingestores independientes que escriben en una `asyncio.Queue` común de `RawMessage`.
 
-### 2.3 Notificación (`notify/`)
-- **Responsabilidad**: presentar y serializar alertas. **No** conoce fuentes ni red.
-- **AlertController** `[VERIFY: src/vigia_eew/notify/controller.py:32]`: orquesta tres
-  efectos recibidos como callbacks inyectados — de ahí que sea testeable sin I/O real.
-- **AlertQueue** `[VERIFY: src/vigia_eew/notify/queue.py:25]`: una alerta a la vez.
-- **AlertWindow** `[VERIFY: src/vigia_eew/notify/alert_window.py:48]` + política
-  no-descartable `[VERIFY: src/vigia_eew/notify/alert_window.py:39]`.
-- **presentation.py** `[VERIFY: src/vigia_eew/notify/presentation.py:56]`: funciones
-  **puras**; único punto donde UTC se convierte a hora local.
+| Componente | Ubicación | Estrategia | Estado que persiste |
+|---|---|---|---|
+| `WSIngestor` | `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:37]` | push, keepalive 15 s, backoff+jitter `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:111]` | ninguno |
+| `RESTReconciler` | `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:42]` | poll 60 s, cursor `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:70]` | `usgs_cursor` |
+| `GEOFONPoller` | `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:52]` | poll 60 s, cursor, parse texto `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:133]` | `geofon_cursor` |
+| `FUNVISISPoller` | `[VERIFY: src/vigia_eew/ingest/rest_funvisis.py:40]` | poll 60 s, seen-set en memoria `[VERIFY: src/vigia_eew/ingest/rest_funvisis.py:60]` | ninguno |
 
-### 2.4 Orquestación
-- **Supervisor** `[VERIFY: src/vigia_eew/supervisor.py:28]`: corre las 5 tareas y
-  reinicia con backoff la que falle `[VERIFY: src/vigia_eew/supervisor.py:80]`.
-- **Application** `[VERIFY: src/vigia_eew/app.py:54]`: cablea todo; expone `execute()`,
-  `run_tui()` y `simulate()`.
-- **AsyncioTkBridge** `[VERIFY: src/vigia_eew/notify/queue.py:104]`: único cruce de hilos.
+**No hacen**: filtrar, deduplicar ni decidir si algo se alerta. Solo normalizan a `RawMessage`.
+
+### 2.2 Pipeline (`src/vigia_eew/pipeline/`)
+
+`Processor` `[VERIFY: src/vigia_eew/pipeline/processor.py:32]` consume la cola y encadena:
+
+1. `Normalizer` `[VERIFY: src/vigia_eew/pipeline/normalize.py:38]` → `SeismicEvent`; calcula
+   distancia (`haversine_km` `[VERIFY: src/vigia_eew/geo.py:16]`) y severidad
+   (`classify_severity` `[VERIFY: src/vigia_eew/models.py:38]`).
+2. `GeoFilter.accepts` `[VERIFY: src/vigia_eew/pipeline/filter.py:52]` → radio, magnitud, país
+   `[VERIFY: src/vigia_eew/pipeline/filter.py:60]` y frescura `[VERIFY: src/vigia_eew/pipeline/filter.py:71]`.
+3. `Deduplicator.classify` `[VERIFY: src/vigia_eew/pipeline/dedup.py:45]` → `new` / `update` /
+   `duplicate`; `register` `[VERIFY: src/vigia_eew/pipeline/dedup.py:56]` persiste y poda.
+
+**Orden invariante**: el filtro corre **antes** que el dedup, para que un evento rechazado no
+contamine el estado de "primer reportante gana" `[VERIFY: src/vigia_eew/pipeline/processor.py:54]`.
+
+### 2.3 Notificación (`src/vigia_eew/notify/`)
+
+`AlertController` `[VERIFY: src/vigia_eew/notify/controller.py:32]` orquesta tres efectos
+**inyectables**: `create_window`, `play_sound`, `send_toast`. `AlertQueue`
+`[VERIFY: src/vigia_eew/notify/queue.py:25]` garantiza una alerta a la vez y la actualiza en sitio.
+
+- Ventana no descartable: `configure_undismissable` `[VERIFY: src/vigia_eew/notify/alert_window.py:38]`
+- Sonido por severidad: `SoundPlayer` `[VERIFY: src/vigia_eew/notify/sound.py:99]`
+- Toast nativo: `Toaster` `[VERIFY: src/vigia_eew/notify/toast.py:40]`
+- Formato puro: `format_event` `[VERIFY: src/vigia_eew/notify/presentation.py:56]`
+
+### 2.4 Composición y frontends
+
+`Application` `[VERIFY: src/vigia_eew/app.py:54]` es la raíz de composición: construye supervisor
+`[VERIFY: src/vigia_eew/app.py:85]`, filtro `[VERIFY: src/vigia_eew/app.py:137]`, controlador
+`[VERIFY: src/vigia_eew/app.py:158]` y bandeja `[VERIFY: src/vigia_eew/app.py:178]`.
+Expone tres modos: `execute()` GUI `[VERIFY: src/vigia_eew/app.py:397]`, `run_tui()`
+`[VERIFY: src/vigia_eew/app.py:369]` y `simulate()` `[VERIFY: src/vigia_eew/app.py:359]`.
+
+### 2.5 Transversales
+
+| Preocupación | Componente | Evidencia |
+|---|---|---|
+| Estado persistido | `StateStore` (JSON atómico vía `platformdirs`) | `[VERIFY: src/vigia_eew/state.py:33]` |
+| Configuración | `Settings` (pydantic sobre `tomllib`) | `[VERIFY: src/vigia_eew/config.py:142]` |
+| Resiliencia | `Supervisor` + `exponential_backoff` | `[VERIFY: src/vigia_eew/supervisor.py:27]`, `[VERIFY: src/vigia_eew/backoff.py:18]` |
+| Tiempo local | `timeutil` | `[VERIFY: src/vigia_eew/timeutil.py:23]` |
+| i18n | `t()` | `[VERIFY: src/vigia_eew/i18n.py:64]` |
+| Logging UTC | `_UTCFormatter` | `[VERIFY: src/vigia_eew/logging_conf.py:23]` |
+| Entorno de subprocesos | `system_env` (saneo `LD_LIBRARY_PATH` bajo PyInstaller) | `[VERIFY: src/vigia_eew/subprocess_env.py:25]` |
 
 ```mermaid
 graph LR
     subgraph ingest
-        WS[WSIngestor] & USGS[RESTReconciler] & GEO[GEOFONPoller] & FUN[FUNVISISPoller]
+      WS[WSIngestor]; US[RESTReconciler]; GE[GEOFONPoller]; FU[FUNVISISPoller]
     end
-    WS & USGS & GEO & FUN --> Q[(raw_queue)]
+    Q[(raw_queue)]
+    WS-->Q; US-->Q; GE-->Q; FU-->Q
     Q --> P[Processor]
     P --> N[Normalizer] --> F[GeoFilter] --> D[Deduplicator]
     D --> AC[AlertController]
     AC --> AQ[AlertQueue] --> W[AlertWindow / AlertScreen]
-    AC --> S[SoundPlayer] & T[Toaster]
-    D <--> ST[(StateStore)]
-    SUP[Supervisor] -.supervisa.-> WS & USGS & GEO & FUN & P
+    AC --> S[SoundPlayer]; AC --> T[Toaster]
+    ST[(StateStore)] -.-> US; ST -.-> GE; ST -.-> D
+    SUP[Supervisor] -.reinicia.-> WS & US & GE & FU & P
 ```
 
 ## 3. Flujos principales
 
-### 3.1 De EMSC a la ventana de alerta (camino feliz)
+### 3.1 De mensaje EMSC a alerta en pantalla
 
 ```mermaid
 sequenceDiagram
-    participant E as EMSC WS
-    participant W as WSIngestor
+    participant EMSC
+    participant WS as WSIngestor
     participant Q as raw_queue
     participant P as Processor
-    participant D as Deduplicator
-    participant C as AlertController
-    participant U as AlertWindow
-    E->>W: mensaje JSON
-    W->>W: _parse → RawMessage
-    W->>Q: put
-    P->>Q: get
-    P->>P: normalize → SeismicEvent
+    participant AC as AlertController
+    participant UI as AlertWindow
+    EMSC->>WS: mensaje JSON
+    WS->>WS: _parse
+    WS->>Q: RawMessage
+    P->>Q: get()
+    P->>P: Normalizer → SeismicEvent
     P->>P: GeoFilter.accepts
-    P->>D: classify → "new"
-    D->>D: register (prune + save)
-    P->>C: enqueue
-    C->>U: create_window + sound + toast
-    U-->>C: on_acknowledge
+    P->>P: Deduplicator.classify → new
+    P->>AC: enqueue(evento)
+    AC->>UI: create_window(data, severity, on_ack)
+    AC->>AC: play_sound + send_toast
 ```
 
-Pasos con evidencia: recepción y parseo
-`[VERIFY: src/vigia_eew/ingest/ws_emsc.py:61]` → consumo
-`[VERIFY: src/vigia_eew/pipeline/processor.py:54]` → normalización
-`[VERIFY: src/vigia_eew/pipeline/normalize.py:52]` → filtrado
-`[VERIFY: src/vigia_eew/pipeline/filter.py:52]` → dedup
-`[VERIFY: src/vigia_eew/pipeline/dedup.py:45]` → registro con poda
-`[VERIFY: src/vigia_eew/pipeline/dedup.py:57]` → presentación
-`[VERIFY: src/vigia_eew/notify/controller.py:81]`.
+Saltos verificables: `_parse` `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:61]` →
+`process_one` `[VERIFY: src/vigia_eew/pipeline/processor.py:54]` → `enqueue`
+`[VERIFY: src/vigia_eew/notify/controller.py:81]` → `_show`
+`[VERIFY: src/vigia_eew/notify/controller.py:90]`.
 
-### 3.2 Mismo sismo desde dos fuentes → una sola alerta
+### 3.2 Cruce asyncio ↔ Tkinter
 
-USGS y EMSC asignan ids distintos al mismo sismo. La heurística
-(≤100 km, ≤90 s, ≤0,5 mag) `[VERIFY: src/vigia_eew/pipeline/dedup.py:72]` compara contra
-firmas recientes persistidas. Verificado end-to-end en
-`[VERIFY: tests/test_resilience.py:107]`.
+Tk posee el hilo principal; asyncio vive en un hilo trabajador. El único punto de cruce es
+`AsyncioTkBridge` `[VERIFY: src/vigia_eew/notify/queue.py:102]`: `publish` desde asyncio,
+`drain` `[VERIFY: src/vigia_eew/notify/queue.py:114]` desde el tick de `widget.after()`
+`[VERIFY: src/vigia_eew/notify/queue.py:123]`. En modo TUI **este puente no existe**: el supervisor corre como worker
+de Textual sobre el mismo loop `[VERIFY: src/vigia_eew/app.py:369]`.
 
-### 3.3 Actualización de magnitud (EMSC `update`)
+### 3.3 Reconciliación REST con cursor
 
-EMSC reemite el mismo `unid` con magnitud revisada. El dedup devuelve `"update"`
-`[VERIFY: src/vigia_eew/pipeline/dedup.py:45]` y la cola refresca la ventana en sitio sin
-re-encolar `[VERIFY: src/vigia_eew/notify/queue.py:69]`. Sin esto, cada revisión de
-magnitud generaría una alerta nueva y entrenaría al usuario a descartarlas por reflejo.
+`_build_params` `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:70]` calcula `starttime` desde el
+cursor persistido, con piso en medianoche local `[VERIFY: src/vigia_eew/timeutil.py:50]`.
+`poll_once` `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:87]` emite un `RawMessage` por feature y solo entonces avanza
+el cursor `[VERIFY: src/vigia_eew/state.py:101]`.
 
-### 3.4 Reconexión tras caída del WebSocket
+### 3.4 Resolución del punto de referencia
 
-`run()` es un bucle perpetuo que solo sale por cancelación
-`[VERIFY: src/vigia_eew/ingest/ws_emsc.py:75]`; el backoff exponencial con jitter viene de
-`[VERIFY: src/vigia_eew/backoff.py:18]`. El jitter importa porque, sin él, todas las
-instancias reconectarían en lockstep tras una caída compartida.
+`_prepare` `[VERIFY: src/vigia_eew/app.py:245]` → `_resolve_automatic_reference`
+`[VERIFY: src/vigia_eew/app.py:251]`: si no hay `[reference]` manual ni caché, llama a
+`detect_ip_location` `[VERIFY: src/vigia_eew/geoloc.py:39]` **una sola vez** y cachea
+`[VERIFY: src/vigia_eew/state.py:120]`. Fallo → default sin cachear.
 
-### 3.5 Arranque con configuración ausente
+### 3.5 Supervisión y reinicio
 
-`Application._prepare` `[VERIFY: src/vigia_eew/app.py:245]` resuelve el punto de
-referencia por IP solo si no hay `[reference]` manual ni caché
-`[VERIFY: src/vigia_eew/app.py:252]`. `--simulate` nunca pasa por aquí, porque debe
-funcionar sin red `[VERIFY: src/vigia_eew/app.py:360]`.
+`Supervisor.run` `[VERIFY: src/vigia_eew/supervisor.py:62]` lanza cada tarea envuelta en `_guard`
+`[VERIFY: src/vigia_eew/supervisor.py:79]`, que la reinicia con backoff
+`[VERIFY: src/vigia_eew/supervisor.py:102]` sin derribar el proceso.
 
 ## 4. Modelo de datos (mapa)
 
 | Entidad | Rol | Ubicación |
 |---|---|---|
-| `SeismicEvent` | Contrato único entre capas | `[VERIFY: src/vigia_eew/models.py:51]` |
-| `EventSignature` | Huella para dedup inter-fuente | `[VERIFY: src/vigia_eew/models.py:87]` |
-| `AlertedId` | Registro de ya-alertado | `[VERIFY: src/vigia_eew/models.py:103]` |
-| `DetectedLocation` | Caché de geolocalización IP | `[VERIFY: src/vigia_eew/models.py:117]` |
-| `AppState` | Raíz persistida en `state.json` | `[VERIFY: src/vigia_eew/models.py:133]` |
-| `RawMessage` | Payload sin normalizar | `[VERIFY: src/vigia_eew/ingest/__init__.py:18]` |
-| `Settings` | Config validada | `[VERIFY: src/vigia_eew/config.py:142]` |
+| `RawMessage` | payload crudo + fuente | `[VERIFY: src/vigia_eew/ingest/__init__.py:18]` |
+| `SeismicEvent` | **contrato interno único** entre capas | `[VERIFY: src/vigia_eew/models.py:51]` |
+| `EventSignature` | firma para dedup cruzado | `[VERIFY: src/vigia_eew/models.py:87]` |
+| `AlertedId` | id ya alertado + ack | `[VERIFY: src/vigia_eew/models.py:103]` |
+| `DetectedLocation` | ubicación geo-IP cacheada | `[VERIFY: src/vigia_eew/models.py:117]` |
+| `AppState` | raíz persistida en `state.json` | `[VERIFY: src/vigia_eew/models.py:133]` |
+| `AlertData` | proyección de presentación | `[VERIFY: src/vigia_eew/notify/presentation.py:29]` |
 
-**Invariantes que el modelo hace cumplir**, no la convención:
-todo `datetime` es tz-aware UTC y los *naive* se rechazan
-`[VERIFY: src/vigia_eew/models.py:25]`; `magtype` se normaliza a minúsculas
-`[VERIFY: tests/test_models.py:42]`; distancia y severidad son **siempre** derivadas
-`[VERIFY: src/vigia_eew/pipeline/normalize.py:150]`.
+Invariante global: todo `datetime` interno es *tz-aware* UTC; se valida y se rechaza lo naive
+`[VERIFY: src/vigia_eew/models.py:25]`.
 
 ## 5. Decisiones de arquitectura observadas
 
-| # | Decisión | Evidencia | ¿Mantener en v2? | Justificación |
+| # | Decisión | Evidencia | ¿v2? | Justificación |
 |---|---|---|---|---|
-| AD-1 | Push primario + polling de respaldo | `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:37]` | **Sí** | EMSC documenta pérdida de mensajes; el respaldo es la red de seguridad |
-| AD-2 | Un agente por máquina, sin relay | `[VERIFY: src/vigia_eew/app.py:54]` | **Sí** | Un relay caído deja ciegos a todos a la vez |
-| AD-3 | Supervisor que reinicia hijos | `[VERIFY: src/vigia_eew/supervisor.py:80]` | **Sí** | Un agente que muere por un fallo de red es peor que inútil |
-| AD-4 | Efectos inyectados como callbacks | `[VERIFY: src/vigia_eew/notify/controller.py:35]` | **Sí** | Permite 348 tests sin I/O real y compartir controlador entre GUI y TUI |
-| AD-5 | Dedup heurístico (100 km/90 s/0,5 mag) | `[VERIFY: src/vigia_eew/pipeline/dedup.py:72]` | **Revisar** | Correcto, pero puede confundir sismos distintos durante enjambres |
-| AD-6 | Filtros fail-safe (inertes ante duda) | `[VERIFY: src/vigia_eew/pipeline/filter.py:61]` | **Sí** | Una alerta perdida es un fallo de seguridad; una de más, una molestia |
-| AD-7 | Tkinter en hilo principal + puente | `[VERIFY: src/vigia_eew/notify/queue.py:104]` | **Revisar** | Funciona, pero Wayland limita topmost/focus (ver §6) |
-| AD-8 | Punto-en-polígono offline | `[VERIFY: src/vigia_eew/geocode.py:96]` | **Sí** | Sin dependencia geoespacial ni red por evento |
-| AD-9 | Día **local**, no UTC, para frescura | `[VERIFY: src/vigia_eew/timeutil.py:23]` | **Sí** | Venezuela es UTC-4: el corte UTC caería a las 8pm local |
-| AD-10 | Texto pipe en GEOFON, no GeoJSON | `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:83]` | **Revisar** | Deliberado (GeoJSON no confirmado), pero duplica el camino de parseo FDSN |
+| AD-1 | Un agente por máquina, sin relay central | `[VERIFY: src/vigia_eew/app.py:54]` | Sí | evita SPOF; el coste (N conexiones) es aceptable |
+| AD-2 | Push primario + polling de respaldo | `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:37]` + `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:42]` | Sí | el WS de EMSC pierde mensajes por diseño |
+| AD-3 | Contrato interno único (`SeismicEvent`) | `[VERIFY: src/vigia_eew/models.py:51]` | Sí | las 4 fuentes convergen sin lógica *source-aware* aguas abajo |
+| AD-4 | Efectos de notificación inyectables | `[VERIFY: src/vigia_eew/notify/controller.py:35]` | Sí | única razón por la que la suite corre headless |
+| AD-5 | Puente asyncio↔Tk en un solo punto | `[VERIFY: src/vigia_eew/notify/queue.py:102]` | Sí | Tk no es *thread-safe* |
+| AD-6 | Dedup heurístico (100 km / 90 s / 0,5 mag) | `[VERIFY: src/vigia_eew/pipeline/dedup.py:70]` | Revisar | falsos positivos durante enjambres |
+| AD-7 | Filtro de país como **lista de bloqueo** | `[VERIFY: src/vigia_eew/pipeline/filter.py:60]` | Sí | los sismos peligrosos de Venezuela son *offshore* |
+| AD-8 | Frescura por día **local**, no UTC | `[VERIFY: src/vigia_eew/pipeline/filter.py:71]` | Sí | Venezuela es UTC-4; el corte UTC caería a las 20:00 locales |
+| AD-9 | Degradación *fail-safe*, nunca *fail-closed* | `[VERIFY: src/vigia_eew/tray.py:110]`, `[VERIFY: src/vigia_eew/geoloc.py:39]` | Sí | coste asimétrico: alerta perdida ≫ alerta espuria |
+| AD-10 | Poda de estado atada a `register()` | `[VERIFY: src/vigia_eew/pipeline/dedup.py:56]` | Revisar | correcta pero deja una ventana sin podar si no hay alertas |
+| AD-11 | GEOFON parsea texto, no GeoJSON | `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:133]` | Revisar | duplica lógica FDSN; unificar si entra una 5ª fuente |
+| AD-12 | TUI como **modo alternativo**, no capa extra | `[VERIFY: src/vigia_eew/app.py:369]` | Sí | Textual ya es asyncio-nativo; evita el puente |
 
-## 6. Decisiones históricas (superadas o no ejecutadas)
+## 6. Decisiones históricas (superadas)
 
-- **ADR-010 — frontend desacoplado por D-Bus + extensión GNOME Shell.** Documentado en
-  profundidad (`230b0b8`) pero **sin implementar**: no existe módulo D-Bus en `src/`.
-  Es el plan de contingencia para el límite real de Wayland, donde el compositor controla
-  el apilamiento y una app XWayland no puede forzar topmost de forma confiable. Para la
-  v2: esto no es un callejón sin salida, es una decisión pendiente que la v2 debe tomar
-  explícitamente antes de comprometerse con Tkinter.
-- **Código base en español → inglés** (`7f9132e`, breaking change): el proyecto nació con
-  identificadores y docstrings en español y migró a inglés con i18n para el texto de
-  usuario. La v2 debe nacer en inglés con i18n desde el día uno; la migración tardía
-  tocó todo el árbol.
-- **Imports relativos → absolutos** (`e49404d`), inmediatamente después de la migración
-  anterior. Adoptar absolutos desde el inicio.
-
-## 7. Transversales
-
-- **Autenticación/autorización**: **ninguna, por diseño.** No hay API keys ni credenciales;
-  todas las fuentes son públicas y de solo lectura. La única fuga de información es la IP
-  de origen hacia `ipapi.co`, y solo cuando no hay `[reference]` configurado
-  `[VERIFY: src/vigia_eew/geoloc.py:39]`.
-- **Manejo de errores**: patrón dominante de **aislamiento de fallos**. Cada efecto
-  opcional atrapa su propia excepción y degrada en vez de propagar:
-  toast `[VERIFY: src/vigia_eew/notify/toast.py:40]`, sonido
-  `[VERIFY: tests/test_sound.py:76]`, bandeja `[VERIFY: tests/test_tray.py:121]`,
-  geolocalización `[VERIFY: tests/test_geoloc.py:48]`. En el pipeline, un mensaje
-  inválido se descarta sin abortar el lote `[VERIFY: tests/test_rest_geofon.py:189]`.
-- **Logging/observabilidad**: estructurado clave=valor a consola y archivo rotativo
-  `[VERIFY: src/vigia_eew/logging_conf.py:36]`, con timestamps en UTC
-  `[VERIFY: src/vigia_eew/logging_conf.py:23]`. Se registran conexiones, reconexiones,
-  polls, eventos filtrados, alertas y **reconocimientos** (traza de auditoría).
-- **Configuración**: TOML validado por pydantic `[VERIFY: src/vigia_eew/config.py:251]`,
-  sembrado desde plantilla en el primer arranque
-  `[VERIFY: src/vigia_eew/config.py:176]`. Rutas por SO vía `platformdirs`
-  `[VERIFY: src/vigia_eew/config.py:157]`. **Sin secretos** — no hay variables de entorno
-  sensibles que gestionar.
-
-## 8. Deuda técnica visible
-
-| # | Deuda | Evidencia | Impacto |
+| Qué había | Qué lo reemplazó | Commits | Lección para v2 |
 |---|---|---|---|
-| DT-1 | `app.py` concentra el cableado de GUI, TUI, bandeja, país y geolocalización | 11 toques en el historial; `[VERIFY: src/vigia_eew/app.py:54]` | Cada feature nueva lo modifica → punto de conflicto y de regresión |
-| DT-2 | Dos caminos de parseo FDSN casi idénticos (USGS GeoJSON, GEOFON texto) | `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:70]` vs `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:80]` | La lógica de cursor/floor/Retry-After está duplicada; ADR-016 lo difiere explícitamente hasta una tercera fuente FDSN — que ya llegaría con la v2 |
-| DT-3 | ADR-010 (Wayland) documentado y no implementado | Sin módulo D-Bus en `src/` | La garantía central del producto es frágil bajo GNOME/Wayland, el escritorio Linux por defecto hoy |
-| DT-4 | `MAX_AGE` de poda no configurable y solo se ejecuta al registrar | `[VERIFY: src/vigia_eew/pipeline/dedup.py:64]` | Aceptado en ADR-018; sin riesgo real, pero `state.json` no está podado en todo instante |
-| DT-5 | Dos tests del suite por defecto exigen display real | `[VERIFY: tests/test_tray.py:81]`, `[VERIFY: tests/test_app.py:175]` | Contradice "el suite por defecto corre headless" de `CLAUDE.md`; fallan con `Xlib DisplayNameError` sin `xvfb` |
-| DT-6 | `uv.lock` está en `.gitignore` | `[VERIFY: .gitignore:29]` | Sin lockfile versionado no hay builds reproducibles; el CI cachea sobre `pyproject.toml` como workaround (`27e4b45`) |
+| Todo el código y la documentación en **español** (módulos `filtro.py`, `presentacion.py`, `controlador.py`, `procesador.py`, `simulacion.py`, `estado_agente.py`; assets `critico.wav`, `atencion.wav`) | Traducción completa a inglés + capa i18n (`i18n.py`) | `[COMMITS: 7f9132e]` | **Nacer en inglés.** Fue un `feat!` que tocó 30+ archivos y renombró assets; hacerlo tarde es caro |
+| Imports relativos dentro del paquete | Imports absolutos | `[COMMITS: e49404d]` | fijar la convención en la fase 1 |
+| Ícono de bandeja placeholder generado al vuelo | PNG commiteado como asset | `[COMMITS: 7b1c71c, c38d9f6]` | los assets del empaquetado necesitan validación de formato en CI |
+| GEOFON sobre HTTP | GEOFON sobre HTTPS | `[COMMITS: 8e0064a]` | exigir TLS por defecto en los clientes nuevos |
+
+No se detectaron features iniciadas y revertidas: no hay commits `revert:` en la historia.
+
+## 7. Lo que está diseñado pero **no** implementado
+
+`docs/TECHNICAL-DESIGN.md` (ADR-010) especifica un frontend de presentación desacoplado vía D-Bus
+más una extensión de GNOME Shell, como respuesta a que bajo Wayland un cliente X11/XWayland no
+puede forzar de forma fiable *topmost* ni foco. **No existe código para esto**: la única mención de
+D-Bus en `src/` es un comentario sobre el backend de `desktop-notifier`
+`[VERIFY: src/vigia_eew/notify/toast.py:8]`, y no hay módulo de servicio D-Bus ni directorio de
+extensión GNOME. `[COMMITS: 230b0b8]`
+
+Esto es el límite conocido de la garantía "imposible de ignorar" y el mayor riesgo funcional
+heredado por una v2.

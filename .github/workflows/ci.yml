@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python-env
       - run: uv run ruff check .
+      # Formatting is a gate rule, not a preference (REQ-OBS-006, Art. 8).
+      - run: uv run ruff format --check .
 
   mypy:
     name: Type check (mypy)
@@ -39,28 +41,87 @@ jobs:
       - uses: ./.github/actions/setup-python-env
       - run: uv run mypy src
 
-  test:
-    name: Tests (pytest + coverage)
+  boundaries:
+    name: Import boundaries (import-linter)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python-env
+      # Declared in pyproject.toml [tool.importlinter] (REQ-OBS-005, ADR-003).
+      # The graph is acyclic today; this is what stops the first cycle.
+      - run: uv run lint-imports
+
+  # The suite runs on the declared floor and on the version above it
+  # (REQ-DEP-007). A floor verified on a single interpreter is a floor nobody
+  # has tested moving off, which is how the next bump becomes a surprise.
+  # Dimensions 1 and 2 of Article 8, which the gate did not measure at all
+  # before (REQ-OBS-007, code-audit P2-4).
+  quality:
+    name: Duplication and complexity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+      - name: Cognitive complexity
+        run: >-
+          uv run --with flake8 --with flake8-cognitive-complexity
+          flake8 --select=CCR001 --max-cognitive-complexity=12 src/
+      - name: Structural complexity and length
+        run: uv run --with lizard lizard src/ --CCN 15 --length 200 -w
+      - name: Duplication
+        run: npx --yes jscpd@4 src --min-tokens 70 --threshold 3 --reporters console
+
+  # Article 9 as a lint (REQ-OBS-008). A decision that no longer matches the
+  # code is worse than an undocumented one: it is read, believed and acted on.
+  intent:
+    name: Intent layer (lat check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned: the version that the repo's intent layer was written against.
+      - run: npx --yes lat.md@0.12.2 check
+
+  test:
+    name: Tests (pytest + coverage, py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+        with:
+          python-version: ${{ matrix.python-version }}
       # The suite imports the GUI modules (tkinter + pystray's X backend), which need a
-      # display even though the real-window tests are skipped. Xvfb provides a headless one.
+      # display. Xvfb provides a headless one -- and since it is there, the
+      # real-window tests run here too (REQ-DEV-003): the alert, the
+      # configuration panel, the history table and the Pillow-to-Tk bridge the
+      # map depends on. Those are the checks that catch what only appears when
+      # a widget is actually created, and a check only the developer runs is a
+      # check that eventually stops being run.
       - run: sudo apt-get update && sudo apt-get install -y xvfb
-      - run: >-
+      - env:
+          VIGIA_GUI_TESTS: "1"
+        run: >-
           xvfb-run -a
           uv run pytest
           --cov=vigia_eew
           --cov-branch
           --cov-report=term-missing
           --cov-report=xml:coverage.xml
+          --cov-report=json:coverage.json
           --junitxml=report.xml
+      # A single global fail_under lets a well-covered module pay for a bare
+      # one. Each criticality group is asked for its own figure instead, and
+      # the failure names the module that is short (REQ-OBS-003, CA-102.1).
+      - run: uv run python scripts/check_coverage.py coverage.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage
+          name: coverage-py${{ matrix.python-version }}
           path: |
             coverage.xml
+            coverage.json
             report.xml
           retention-days: 7

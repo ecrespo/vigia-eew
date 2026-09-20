@@ -1,6 +1,6 @@
 # Señales arquitectónicas desde git
 
-**Repo:** `/home/user/vigia-eew` · 49 commits (2026-06-28 → 2026-08-16)
+**Repo:** `/sessions/busy-eloquent-cray/mnt/vigia-eew` · 47 commits (2026-06-28 → 2026-07-17)
 
 ## 🔴 Acoplamiento temporal entre módulos — evidencia P1
 
@@ -15,6 +15,7 @@ Pares de archivos en módulos distintos que cambian juntos: la frontera entre es
 | `src/vigia_eew/app.py` | `tests/test_app.py` | 5 | 0.56 |
 | `src/vigia_eew/config.py` | `tests/test_config.py` | 5 | 0.56 |
 | `docs/IMPLEMENTATION-PLAN.md` | `src/vigia_eew/cli.py` | 5 | 0.56 |
+| `docs/IMPLEMENTATION-PLAN.md` | `src/vigia_eew/app.py` | 5 | 0.5 |
 | `CHANGELOG.md` | `packaging/build_linux.sh` | 3 | 1.0 |
 | `packaging/build_linux.sh` | `pyproject.toml` | 3 | 1.0 |
 | `src/vigia_eew/notify/alert_window.py` | `tests/test_alert_window.py` | 3 | 0.75 |
@@ -42,15 +43,15 @@ Pares de archivos en módulos distintos que cambian juntos: la frontera entre es
 | `CHANGELOG.md` | 22 | 5 | 295 | 132 |
 | `pyproject.toml` | 17 | 2 | 164 | 51 |
 | `src/vigia_eew/config.py` | 10 | 1 | 505 | 20 |
-| `src/vigia_eew/notify/alert_window.py` | 6 | 2 | 399 | 18 |
 | `src/vigia_eew/tray.py` | 6 | 2 | 307 | 18 |
+| `src/vigia_eew/notify/alert_window.py` | 5 | 2 | 398 | 15 |
 | `docs/API-SPEC.md` | 7 | 1 | 809 | 14 |
 | `docs/IMPLEMENTATION-PLAN.md` | 14 | 0 | 815 | 14 |
 | `docs/DATA-MODEL.md` | 6 | 1 | 651 | 12 |
 | `tests/test_tray.py` | 4 | 2 | 307 | 12 |
 | `tests/test_alert_window.py` | 4 | 2 | 365 | 12 |
-| `src/vigia_eew/app.py` | 11 | 0 | 879 | 11 |
 | `docs/TECHNICAL-DESIGN.md` | 10 | 0 | 1378 | 10 |
+| `src/vigia_eew/app.py` | 10 | 0 | 878 | 10 |
 | `docs/PRD.md` | 9 | 0 | 539 | 9 |
 | `tests/test_app.py` | 9 | 0 | 623 | 9 |
 | `tests/test_config.py` | 9 | 0 | 320 | 9 |
@@ -71,15 +72,15 @@ Pares de archivos en módulos distintos que cambian juntos: la frontera entre es
 
 | Módulo | Commits | Autores | Autor dominante | % |
 |---|---|---|---|---|
+| `(raiz)` | 30 | 1 | Ernesto Crespo | 100.0% ⚠️ |
 | `tests` | 22 | 1 | Ernesto Crespo | 100.0% ⚠️ |
+| `src/vigia_eew` | 19 | 1 | Ernesto Crespo | 100.0% ⚠️ |
 | `docs` | 16 | 1 | Ernesto Crespo | 100.0% ⚠️ |
-| `packaging` | 8 | 1 | Ernesto Crespo | 100.0% |
+| `src/vigia_eew/pipeline` | 8 | 1 | Ernesto Crespo | 100.0% |
 | `.github/workflows` | 8 | 1 | Ernesto Crespo | 100.0% |
+| `packaging` | 8 | 1 | Ernesto Crespo | 100.0% |
+| `src/vigia_eew/notify` | 8 | 1 | Ernesto Crespo | 100.0% |
+| `src/vigia_eew/ingest` | 7 | 1 | Ernesto Crespo | 100.0% |
 | `src/vigia_eew/autostart` | 5 | 1 | Ernesto Crespo | 100.0% |
 | `src/vigia_eew/assets` | 4 | 1 | Ernesto Crespo | 100.0% |
 | `docs/plans` | 3 | 1 | Ernesto Crespo | 100.0% |
-| `.github/actions` | 2 | 1 | Ernesto Crespo | 100.0% |
-| `docs/code-audit` | 1 | 1 | Claude | 100.0% |
-| `docs/reverse-sdd` | 1 | 1 | Claude | 100.0% |
-| `lat.md` | 1 | 1 | Claude | 100.0% |
-| `.codegraph` | 1 | 1 | Claude | 100.0% |

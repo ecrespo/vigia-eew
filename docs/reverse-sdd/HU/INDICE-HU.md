@@ -1,77 +1,81 @@
 # Índice de Historias de Usuario
 
-> 22 HUs reconstruidas desde 47 commits no-merge. Curaduría de clusters en
-> `../00-INVENTARIO.md` §3. Cada HU cita sus commits; cada criterio cita el test o el fix
-> que lo respalda.
+> 17 HUs reconstruidas de 18 clusters de producto (58 commits, 2026-06-28 → 2026-07-17).
+> Numeración cronológica: HU-001 = cluster más antiguo.
+> Los clusters C-01 (andamiaje SDD), C-08 (pruebas e2e) y C-20 (releases) no generan HU por
+> diseño; están cubiertos en `../03-EVOLUCION.md` y `../04-MATRIZ-PRUEBAS.md`.
 
 ## Matriz de trazabilidad
 
-| HU | Título | Commits | Hashes | Era | CA | TC |
-|---|---|---|---|---|---|---|
-| [HU-001](HU-001-contrato-evento-sismico.md) | Contrato interno de evento sísmico | 1 | `b5c5371` | 0 | 7 | 8 |
-| [HU-002](HU-002-estado-persistente.md) | Estado persistente entre reinicios | 2 | `b5c5371`, `b0f832c` | 0, 5 | 8 | 10 |
-| [HU-003](HU-003-configuracion-validada.md) | Configuración TOML validada y auto-sembrada | 2 | `b5c5371`, `a06f7a1` | 0, 3 | 8 | 10 |
-| [HU-004](HU-004-logging-estructurado.md) | Observabilidad: logging estructurado | 1 | `b5c5371` | 0 | 5 | 6 |
-| [HU-005](HU-005-canal-push-emsc.md) | Canal push EMSC en tiempo real | 1 | `fc0ca99` | 0 | 9 | 11 |
-| [HU-006](HU-006-reconciliacion-usgs.md) | Reconciliación USGS con cursor | 1 | `fc0ca99` | 0 | 10 | 13 |
-| [HU-007](HU-007-supervision-resiliente.md) | Supervisión resiliente de tareas | 2 | `fc0ca99`, `f49d139` | 0 | 8 | 10 |
-| [HU-008](HU-008-normalizacion-multifuente.md) | Normalización multi-fuente | 1 | `b40c20b` | 0 | 7 | 15 |
-| [HU-009](HU-009-filtrado-radio-magnitud-frescura.md) | Filtrado por radio, magnitud y frescura | 2 | `b40c20b`, `b0f832c` | 0, 5 | 9 | 13 |
-| [HU-010](HU-010-deduplicacion.md) | Deduplicación intra e inter-fuente | 1 | `b40c20b` | 0 | 10 | 13 |
-| [HU-011](HU-011-alerta-no-descartable.md) | Alerta de escritorio no descartable | 3 | `fb50326`, `f90c796`, `f0960ac` | 0, 2 | 10 | 13 |
-| [HU-012](HU-012-sonido-toast-presentacion.md) | Sonido, toast y presentación por severidad | 1 | `fb50326` | 0 | 12 | 13 |
-| [HU-013](HU-013-cli-y-simulacion.md) | CLI, ensamblaje y modo simulación | 1 | `4fb49d0` | 0 | 12 | 13 |
-| [HU-014](HU-014-autoarranque-multiplataforma.md) | Autoarranque multiplataforma | 1 | `5b79ff1` | 0 | 11 | 14 |
-| [HU-015](HU-015-empaquetado-distribucion.md) | Empaquetado y distribución | 5 | `b6413e3`, `7b1c71c`, `c38d9f6`, `bdc2a9d`, `a02607f` | 0, 1, 2 | 8 | 11 |
-| [HU-016](HU-016-ubicacion-automatica-ip.md) | Ubicación automática por IP | 1 | `c20a59b` | 2 | 9 | 12 |
-| [HU-017](HU-017-icono-bandeja.md) | Ícono de bandeja del sistema | 1 | `fb3fe14` | 2 | 11 | 14 |
-| [HU-018](HU-018-internacionalizacion.md) | Internacionalización | 1 | `7f9132e` | 2 | 8 | 11 |
-| [HU-019](HU-019-dashboard-tui-headless.md) | Dashboard TUI headless | 2 | `7f98980`, `651c024` | 2 | 11 | 13 |
-| [HU-020](HU-020-filtro-pais.md) | Filtro de notificación por país | 1 | `a3a4a1a` | 3 | 9 | 14 |
-| [HU-021](HU-021-fuente-funvisis.md) | Fuente local FUNVISIS | 1 | `10bb72d` | 4 | 8 | 12 |
-| [HU-022](HU-022-fuente-geofon.md) | Fuente global GEOFON | 2 | `ade1199`, `8e0064a` | 4 | 12 | 16 |
-| | **Total** | **34 refs** | | | **212** | **275** |
+| HU | Título | Cluster | Commits | Hashes | Era | CA | TC |
+|---|---|---|---|---|---|---|---|
+| [HU-001](HU-001-contrato-configuracion-estado.md) | Contrato de evento, configuración y estado persistente | C-02 | 1 | `b5c5371` | v0.1.0 | 6 | 10 |
+| [HU-002](HU-002-ingesta-emsc-usgs-supervisor.md) | Ingesta en tiempo real con respaldo y auto-recuperación | C-03 | 1 | `fc0ca99` | v0.1.0 | 6 | 11 |
+| [HU-003](HU-003-pipeline-normalizacion-filtro-dedup.md) | Un solo aviso por terremoto, y solo si me afecta | C-04 | 1 | `b40c20b` | v0.1.0 | 6 | 12 |
+| [HU-004](HU-004-alerta-imposible-de-ignorar.md) | Una alerta que no puedo cerrar por reflejo | C-05 | 3 | `fb50326`, `f90c796`, `f0960ac` | v0.1.0–v0.1.3 | 6 | 10 |
+| [HU-005](HU-005-cli-ensamblaje-simulacion.md) | Arrancar el agente y poder probarlo sin esperar un terremoto | C-06 | 1 | `4fb49d0` | v0.1.0 | 5 | 8 |
+| [HU-006](HU-006-autoarranque-multiplataforma.md) | Que el agente arranque solo al encender el equipo | C-07 | 1 | `5b79ff1` | v0.1.0 | 5 | 8 |
+| [HU-007](HU-007-empaquetado-binarios-release.md) | Instalar el agente sin saber Python | C-09 | 5 | `b6413e3`, `7b1c71c`, `c38d9f6`, `bdc2a9d`, `a02607f` | v0.1.0–v0.1.3 | 5 | 7 |
+| [HU-008](HU-008-ubicacion-automatica-ip.md) | No tener que averiguar mis coordenadas | C-10 | 1 | `c20a59b` | v0.1.3 | 5 | 9 |
+| [HU-009](HU-009-icono-bandeja.md) | Ver el estado y pausar sin abrir una terminal | C-11 | 1 | `fb3fe14` | v0.1.3 | 5 | 10 |
+| [HU-010](HU-010-i18n-ingles.md) | Que el agente me hable en mi idioma | C-12 | 2 | `7f9132e`, `e49404d` | v0.1.3 | 5 | 8 |
+| [HU-011](HU-011-dashboard-tui-headless.md) | Usar el agente en un servidor sin escritorio | C-13 | 2 | `7f98980`, `651c024` | v0.1.3–v0.3.0 | 6 | 9 |
+| [HU-012](HU-012-filtro-de-pais.md) | No recibir avisos de sismos de otros países | C-14 | 1 | `a3a4a1a` | v0.2.1 | 5 | 9 |
+| [HU-013](HU-013-semilla-configuracion.md) | Tener un config.toml desde el primer arranque | C-15 | 1 | `a06f7a1` | v0.3.0 | 6 | 8 |
+| [HU-014](HU-014-fuente-funvisis.md) | Enterarme de los temblores pequeños de mi país | C-16 | 1 | `10bb72d` | v0.4.0 | 6 | 9 |
+| [HU-015](HU-015-fuente-geofon.md) | No quedarme ciego si las dos redes principales fallan | C-17 | 2 | `ade1199`, `8e0064a` | v0.5.0 | 6 | 10 |
+| [HU-016](HU-016-frescura-backlog-poda.md) | No recibir alertas de terremotos de días pasados | C-18 | 1 | `b0f832c` | v0.6.0 | 6 | 12 |
+| [HU-017](HU-017-ci-seguridad-precommit.md) | Que ningún cambio rompa el agente sin que nos enteremos | C-19 | 6 | `97b2a8e`, `5ee3b1d`, `f51da9c`, `27e4b45`, `0e707a1`, `559f077` | v0.3.0–v0.4.1 | 6 | 7 |
 
-*"34 refs" cuenta referencias a commits; los commits distintos son 25, porque cinco
-commits de fase entregaron varias capacidades separables (ver `00-INVENTARIO.md` §3).*
+**Totales**: 17 HUs · 95 criterios de aceptación · 157 casos de prueba.
 
 ## Grafo de dependencias
 
 ```mermaid
 graph TD
-    HU001[HU-001 Evento] --> HU008[HU-008 Normalización]
-    HU002[HU-002 Estado] --> HU006[HU-006 USGS]
-    HU003[HU-003 Config] --> HU005[HU-005 EMSC]
-    HU003 --> HU004[HU-004 Logging]
-    HU001 --> HU009[HU-009 Filtros]
-    HU008 --> HU009 --> HU010[HU-010 Dedup]
-    HU002 --> HU010
-    HU005 & HU006 --> HU007[HU-007 Supervisor]
-    HU010 --> HU011[HU-011 Alerta]
-    HU011 --> HU012[HU-012 Sonido/Toast]
-    HU007 & HU011 --> HU013[HU-013 CLI]
-    HU013 --> HU014[HU-014 Autoarranque]
-    HU013 --> HU015[HU-015 Empaquetado]
-    HU015 --> HU014
-    HU002 --> HU016[HU-016 Geoloc IP]
-    HU016 --> HU020[HU-020 Filtro país]
-    HU009 --> HU020
-    HU013 --> HU017[HU-017 Bandeja]
-    HU012 --> HU018[HU-018 i18n]
-    HU012 & HU007 --> HU019[HU-019 TUI]
-    HU007 & HU008 --> HU021[HU-021 FUNVISIS]
-    HU002 & HU010 --> HU022[HU-022 GEOFON]
+    HU001[HU-001 Contrato y estado] --> HU002[HU-002 Ingesta]
+    HU001 --> HU003[HU-003 Pipeline]
+    HU002 --> HU003
+    HU003 --> HU004[HU-004 Alerta no descartable]
+    HU004 --> HU005[HU-005 CLI y simulación]
+    HU005 --> HU006[HU-006 Autoarranque]
+    HU005 --> HU007[HU-007 Empaquetado]
+    HU006 --> HU007
+    HU005 --> HU008[HU-008 Ubicación por IP]
+    HU004 --> HU009[HU-009 Bandeja]
+    HU004 --> HU010[HU-010 i18n]
+    HU004 --> HU011[HU-011 TUI]
+    HU008 --> HU012[HU-012 Filtro de país]
+    HU003 --> HU012
+    HU005 --> HU013[HU-013 Semilla de config]
+    HU013 --> HU008
+    HU002 --> HU014[HU-014 FUNVISIS]
+    HU002 --> HU015[HU-015 GEOFON]
+    HU015 --> HU016[HU-016 Frescura y poda]
+    HU003 --> HU016
+    HU007 --> HU017[HU-017 CI y seguridad]
 ```
 
-## Cobertura de tests por HU
+## Cobertura de clusters
 
-| Cobertura | HUs | Comentario |
+| Cluster | Commits | ¿En una HU? |
 |---|---|---|
-| **Alta** (test por cada criterio) | HU-001, 002, 003, 005, 006, 008, 009, 010, 012, 013, 016, 018, 019, 020, 021, 022 | 16 de 22 |
-| **Media** (huecos puntuales señalados) | HU-007, 011, 014, 017 | Casos límite y de entorno |
-| **Baja** | HU-004 (logging), HU-015 (empaquetado) | Ver abajo |
+| C-01 andamiaje SDD | 4 | No — narrado en `03-EVOLUCION.md` Era 1 |
+| C-02 … C-07, C-09 … C-19 | 30 | Sí, exactamente una cada uno |
+| C-08 pruebas e2e de resiliencia | 1 | No — sus 5 tests alimentan `04-MATRIZ-PRUEBAS.md` |
+| C-20 releases | 9 | No — delimitan las eras |
+| merges de PR | 11 | No aplica |
 
-Los dos puntos débiles son consistentes entre sí: **lo que no es lógica de dominio está
-poco probado**. No existe `tests/test_logging_conf.py`, y el empaquetado —el área con más
-fixes de todo el historial— se valida solo ejecutando el workflow. Ambos se detallan en
-`../04-MATRIZ-PRUEBAS.md` §4.
+Ningún cluster de producto queda sin HU; ninguna HU cubre dos clusters.
+
+## Fuentes de los criterios de aceptación
+
+| Fuente | Criterios | Comentario |
+|---|---|---|
+| Tests existentes en el repo | 78 | las 344 pruebas del repo respaldan la mayoría |
+| Commits `fix` del cluster | 11 | cada bug corregido es un criterio que la historia original no tenía |
+| Código de validación / manejo de error | 6 | rutas sin test directo pero verificables en el fuente |
+
+Criterios **sin ningún test automatizado hoy** (huecos que la v2 debe cerrar primero):
+CA-007.1, CA-007.2, CA-007.3, CA-007.5, CA-010.5, CA-015.5, CA-017.5. Detalle en
+`../04-MATRIZ-PRUEBAS.md`.

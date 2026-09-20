@@ -7,6 +7,8 @@ import json
 
 import pytest
 
+from tests.conftest import FakeConnect as _FakeConnect
+from tests.conftest import FakeWS as _FakeWS
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import EMSCSource
 from vigia_eew.ingest import RawMessage
@@ -35,42 +37,6 @@ _EMSC_MESSAGE = {
 
 
 # --- Test doubles for the WebSocket transport ---
-
-
-class _FakeWS:
-    """Fake WS connection: context manager + async iterator of messages."""
-
-    def __init__(self, messages, *, error=None):
-        self._messages = list(messages)
-        self._error = error
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if self._messages:
-            return self._messages.pop(0)
-        if self._error is not None:
-            raise self._error
-        raise StopAsyncIteration
-
-
-class _FakeConnect:
-    """Injectable connection factory that records the kwargs (keepalive)."""
-
-    def __init__(self, connections):
-        self._connections = list(connections)
-        self.calls = []
-
-    def __call__(self, url, **kw):
-        self.calls.append((url, kw))
-        return self._connections.pop(0)
 
 
 class _ControlledSleep:
@@ -194,9 +160,7 @@ async def test_connecting_marks_state_connected():
     state = AgentState()
     # Cancelled while still connected (no drop): the state must not switch to
     # "reconnecting" (that path is only hit if the connection actually closes).
-    connect = _FakeConnect(
-        [_FakeWS([json.dumps(_EMSC_MESSAGE)], error=asyncio.CancelledError())]
-    )
+    connect = _FakeConnect([_FakeWS([json.dumps(_EMSC_MESSAGE)], error=asyncio.CancelledError())])
     sleep = _ControlledSleep(break_at=1)
     ing = _ingestor(asyncio.Queue(), connect=connect, sleep=sleep, state=state)
 

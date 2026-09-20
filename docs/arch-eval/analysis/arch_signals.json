@@ -1,9 +1,9 @@
 {
-  "repo": "/home/user/vigia-eew",
-  "commits_analyzed": 49,
+  "repo": "/sessions/busy-eloquent-cray/mnt/vigia-eew",
+  "commits_analyzed": 47,
   "date_range": [
     "2026-06-28",
-    "2026-08-16"
+    "2026-07-17"
   ],
   "hotspots": [
     {
@@ -28,18 +28,18 @@
       "score": 20
     },
     {
-      "file": "src/vigia_eew/notify/alert_window.py",
-      "touches": 6,
-      "fixes": 2,
-      "churn": 399,
-      "score": 18
-    },
-    {
       "file": "src/vigia_eew/tray.py",
       "touches": 6,
       "fixes": 2,
       "churn": 307,
       "score": 18
+    },
+    {
+      "file": "src/vigia_eew/notify/alert_window.py",
+      "touches": 5,
+      "fixes": 2,
+      "churn": 398,
+      "score": 15
     },
     {
       "file": "docs/API-SPEC.md",
@@ -77,17 +77,17 @@
       "score": 12
     },
     {
-      "file": "src/vigia_eew/app.py",
-      "touches": 11,
-      "fixes": 0,
-      "churn": 879,
-      "score": 11
-    },
-    {
       "file": "docs/TECHNICAL-DESIGN.md",
       "touches": 10,
       "fixes": 0,
       "churn": 1378,
+      "score": 10
+    },
+    {
+      "file": "src/vigia_eew/app.py",
+      "touches": 10,
+      "fixes": 0,
+      "churn": 878,
       "score": 10
     },
     {
@@ -277,6 +277,15 @@
       "module_b": "src/vigia_eew"
     },
     {
+      "file_a": "docs/IMPLEMENTATION-PLAN.md",
+      "file_b": "src/vigia_eew/app.py",
+      "cochanges": 5,
+      "confidence": 0.5,
+      "cross_module": true,
+      "module_a": "docs",
+      "module_b": "src/vigia_eew"
+    },
+    {
       "file_a": "CHANGELOG.md",
       "file_b": "packaging/build_linux.sh",
       "cochanges": 3,
@@ -403,11 +412,25 @@
       "module_b": "docs"
     }
   ],
-  "cross_module_pairs": 14,
+  "cross_module_pairs": 15,
   "bus_factor_by_module": [
+    {
+      "module": "(raiz)",
+      "commits": 30,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
     {
       "module": "tests",
       "commits": 22,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "src/vigia_eew",
+      "commits": 19,
       "authors": 1,
       "top_author": "Ernesto Crespo",
       "top_author_pct": 100.0
@@ -420,7 +443,7 @@
       "top_author_pct": 100.0
     },
     {
-      "module": "packaging",
+      "module": "src/vigia_eew/pipeline",
       "commits": 8,
       "authors": 1,
       "top_author": "Ernesto Crespo",
@@ -429,6 +452,27 @@
     {
       "module": ".github/workflows",
       "commits": 8,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "packaging",
+      "commits": 8,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "src/vigia_eew/notify",
+      "commits": 8,
+      "authors": 1,
+      "top_author": "Ernesto Crespo",
+      "top_author_pct": 100.0
+    },
+    {
+      "module": "src/vigia_eew/ingest",
+      "commits": 7,
       "authors": 1,
       "top_author": "Ernesto Crespo",
       "top_author_pct": 100.0
@@ -462,34 +506,6 @@
       "top_author_pct": 100.0
     },
     {
-      "module": "docs/code-audit",
-      "commits": 1,
-      "authors": 1,
-      "top_author": "Claude",
-      "top_author_pct": 100.0
-    },
-    {
-      "module": "docs/reverse-sdd",
-      "commits": 1,
-      "authors": 1,
-      "top_author": "Claude",
-      "top_author_pct": 100.0
-    },
-    {
-      "module": "lat.md",
-      "commits": 1,
-      "authors": 1,
-      "top_author": "Claude",
-      "top_author_pct": 100.0
-    },
-    {
-      "module": ".codegraph",
-      "commits": 1,
-      "authors": 1,
-      "top_author": "Claude",
-      "top_author_pct": 100.0
-    },
-    {
       "module": "config.toml.example => src/vigia_eew",
       "commits": 1,
       "authors": 1,
@@ -502,41 +518,6 @@
       "authors": 1,
       "top_author": "Ernesto Crespo",
       "top_author_pct": 100.0
-    },
-    {
-      "module": "(raiz)",
-      "commits": 30,
-      "authors": 2,
-      "top_author": "Ernesto Crespo",
-      "top_author_pct": 96.7
-    },
-    {
-      "module": "src/vigia_eew",
-      "commits": 20,
-      "authors": 2,
-      "top_author": "Ernesto Crespo",
-      "top_author_pct": 95.0
-    },
-    {
-      "module": "src/vigia_eew/notify",
-      "commits": 9,
-      "authors": 2,
-      "top_author": "Ernesto Crespo",
-      "top_author_pct": 88.9
-    },
-    {
-      "module": "src/vigia_eew/pipeline",
-      "commits": 9,
-      "authors": 2,
-      "top_author": "Ernesto Crespo",
-      "top_author_pct": 88.9
-    },
-    {
-      "module": "src/vigia_eew/ingest",
-      "commits": 8,
-      "authors": 2,
-      "top_author": "Ernesto Crespo",
-      "top_author_pct": 87.5
     }
   ],
   "params": {

@@ -8,10 +8,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigia-eew"
-version = "0.6.0"                       # semantic versioning (RF-27)
+version = "1.0.0"                       # semantic versioning (RF-27)
 description = "Real-time desktop seismic alert agent, impossible to ignore (EMSC push + USGS backup)."
 readme = "README.md"
-requires-python = ">=3.11"             # uses stdlib tomllib (RNF-11)
+requires-python = ">=3.13"             # amendment E-01: 3.12 is security-only (RNF-11)
 license = { file = "LICENSE" }
 authors = [{ name = "Ernesto Crespo", email = "ecrespo@gmail.com" }]
 keywords = ["earthquake", "sismo", "alerta", "eew", "emsc", "usgs", "venezuela"]
@@ -21,23 +21,45 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
 
-# Dependencias de runtime (ver IMPLEMENTATION-PLAN §5).
+# Runtime dependencies (see IMPLEMENTATION-PLAN §5).
+#
+# Every range is bounded above (REQ-DEP-005, CA-101.7): without a ceiling, `uv lock`
+# adopts a new major the moment it is published and nobody decides anything. The
+# project already lived that -- the declared floors had drifted four majors behind
+# the resolved version for websockets and eight for textual.
+#
+# The ceiling sits where the package is allowed to break: the next major for a 1.0+
+# package, the next *minor* for a 0.x one, because that is where 0.x breaks. `<1` on
+# httpx 0.28 would be a ceiling in name only.
+#
+# Floors were raised with the ceilings, which the plan did not anticipate: after
+# T-111 moved the runtime to >=3.13, the old floors no longer *resolve* -- Pillow
+# 10.0.0 and pydantic-core 2.16.1 fall back to building from source and fail. The
+# numbers used are the minimums the constitution's stack table already declares.
+# Verified: `uv sync --resolution lowest-direct` installs exactly these floors and
+# `pip-audit` reports nothing against that tree.
 dependencies = [
-    "websockets>=12.0",        # EMSC WS with native keepalive (RF-01/ADR-009)
-    "httpx>=0.27",             # async USGS REST (RF-05/ADR-009)
-    "pydantic>=2.6",           # model and config validation (RF-07/RF-24)
-    "desktop-notifier>=5.0",   # cross-platform toast (RF-14)
-    "platformdirs>=4.0",       # per-OS state/config paths (RF-06/RF-10)
-    "tzdata>=2024.1",          # America/Caracas zone on Win/macOS (RF-18/RNF-12)
-    "pystray>=0.19",           # system tray icon (RF-34/ADR-012)
-    "Pillow>=10.0",            # tray icon image, pystray requirement (RF-34)
-    "textual>=0.60",           # headless TUI dashboard (RF-36/ADR-013)
+    "websockets>=16.0,<17",       # EMSC WS with native keepalive (RF-01/ADR-009)
+    "httpx>=0.28,<0.29",          # async USGS REST (RF-05/ADR-009)
+    "pydantic>=2.13,<3",          # model and config validation (RF-07/RF-24)
+    "desktop-notifier>=6.0,<7",   # cross-platform toast (RF-14)
+    "platformdirs>=4.3,<5",       # per-OS state/config paths (RF-06/RF-10)
+    "tzdata>=2024.1",             # America/Caracas zone on Win/macOS (RF-18/RNF-12).
+                                  # No ceiling, by amendment E-04: IANA data, not an
+                                  # API -- its major is the publication year, so a
+                                  # ceiling would freeze the timezone rules themselves
+    "pystray>=0.19.5,<0.20",      # system tray icon (RF-34/ADR-012)
+    "Pillow>=12.3.0,<13",         # tray icon image, pystray requirement (RF-34). Floor
+                                  # is the security floor: >=10.0 admitted 34 advisories
+    "textual>=8.2,<9",            # headless TUI dashboard (RF-36/ADR-013)
+    "tomlkit>=0.13.3,<0.14",      # config writing that preserves the file's 46 comment
+                                  # lines (REQ-CFG-009/ADR-019). `tomllib` stays the
+                                  # reader -- this is imported only on the write path
 ]
 
 [project.urls]
@@ -57,6 +79,7 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
     "pre-commit>=3.7",
+    "import-linter>=2.0",
 ]
 # Native packaging (Phase 8, RF-28..RF-30): only needed when building binaries
 # with `packaging/build_*.{sh,ps1}`, not for development or installing from PyPI.
@@ -81,22 +104,88 @@ include = ["src/vigia_eew", "docs", "ARCHITECTURE.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# --strict-markers: un marcador mal escrito es un error, no una selección vacía.
+addopts = "--strict-markers"
+markers = [
+    "integration: crosses a real process, filesystem or tool boundary (git, lint-imports, a spawned interpreter)",
+    "gui: drives a real UI toolkit -- Tkinter against a display, or the Textual driver",
+]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 strict = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
 module = "pystray"
 ignore_missing_imports = true  # no published stubs/py.typed (RF-34)
+
+# --- Fronteras de importación (REQ-OBS-005, ADR-003) ---
+# El grafo a nivel de archivo tiene 0 ciclos hoy. Estos contratos no arreglan un
+# ciclo: impiden el primero. Se verifican con `lint-imports` en el gate.
+
+[tool.importlinter]
+root_package = "vigia_eew"
+
+# Capas, de arriba abajo. Una capa solo puede importar las que tiene debajo, y los
+# módulos separados por "|" están en la misma capa: tampoco pueden importarse entre
+# sí. Un ciclo entre dos capas exige exactamente la importación hacia arriba que
+# este contrato prohíbe (CA-103.5).
+[[tool.importlinter.contracts]]
+name = "Layered architecture"
+type = "layers"
+layers = [
+    "vigia_eew.cli",
+    "vigia_eew.app",
+    "vigia_eew.wiring",
+    "vigia_eew.tui | vigia_eew.tray",
+    "vigia_eew.notify | vigia_eew.autostart",
+    "vigia_eew.pipeline",
+    "vigia_eew.ingest",
+    "vigia_eew.simulation",
+    "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf | vigia_eew.config_writer | vigia_eew.history | vigia_eew.tiles",
+    "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env",
+]
+
+# Lo que el pipeline decide no puede depender de cómo se presenta. Redundante con
+# las capas, y deliberadamente: CA-103.4 pide que el fallo nombre el contrato, y
+# "prohibido" dice qué importación sobra mucho más directo que un orden de capas.
+[[tool.importlinter.contracts]]
+name = "The pipeline does not know about presentation"
+type = "forbidden"
+source_modules = ["vigia_eew.pipeline"]
+forbidden_modules = ["vigia_eew.notify"]
+
+# Una fuente de datos no sabe qué se hace con lo que entrega. Es lo que permite
+# añadir una fuente sin leer el resto del sistema (REQ-ING-009, F3).
+[[tool.importlinter.contracts]]
+name = "Ingestion knows nothing downstream"
+type = "forbidden"
+source_modules = ["vigia_eew.ingest"]
+forbidden_modules = [
+    "vigia_eew.pipeline",
+    "vigia_eew.notify",
+    "vigia_eew.app",
+    "vigia_eew.cli",
+]
+
+# Los tres adaptadores —entrada, presentación y sistema operativo— no se conocen.
+# Quien toque uno no necesita entender los otros dos.
+[[tool.importlinter.contracts]]
+name = "The adapters are independent of one another"
+type = "independence"
+modules = [
+    "vigia_eew.ingest",
+    "vigia_eew.notify",
+    "vigia_eew.autostart",
+]
 
 [tool.bandit]
 # SAST gate (security.yml). Only the shipped source is scanned (`-r src`); tests are

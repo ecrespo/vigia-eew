@@ -1,8 +1,8 @@
 # Matriz de gaps — code-audit Phase 0
 
-**Repo:** `/home/user/vigia-eew`  
-**Stacks:** python  
-**Dockerfiles:** 0 · **Lockfiles:** 0 · **pre-commit:** sí
+**Repo:** `/sessions/busy-eloquent-cray/mnt/vigia-eew`
+**Stacks:** python
+**Dockerfiles:** 0 · **Lockfiles:** 1 · **pre-commit:** sí
 
 **Tests:** 35 unitarios (heurística) · 0 integración
 

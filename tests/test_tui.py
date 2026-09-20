@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from textual.widgets import RichLog, Static
 
 from vigia_eew.agent_state import AgentState
 from vigia_eew.notify.presentation import AlertData
 from vigia_eew.tui import AlertScreen, VigiaTuiApp
+
+# Every test here mounts a real Textual app and drives it through its async
+# driver. Headless, but a UI toolkit all the same -- and the slowest file.
+pytestmark = pytest.mark.gui
 
 
 def _data(severity: str = "critical", place: str = "La Guaira") -> AlertData:
@@ -151,11 +156,16 @@ async def test_quit_binding_requests_stop_and_exits():
 
 
 async def test_quit_without_supervisor_exits_cleanly():
+    """In simulate mode nothing is bound, and `q` must still exit.
+
+    "Does not raise" was the old assertion, and a binding that did nothing at
+    all passed it. What matters is that the app is actually gone afterwards.
+    """
     app = VigiaTuiApp(state=AgentState())
     async with app.run_test() as pilot:
         await pilot.press("q")
         await pilot.pause()
-    # no supervisor bound (simulate mode); q must still exit without raising
+        assert not app.is_running
 
 
 async def test_on_start_runs_after_mount():
@@ -176,7 +186,11 @@ async def test_simulate_tui_end_to_end_shows_and_acknowledges():
         state=application._agent_state,
         on_start=application._inject_simulated_alert,
     )
-    application._controller_for_tui(app)
+    # Mirrors run_tui: the application keeps the controller, which is what
+    # on_start reaches for when it injects the simulated event.
+    application._ctrl = application.wiring.build_tui_controller(
+        app, on_acknowledge=application._after_acknowledge
+    )
     async with app.run_test() as pilot:
         await pilot.pause()
         assert isinstance(app.screen, AlertScreen)

@@ -63,14 +63,64 @@ else
     echo "   (omitido: falta linuxdeploy/appimagetool en el PATH)" >&2
 fi
 
-echo "-- 3/3: .deb y .rpm (fpm) --"
-if command -v fpm >/dev/null; then
+echo "-- 3/3: .deb y .rpm --"
+# `fpm` produce los dos formatos pero exige Ruby; `dpkg-deb` viene en cualquier
+# Debian/Ubuntu, incluido el runner de CI. El `.deb` es un archivo con un
+# binario dentro: no hace falta una cadena de herramientas extra para armarlo, y
+# depender de una significaba que en media de las máquinas el paso se omitía en
+# silencio. El `.rpm` sí sigue necesitando fpm.
+construir_deb_con_dpkg() {
+    local raiz="$RAIZ/build/deb"
+    rm -rf "$raiz"
+    mkdir -p "$raiz/DEBIAN" "$raiz/usr/bin" "$raiz/usr/share/doc/vigia-eew"
+    install -m 0755 "$BIN" "$raiz/usr/bin/vigia-eew"
+    install -m 0644 "$RAIZ/README.md" "$raiz/usr/share/doc/vigia-eew/README.md"
+    install -m 0644 "$RAIZ/LICENSE" "$raiz/usr/share/doc/vigia-eew/copyright"
+
+    # El piso de glibc se deriva de la máquina que construye, no se inventa: un
+    # binario de PyInstaller lleva dentro el runtime de Python enlazado contra
+    # *esa* glibc, así que declarar una menor produciría un paquete que instala
+    # y no arranca. En CI esa máquina es la base fijada por T-134.
+    local glibc
+    glibc="$(ldd --version | head -1 | grep -o '[0-9]\+\.[0-9]\+$')"
+    local arch
+    arch="$(dpkg --print-architecture)"
+    local tamano
+    tamano="$(du -k "$BIN" | cut -f1)"
+
+    cat > "$raiz/DEBIAN/control" <<CONTROL
+Package: vigia-eew
+Version: $VERSION
+Section: utils
+Priority: optional
+Architecture: $arch
+Depends: libc6 (>= $glibc), zlib1g
+Installed-Size: $tamano
+Maintainer: Ernesto Crespo <ecrespo@gmail.com>
+Homepage: https://github.com/ecrespo/vigia-eew
+Description: Agente de escritorio de alerta sismica en tiempo real
+ Vigia-eew vigila cuatro redes sismicas (EMSC, USGS, FUNVISIS y GEOFON) y
+ muestra una alerta de escritorio cuando un sismo entra en el radio y la
+ magnitud configurados. Guarda un historico local de lo que evaluo, con el
+ motivo de cada descarte.
+CONTROL
+    dpkg-deb --build --root-owner-group "$raiz" "$DIST/vigia-eew_${VERSION}_${arch}.deb"
+}
+
+if command -v dpkg-deb >/dev/null; then
+    construir_deb_con_dpkg
+elif command -v fpm >/dev/null; then
     fpm -s dir -t deb -n vigia-eew -v "$VERSION" \
         --description "Agente de escritorio de alerta sísmica en tiempo real" \
         --url "https://github.com/ecrespo/vigia-eew" \
         --license "GPL-3.0-or-later" \
         --package "$DIST/vigia-eew_${VERSION}_amd64.deb" \
         "$BIN=/usr/bin/vigia-eew"
+else
+    echo "   (omitido .deb: no hay dpkg-deb ni fpm en el PATH)" >&2
+fi
+
+if command -v fpm >/dev/null; then
     if command -v rpmbuild >/dev/null; then
         fpm -s dir -t rpm -n vigia-eew -v "$VERSION" \
             --description "Agente de escritorio de alerta sísmica en tiempo real" \
@@ -81,7 +131,7 @@ if command -v fpm >/dev/null; then
         echo "   (omitido .rpm: falta rpmbuild en el PATH)" >&2
     fi
 else
-    echo "   (omitido: falta fpm en el PATH — gem install --no-document fpm)" >&2
+    echo "   (omitido .rpm: falta fpm en el PATH — gem install --no-document fpm)" >&2
 fi
 
 echo "== Listo. Artefactos en $DIST =="

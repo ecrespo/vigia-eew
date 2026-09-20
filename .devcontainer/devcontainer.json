@@ -1,0 +1,61 @@
+// Contribution environment for vigia-eew (REQ-DEV-001..003, HU-109).
+//
+// Permitted by constitutional amendment E-03: the "no containers" stack
+// restriction is scoped to the *product*, which is what it always meant. The
+// product is still a desktop agent that ships as a binary, not an image.
+//
+// The obstacle this removes is specific to this project and not obvious. The
+// agent imports tkinter at load time; no Python base image ships it. uv's
+// managed CPython (python-build-standalone) does carry the `_tkinter` module
+// -- which is how CI solves it -- but it resolves libtcl8.6 and libtk8.6
+// against the *system*. Without them the import fails after a perfectly green
+// `uv sync`, which makes a packaging problem look like a code problem.
+{
+  "name": "vigia-eew",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "containerEnv": {
+    // Match ci.yml: uv-managed CPython, never the distro interpreter.
+    "UV_PYTHON_PREFERENCE": "only-managed",
+    // The floor the project declares (requires-python, amendment E-01).
+    "UV_PYTHON": "3.13",
+    // Bind mounts do not support hardlinks; copy instead of warning on every sync.
+    "UV_LINK_MODE": "copy",
+    // Served by the Xvfb that postStartCommand starts, so the opt-in GUI tests
+    // are runnable rather than permanently skipped.
+    "DISPLAY": ":99"
+  },
+
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
+  },
+
+  // Once per container. libtk8.6/libtcl8.6 are what uv's interpreter links
+  // against; libxss1 is a transitive need of Tk that images routinely lack;
+  // xvfb is the virtual display for CA-109.4.
+  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends libtk8.6 libtcl8.6 libxss1 xvfb && sudo rm -rf /var/lib/apt/lists/* && curl -LsSf https://astral.sh/uv/install.sh | sh",
+
+  // `--frozen` so the container reproduces the verified resolution instead of
+  // re-resolving it (REQ-DEP-001). The hooks are installed *for* the
+  // contributor: a gate somebody has to remember to install is a gate that
+  // catches the second commit, never the first.
+  "postCreateCommand": "uv sync --frozen --extra dev --extra security && uv run pre-commit install",
+
+  // Every start, not just creation: the display does not survive a restart.
+  "postStartCommand": "nohup Xvfb :99 -screen 0 1280x1024x24 > /tmp/xvfb.log 2>&1 &",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
+        "python.testing.pytestEnabled": true
+      }
+    }
+  }
+}

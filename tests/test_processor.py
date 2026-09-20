@@ -99,11 +99,25 @@ async def test_update_refreshes_without_alerting(tmp_path):
 
 
 async def test_run_consumes_from_the_queue(tmp_path):
+    """The loop drains the queue until it is cancelled.
+
+    Waited on by yielding to the loop rather than by a real 50 ms sleep: the
+    rest of the suite injects its clocks, and a wall-clock wait is both slower
+    and a flake waiting for a loaded machine.
+    """
     cap = _Capture()
     proc, input_queue = _processor(tmp_path, cap)
     input_queue.put_nowait(_raw())
     task = asyncio.create_task(proc.run())
-    await asyncio.sleep(0.05)
+
+    # Yield until the loop has taken the message and delivered the alert.
+    # `Queue.join()` is not usable here: the processor never calls
+    # `task_done()`, so joining would wait for ever.
+    for _ in range(100):
+        if cap.alerted:
+            break
+        await asyncio.sleep(0)
+
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task

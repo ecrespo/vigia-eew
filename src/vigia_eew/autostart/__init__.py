@@ -76,7 +76,5 @@ def create_installer(
     if platform == "darwin":
         return LaunchAgentInstaller(program_args=args, runner=runner)
     if platform == "win32":
-        return SchtasksInstaller(
-            exec_cmd=exec_cmd or subprocess.list2cmdline(args), runner=runner
-        )
+        return SchtasksInstaller(exec_cmd=exec_cmd or subprocess.list2cmdline(args), runner=runner)
     raise NotImplementedError(f"Autostart not supported on platform: {platform}")

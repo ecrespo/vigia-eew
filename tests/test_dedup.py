@@ -77,7 +77,11 @@ def test_cross_source_duplicate(tmp_path):
     dedup.register(_ev(id="emsc-1", source="EMSC", lat=10.50, lon=-66.90, mag=6.0))
     # USGS: another id, close (<100 km), <90 s, <0.5 mag -> same earthquake.
     usgs = _ev(
-        id="usgs-1", source="USGS", lat=10.55, lon=-66.93, mag=6.2,
+        id="usgs-1",
+        source="USGS",
+        lat=10.55,
+        lon=-66.93,
+        mag=6.2,
         time=_BASE + timedelta(seconds=30),
     )
     assert dedup.classify(usgs) == "duplicate"
@@ -91,7 +95,11 @@ def test_geofon_duplicate_of_prior_source(tmp_path):
         dedup, _ = _dedup(tmp_path)
         dedup.register(_ev(id=f"{prior}-1", source=prior, lat=10.50, lon=-66.90, mag=6.0))
         geofon = _ev(
-            id="gfz-1", source="GEOFON", lat=10.55, lon=-66.93, mag=6.2,
+            id="gfz-1",
+            source="GEOFON",
+            lat=10.55,
+            lon=-66.93,
+            mag=6.2,
             time=_BASE + timedelta(seconds=30),
         )
         assert dedup.classify(geofon) == "duplicate", prior
@@ -114,7 +122,11 @@ def test_cross_source_outside_window_is_new(tmp_path):
     dedup, _ = _dedup(tmp_path)
     dedup.register(_ev(id="emsc-1", lat=10.5, lon=-66.9, mag=6.0, time=_BASE))
     late = _ev(
-        id="usgs-1", source="USGS", lat=10.5, lon=-66.9, mag=6.0,
+        id="usgs-1",
+        source="USGS",
+        lat=10.5,
+        lon=-66.9,
+        mag=6.0,
         time=_BASE + timedelta(seconds=200),
     )
     assert dedup.classify(late) == "new"

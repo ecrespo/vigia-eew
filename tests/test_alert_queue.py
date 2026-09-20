@@ -177,3 +177,74 @@ def test_bridge_start_polling_schedules_after():
     bridge.start_polling(widget, interval_ms=200)
     assert widget.after_calls[0][0] == 200
     assert callable(widget.after_calls[0][1])
+
+
+# --- A supersede refreshes the alert on screen, or is dropped (REQ-PIP-010) ---
+
+
+def _supersede(id="e2", supersedes="e1", mag=4.8) -> SeismicEvent:
+    return _ev(id=id, action="update", mag=mag).model_copy(update={"supersedes": supersedes})
+
+
+def test_a_supersede_refreshes_the_alert_it_names() -> None:
+    """The two arrivals carry different ids -- they come from different catalogues.
+
+    Matching on the id alone would not recognise the revision, so the queue
+    matches on what the pipeline stated explicitly: which alert this one
+    overrules.
+    """
+    sink = _Sink()
+    queue = _make_queue(sink)
+    queue.enqueue(_ev(id="e1", mag=5.2))
+
+    queue.enqueue(_supersede(id="e2", supersedes="e1", mag=4.8))
+
+    assert [e.magnitude for e in sink.shown] == [5.2]
+    assert [e.magnitude for e in sink.updated] == [4.8]
+    assert queue.current is not None and queue.current.magnitude == 4.8
+
+
+def test_a_supersede_of_an_alert_no_longer_on_screen_is_dropped() -> None:
+    """Better data about an earthquake the user already acknowledged is not news.
+
+    Queuing it would raise a second alert for the same earthquake, which is
+    the one thing the deduplicator exists to prevent.
+    """
+    sink = _Sink()
+    queue = _make_queue(sink)
+    queue.enqueue(_ev(id="e1", mag=5.2))
+    queue.acknowledge()
+
+    queue.enqueue(_supersede(id="e2", supersedes="e1"))
+
+    assert len(sink.shown) == 1
+    assert queue.current is None
+    assert queue.pending == 0
+
+
+def test_a_supersede_does_not_interrupt_a_different_alert() -> None:
+    """It names the alert it overrules; anything else on screen is not it."""
+    sink = _Sink()
+    queue = _make_queue(sink)
+    queue.enqueue(_ev(id="other", mag=6.4))
+
+    queue.enqueue(_supersede(id="e2", supersedes="e1"))
+
+    assert [e.id for e in sink.shown] == ["other"]
+    assert sink.updated == []
+    assert queue.pending == 0
+
+
+def test_an_ordinary_update_of_an_unseen_event_still_alerts() -> None:
+    """EMSC revisions of an event we never saw must not be swallowed (RF-11).
+
+    That is what separates them from a supersede: an `update` with nothing to
+    refresh is a first sighting, and the deduplicator has already classified
+    it as new by the time it gets here.
+    """
+    sink = _Sink()
+    queue = _make_queue(sink)
+
+    queue.enqueue(_ev(id="e9", action="update"))
+
+    assert [e.id for e in sink.shown] == ["e9"]

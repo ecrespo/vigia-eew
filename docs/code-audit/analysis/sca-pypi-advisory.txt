@@ -1,0 +1,8 @@
+Fuente: PyPI Advisory Database (https://pypi.org/pypi/<pkg>/<ver>/json -> campo 'vulnerabilities')
+Motivo de la sustitucion: api.osv.dev devuelve 403 en este entorno; pip-audit -r no resuelve por Python 3.10 vs lock >=3.11
+Paquetes a auditar: 90
+
+VULN pip==26.1.2  id=PYSEC-2026-3721  aliases=['CVE-2026-13346']  fixed_in=['26.2']  withdrawn=None
+VULN pip==26.1.2  id=GHSA-qwm4-qh6w-59xr  aliases=['CVE-2026-13346']  fixed_in=['26.2.0']  withdrawn=None
+
+RESUMEN: auditados=90  con_vulnerabilidades=1  no_consultados=0

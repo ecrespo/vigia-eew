@@ -50,9 +50,7 @@ def assets_path() -> Path:
     return Path(__file__).resolve().parent.parent / "assets"
 
 
-def player_command(
-    path: str | Path, platform: str, available: set[str]
-) -> list[str] | None:
+def player_command(path: str | Path, platform: str, available: set[str]) -> list[str] | None:
     """Chooses the playback command based on OS and available binaries.
 
     Returns the argument list for `subprocess`, or None if there is no suitable

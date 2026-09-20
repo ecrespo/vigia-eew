@@ -89,15 +89,22 @@ class AlertController:
 
     def _show(self, ev: SeismicEvent) -> None:
         data = self._data(ev)
+        # The journey's last entry (REQ-OBS-002). Between this line and
+        # `event_received` with the same trace, the five stages are one search.
+        self._log.info(
+            "alert_presented trace=%s id=%s source=%s severity=%s",
+            ev.trace_id,
+            ev.id,
+            ev.source,
+            ev.severity,
+        )
         self._window = self._create_window(data, ev.severity, self._alert_queue.acknowledge)
         if self._play_sound is not None:
             self._play_sound(ev.severity)
         if self._toast is not None:
             self._toast(ev)
         if self._state is not None:
-            self._state.mark_last_alert(
-                f"{data.magnitude} · {data.place} · {data.local_time}"
-            )
+            self._state.mark_last_alert(f"{data.magnitude} · {data.place} · {data.local_time}")
 
     def _update(self, ev: SeismicEvent) -> None:
         if self._window is not None:

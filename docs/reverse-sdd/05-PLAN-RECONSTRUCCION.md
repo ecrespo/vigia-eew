@@ -1,197 +1,179 @@
-# Plan de reconstrucción (v2) — Vigía-eew
+# 05 — Plan de reconstrucción (v2)
 
-> Insumos: `00-INVENTARIO`, `01-ARQUITECTURA`, `02-STACK-TECNOLOGICO`, `03-EVOLUCION`,
-> `HU/*`, `04-MATRIZ-PRUEBAS`.
-> El orden de fases sigue el grafo de dependencias de las HUs, corrigiendo la cronología
-> original donde el historial demostró que estaba mal (ver Fase 1).
+> Insumos: `00-INVENTARIO.md`, `01-ARQUITECTURA.md`, `02-STACK-TECNOLOGICO.md`,
+> `03-EVOLUCION.md`, `HU/*`, `04-MATRIZ-PRUEBAS.md`.
+> La cronología original es la primera pista del orden de dependencias; se corrige donde el grafo
+> de dependencias de las HUs dice otra cosa.
 
 ## 1. Alcance de la v2
 
-### 1.1 Se reconstruye a paridad (17 HUs)
+### Se reconstruye a paridad (13 HUs)
 
-La arquitectura de este sistema **se validó en la práctica**: nació completa en la Era 0 y
-absorbió dos fuentes nuevas, dos frontends y tres filtros sin cambiar de forma. Se
-reconstruye tal cual:
+HU-001, HU-002, HU-003, HU-005, HU-006, HU-008, HU-009, HU-011, HU-012, HU-013, HU-014, HU-015,
+HU-017. Su diseño resistió el uso: ningún fix posterior las contradijo y sus criterios de
+aceptación están respaldados por tests existentes.
 
-HU-001, HU-002, HU-003, HU-005, HU-006, HU-007, HU-008, HU-009, HU-012, HU-013, HU-014,
-HU-016, HU-018, HU-019, HU-020, HU-021, HU-022.
+### Se rediseña (4 HUs)
 
-Decisiones a preservar **literalmente**, porque son contraintuitivas y están bien
-fundamentadas:
-
-- **Block-list, no allow-list**, en el filtro de país (HU-020). Invertirlo suprimiría los
-  sismos offshore, que son los más peligrosos de Venezuela.
-- **Día local, no UTC**, en el filtro de frescura (HU-009).
-- **`--simulate` sin red jamás** (HU-013).
-- **Efectos inyectados como callbacks** (HU-012): es lo que permite 348 tests sin I/O real.
-- **Filtros fail-safe en una sola dirección**: ante la duda, no suprimir (HU-009, HU-020).
-- **Seen-set sembrado sin alertar** en FUNVISIS (HU-021).
-
-### 1.2 Se rediseña (5 HUs)
-
-| HU | Qué se rediseña | Por qué |
+| HU | Qué cambia | Origen de la decisión |
 |---|---|---|
-| **HU-011** Alerta no descartable | **Decidir el frontend antes de escribir código** | Bajo Wayland, Tkinter no puede forzar topmost/focus de forma confiable. ADR-010 propuso D-Bus + extensión GNOME y nunca se implementó. Es el mayor riesgo abierto (RR-3, TC-011.13) |
-| **HU-015** Empaquetado | **Mover a la Fase 1 y validar el artefacto en CI** | 4 de los fixes del historial son de artefacto; ninguno lo habría detectado el suite (TC-015.11) |
-| **HU-004** Logging | **Escribir sus tests** | Módulo sin cobertura; TC-004.6 (log no escribible) contradice el patrón de aislamiento |
-| **HU-006 + HU-022** Pollers FDSN | **Unificar tras un parser parametrizable** | ADR-016 lo difirió "hasta una tercera fuente"; la v2 arranca con dos escritas y estructura idéntica (DT-2) |
-| **HU-017** Bandeja | **Validar en macOS o declararlo no soportado** | `pystray` exige hilo principal en Cocoa, lo que choca con Tkinter; nunca se probó en hardware real (RR-4) |
+| **HU-004** Alerta no descartable | Resolver Wayland de verdad: implementar ADR-010 (servicio D-Bus + extensión GNOME Shell) o adoptar un frontend nativo. Y fijar el contrato de tamaño de la ventana como criterio verificable, en vez de parchear recortes | `01-ARQUITECTURA.md` §7; fixes `[COMMITS: f90c796, f0960ac]` |
+| **HU-007** Empaquetado | Validar los assets del empaquetado en CI antes de invocar al empaquetador, y ejecutar el binario producido con `--simulate` como smoke | 4 de 5 criterios sin test; 2 releases rotas `[COMMITS: 7b1c71c, c38d9f6]` |
+| **HU-010** i18n | Nacer en inglés con la capa de traducción desde la fase 1, no traducir después | `[COMMITS: 7f9132e]` tocó 30+ archivos y renombró assets binarios |
+| **HU-016** Frescura y poda | Frescura y acotamiento del estado forman parte del Data Model y del pipeline desde el diseño, no como corrección posterior | `[COMMITS: b0f832c]`, tres defectos descubiertos en producción |
 
-### 1.3 Se descarta
+### Se descarta
 
-- **Nada del código actual.** No se detectaron features abandonadas o muertas: el único
-  código muerto que hubo (`StateStore.prune()`) ya se cableó en `b0f832c`.
-- **ADR-010 como plan latente**: o se implementa en la v2 o se retira del diseño. Un ADR
-  documentado a fondo y no ejecutado durante 15 releases es deuda documental que sugiere
-  una cobertura que no existe.
+**Nada.** No hay features abandonadas ni revertidas en la historia (cero commits `revert:`). Lo
+único diseñado y no construido es el frontend D-Bus del ADR-010 `[COMMITS: 230b0b8]`, que la v2
+debe **construir**, no descartar: es lo que sostiene la promesa central del producto en Linux.
 
 ## 2. Decisiones de stack para la v2
 
 | Área | Stack actual | Stack v2 | Justificación |
 |---|---|---|---|
-| Lenguaje | Python ≥3.11 | **Python ≥3.12** | 3.11 se eligió por `tomllib`; 3.12 ya es la base de las distros objetivo y da mejor asyncio |
-| Dependencias | Rangos `>=` abiertos, **sin lockfile versionado** | Rangos con techo mayor + **`uv.lock` versionado** | RR-1/RR-2: lo resuelto ya divergió mucho de lo declarado (websockets 12→17, textual 0.60→8.2) |
-| UI alerta | Tkinter | **Decisión abierta**: Tkinter + puente D-Bus, o TUI como primario | Depende de resolver TC-011.13; no comprometerse antes |
-| TUI | Textual | **Textual, promovida a frontend de primera clase** | Mejor relación cobertura/esfuerzo del repo: 13 tests headless en el suite por defecto |
-| Bandeja | pystray + Pillow | pystray, **con soporte macOS declarado explícitamente** | RR-4 |
-| HTTP / WS | httpx + websockets | Igual | Sin fricción observada en todo el historial |
-| Validación | pydantic v2 | Igual | mypy strict pasa sobre 40 módulos con una sola excepción |
-| Persistencia | JSON atómico | Igual | Sin base de datos; el volumen no la justifica |
-| Geocodificación | Natural Earth 1:110m embebido | Igual, con **1:50m** como opción configurable | El margen de ±decenas de km en frontera es el límite conocido (TC-020.14) |
-| Empaquetado | PyInstaller + fpm + linuxdeploy | Igual, **con humo del artefacto en CI** | La lección más cara del historial |
-| Idioma del código | Inglés + i18n | **Inglés + i18n desde el commit 1** | La migración tardía fue un breaking change que tocó todo el árbol |
+| Lenguaje | Python ≥ 3.11 | Python ≥ 3.12 | El piso 3.11 existe solo por `tomllib`; subir no cuesta nada |
+| Dependencias | rangos `>=` sin techo, `uv.lock` en `.gitignore` | rangos con techo **y lockfile versionado** | `websockets` 12→16, `textual` 0.60→8.2, `mypy` 1.10→2.1 entre rango y lock |
+| UI de alerta (Linux) | Tkinter X11/XWayland | Tkinter + servicio D-Bus / extensión GNOME (ADR-010) | Wayland niega *topmost* y foco |
+| UI de alerta (otros) | Tkinter | Tkinter | Cero dependencias, contrato cumplido en Windows y macOS |
+| TUI | Textual | Textual | Asyncio-nativo y con harness headless: decisión que se paga sola |
+| Bandeja | `pystray` + Pillow | `pystray` + Pillow, con soporte macOS **decidido explícitamente** | El conflicto Cocoa/Tk nunca se validó en hardware real |
+| Persistencia | JSON atómico | JSON atómico | Adecuado a la escala; no introducir una BD sin necesidad |
+| Config | TOML solo lectura + pydantic | igual, separando "materializar" de "cargar" | Ver notas de HU-013 |
+| Geo | ray casting puro, Natural Earth 1:110m | igual; 1:50m **solo si** el filtro pasa a activo por defecto | Sin dependencia geoespacial (RNF-06) |
+| Gate de calidad | ruff + mypy strict + pytest | añadir **detección de código inalcanzable** | `prune()` vivió 14 fases sin llamadas |
 
 ## 3. Fases de construcción
 
-### Fase 0 — Specs y andamiaje
-- **HUs**: ninguna (fase de artefactos)
-- **Prerequisitos**: este kit
-- **Done**: artefactos SDD de §4 aprobados; repo con `uv.lock` versionado, ruff, mypy
-  strict, pytest y CI **bajo xvfb** desde el primer commit
-- **Riesgos**: reproducir el error de la v1 de dejar el lockfile fuera del control de
-  versiones (RR-1)
+### Fase 1 — Fundamento y contrato
 
-### Fase 1 — Núcleo de dominio **y empaquetado**
-- **HUs**: [HU-001](HU/HU-001-contrato-evento-sismico.md),
-  [HU-002](HU/HU-002-estado-persistente.md),
-  [HU-003](HU/HU-003-configuracion-validada.md),
-  [HU-004](HU/HU-004-logging-estructurado.md),
-  [HU-015](HU/HU-015-empaquetado-distribucion.md)
-- **Prerequisitos**: Fase 0
-- **Done**: TC-001.\*, TC-002.\*, TC-003.\*, TC-004.\* en verde **y** un artefacto
-  construido que arranca (TC-015.11)
-- **Riesgos**: RR-1, RR-2
+- **HUs**: HU-001, HU-016 (parte de frescura y poda, adelantada al diseño)
+- **Prerequisitos**: ninguno
+- **Done verificable**: TC-001.1 … TC-001.10, TC-016.1 … TC-016.7 y TC-016.12 en verde
+- **Riesgos**: si el acotamiento del estado y la frescura no entran aquí, se repite el defecto
+  histórico de descubrirlos en producción
 
-> **Esta es la corrección más importante al orden original.** En la v1, el empaquetado fue
-> la Fase 8 y produjo tres releases de parche consecutivas. Adelantarlo a la Fase 1
-> —aunque el binario todavía no haga nada útil— convierte cuatro fallos de producción en
-> fallos de CI del primer día.
+### Fase 2 — Ingesta resiliente
 
-### Fase 2 — Ingestión y resiliencia
-- **HUs**: [HU-005](HU/HU-005-canal-push-emsc.md),
-  [HU-006](HU/HU-006-reconciliacion-usgs.md),
-  [HU-007](HU/HU-007-supervision-resiliente.md)
+- **HUs**: HU-002
 - **Prerequisitos**: Fase 1
-- **Done**: TC-005.\*, TC-006.\*, TC-007.\* en verde, incluido TC-007.10 (hueco actual)
-- **Riesgos**: RR-7 (contratos externos inestables) — introducir aquí los tests de
-  contrato contra respuestas grabadas
+- **Done verificable**: TC-002.1 … TC-002.11 y E2E-5 en verde
+- **Riesgos**: EMSC documenta pérdida de mensajes; el respaldo por polling no es opcional
 
 ### Fase 3 — Pipeline
-- **HUs**: [HU-008](HU/HU-008-normalizacion-multifuente.md),
-  [HU-009](HU/HU-009-filtrado-radio-magnitud-frescura.md),
-  [HU-010](HU/HU-010-deduplicacion.md)
-- **Prerequisitos**: Fase 2
-- **Done**: TC-008.\*, TC-009.\* (los 4 P1 incluidos), TC-010.\* en verde
-- **Riesgos**: la heurística de dedup fusiona sismos distintos en enjambres (TC-010.13);
-  evaluar incorporar la profundidad a la firma
 
-> La frescura (HU-009) llegó en la v1 como Fase 15, tras un bug reportado. Aquí entra con
-> el pipeline, que es su sitio lógico.
+- **HUs**: HU-003
+- **Prerequisitos**: Fases 1–2
+- **Done verificable**: TC-003.1 … TC-003.12, E2E-2 y E2E-3 en verde
+- **Riesgos**: la heurística de dedup puede fusionar sismos distintos en un enjambre; registrar qué
+  firma coincidió para poder diagnosticarlo
 
-### Fase 4 — Decisión de frontend ⚠️ **puerta de decisión**
-- **HUs**: [HU-011](HU/HU-011-alerta-no-descartable.md),
-  [HU-012](HU/HU-012-sonido-toast-presentacion.md),
-  [HU-019](HU/HU-019-dashboard-tui-headless.md)
+### Fase 4 — Presentación e i18n
+
+- **HUs**: HU-004 (rediseñada), HU-010 (desde el inicio, no como traducción posterior)
 - **Prerequisitos**: Fase 3
-- **Done**: TC-011.\* y TC-019.\* en verde, **incluido TC-011.13 bajo GNOME/Wayland real**
-- **Riesgos**: **RR-3 es bloqueante.** Antes de escribir la UI, correr una prueba de
-  concepto de topmost + robo de foco bajo Wayland. Si falla, decidir entre implementar
-  ADR-010 (D-Bus + extensión GNOME) o promover la TUI a frontend primario. No avanzar a la
-  Fase 5 sin esa decisión tomada y verificada.
+- **Done verificable**: TC-004.1 … TC-004.10 y TC-010.1 … TC-010.8 en verde, **incluyendo el
+  comportamiento bajo Wayland**
+- **Riesgos**: **el mayor del plan.** ADR-010 está diseñado pero nunca implementado; su alcance
+  real (servicio D-Bus + extensión GNOME Shell) no está estimado. Si se pospone, la promesa
+  "imposible de ignorar" queda sin cumplir en el escritorio Linux más común
 
-### Fase 5 — Ensamblaje y despliegue
-- **HUs**: [HU-013](HU/HU-013-cli-y-simulacion.md),
-  [HU-014](HU/HU-014-autoarranque-multiplataforma.md),
-  [HU-017](HU/HU-017-icono-bandeja.md),
-  [HU-018](HU/HU-018-internacionalizacion.md)
-- **Prerequisitos**: Fase 4
-- **Done**: TC-013.\*, TC-014.\*, TC-017.\*, TC-018.\* en verde; paridad de catálogos
-  verificada en CI (TC-018.11)
-- **Riesgos**: RR-4 (bandeja en macOS) — resolver aquí, no dejar como best-effort
+### Fase 5 — Ensamblaje, CLI y simulación
 
-### Fase 6 — Contexto del usuario y precisión
-- **HUs**: [HU-016](HU/HU-016-ubicacion-automatica-ip.md),
-  [HU-020](HU/HU-020-filtro-pais.md)
+- **HUs**: HU-005, HU-013
+- **Prerequisitos**: Fases 1–4
+- **Done verificable**: TC-005.1 … TC-005.8 y TC-013.1 … TC-013.8 en verde; `--simulate` funciona
+  sin red
+- **Riesgos**: `app.py`/`config.py`/`cli.py` fueron tocados por casi toda feature posterior;
+  considerar un registro declarativo de fuentes y flags para no repetir el patrón
+
+### Fase 6 — Ubicación, filtro de país y bandeja
+
+- **HUs**: HU-008, HU-012, HU-009
 - **Prerequisitos**: Fase 5
-- **Done**: TC-016.\*, TC-020.\* en verde
-- **Riesgos**: la excepción de privacidad (IP visible a un tercero) debe hacerse explícita
-  al usuario en el `config.toml` sembrado
+- **Done verificable**: TC-008.*, TC-012.* y TC-009.* en verde
+- **Riesgos**: la bandeja en macOS sigue sin validar; decidir soporte antes de construir
 
-### Fase 7 — Redundancia de fuentes
-- **HUs**: [HU-021](HU/HU-021-fuente-funvisis.md),
-  [HU-022](HU/HU-022-fuente-geofon.md)
-- **Prerequisitos**: Fase 3 (pipeline), Fase 2 (patrón de poller)
-- **Done**: TC-021.\*, TC-022.\* en verde, incluidos TC-022.2 y TC-022.16
-- **Riesgos**: RR-5 (FUNVISIS sin HTTPS), RR-7 (formato de GEOFON sin contrato versionado)
-- **Nota**: aquí se materializa el parser FDSN unificado del §1.2, con GEOFON y USGS como
-  sus dos primeras instancias
+### Fase 7 — Fuentes adicionales
 
-### Fase 8 — Capas de conocimiento
-- **HUs**: ninguna
-- **Done**: `.codegraph/`, `graphify-out/` y `lat.md/` instalados, con `lat check` como
-  gate de CI
-- **Nota**: en este repo se añadieron al final; en la v2 conviene desde la Fase 1, porque
-  su valor es acumulativo — la capa de intención se escribe mejor **cuando la decisión se
-  toma**, no reconstruida después
+- **HUs**: HU-014 (FUNVISIS), HU-015 (GEOFON)
+- **Prerequisitos**: Fases 2–3
+- **Done verificable**: TC-014.*, TC-015.* (incluido **TC-015.8**, el aserto de HTTPS) y E2E-4
+- **Riesgos**: con una quinta fuente FDSN, unificar los parsers de USGS y GEOFON; con solo dos, no
 
-## 4. Artefactos SDD pendientes
+### Fase 8 — Frontend TUI
 
-El skill `spec-driven-design` **está disponible** en este entorno y puede generar los
-artefactos usando este kit como insumo. No se han generado en esta ejecución porque no se
-solicitaron; la tabla queda como backlog inmediato.
+- **HUs**: HU-011
+- **Prerequisitos**: Fase 4 (contrato de efectos inyectables)
+- **Done verificable**: TC-011.1 … TC-011.9 en verde con `App.run_test()`
+- **Riesgos**: conservar los nombres `update_data` y `_paint`; renombrarlos rompe el renderizado en
+  silencio
 
-| Artefacto SDD | Insumo desde este kit | Estado |
+### Fase 9 — Empaquetado, distribución y CI
+
+- **HUs**: HU-007 (rediseñada), HU-017, HU-006
+- **Prerequisitos**: todas las anteriores
+- **Done verificable**: TC-006.*, TC-007.* (**los 5 huecos P1 cerrados**) y TC-017.* en verde
+- **Riesgos**: es el área con más fixes históricos y menos cobertura; empezar por la validación de
+  assets (TC-007.4) y el smoke del binario (TC-007.7)
+
+```mermaid
+graph LR
+    F1[F1 Fundamento<br/>HU-001, HU-016] --> F2[F2 Ingesta<br/>HU-002]
+    F2 --> F3[F3 Pipeline<br/>HU-003]
+    F3 --> F4[F4 Presentación e i18n<br/>HU-004, HU-010]
+    F4 --> F5[F5 CLI y config<br/>HU-005, HU-013]
+    F5 --> F6[F6 Ubicación, país, bandeja<br/>HU-008, HU-012, HU-009]
+    F3 --> F7[F7 Fuentes extra<br/>HU-014, HU-015]
+    F4 --> F8[F8 TUI<br/>HU-011]
+    F6 --> F9[F9 Empaquetado y CI<br/>HU-006, HU-007, HU-017]
+    F7 --> F9
+    F8 --> F9
+```
+
+## 4. Artefactos SDD
+
+Este repositorio **ya contiene artefactos SDD vivos y sincronizados con el código**:
+`docs/PRD.md`, `docs/API-SPEC.md`, `docs/TECHNICAL-DESIGN.md` (18 ADRs), `docs/DATA-MODEL.md`,
+`docs/IMPLEMENTATION-PLAN.md` y `ARCHITECTURE.md`. Generar copias nuevas desde la ingeniería
+inversa produciría dos fuentes de verdad en conflicto, que es exactamente el problema que la
+disciplina SDD del proyecto evita.
+
+La acción correcta no es regenerarlos, sino **reconciliarlos** con lo que la ingeniería inversa
+encontró:
+
+| Artefacto existente | Acción para la v2 | Motivo |
 |---|---|---|
-| Constitution | Decisiones a preservar (§1.1) + convenciones del repo actual | Pendiente |
-| PRD (con criterios EARS) | Las 22 HUs + `03-EVOLUCION` (contexto y lecciones) | Pendiente |
-| API Spec | `01-ARQUITECTURA` §1-3 (integraciones y flujos) + `docs/API-SPEC.md` actual | Pendiente |
-| Technical Design | `01-ARQUITECTURA` §5-8 + decisiones de stack (§2) | Pendiente |
-| Data Model | `01-ARQUITECTURA` §4 + esquemas citados | Pendiente |
-| Implementation Plan | §3 de este documento | Pendiente |
-| Tasks | `04-MATRIZ-PRUEBAS` (cada TC es una tarea verificable) | Pendiente |
+| `docs/PRD.md` | Añadir como requisito de primera clase el comportamiento bajo Wayland | Hoy OBJ-1 se enuncia sin acotar el entorno en que puede garantizarse |
+| `docs/TECHNICAL-DESIGN.md` | Promover ADR-010 de "solo diseño" a decisión implementada, o registrar formalmente su rechazo | Es el único ADR sin código |
+| `docs/DATA-MODEL.md` | Incorporar frescura y acotamiento del estado como parte del modelo, no como añadido | Lección de `[COMMITS: b0f832c]` |
+| `docs/IMPLEMENTATION-PLAN.md` | Reemplazar sus fases por las 9 de §3, trazadas a HUs y no a módulos | Las HUs trazan a criterios verificables; los módulos no |
+| `docs/API-SPEC.md` | Fijar el esquema HTTPS de cada endpoint como parte del contrato | El fix `8e0064a` fue posible por no estar fijado |
+| **Nuevo**: `docs/reverse-sdd/HU/` | Adoptarlo como el backlog de la v2 | 95 criterios de aceptación en Gherkin, 157 casos trazados a tests reales |
 
-**Ventaja poco habitual**: el repo actual ya tiene `docs/PRD.md`, `docs/API-SPEC.md`,
-`docs/TECHNICAL-DESIGN.md` (18 ADRs), `docs/DATA-MODEL.md` e
-`docs/IMPLEMENTATION-PLAN.md`. La v2 no parte de cero: parte de specs existentes
-**validados contra el código** por este ejercicio.
+Las tres capas de conocimiento construidas en paralelo (`docs/CONTEXT_REPORT.md`, `graphify-out/`,
+`lat.md/`) son insumo directo de la v2: `lat.md/` ya registra el *porqué* de cada decisión que este
+plan propone conservar o cambiar.
 
-## 5. Qué NO sabemos
+## 5. Riesgos del plan
 
-Lista honesta de lo inferido y lo opaco. La v2 **no debe tratar esto como requisitos
-confirmados**.
-
-| Área | Qué no sabemos | Qué lo resolvería |
+| Riesgo | Impacto | Mitigación |
 |---|---|---|
-| **Personas/roles** | Las 22 HUs marcan su persona `[INFERIDO]`: los commits describen capacidades, nunca a quién sirven. "Usuario en zona sísmica" es una reconstrucción razonable, no un hecho documentado | Entrevista con el autor o usuarios reales |
-| **Comportamiento bajo Wayland** | Si la alerta cumple su promesa en GNOME/Wayland. Ni el código ni los tests ni los ADRs lo responden | Prueba en sesión Wayland real (bloquea la Fase 4) |
-| **Comportamiento en macOS** | Bandeja y ventana de alerta nunca se validaron en hardware macOS; los ADRs lo declaran explícitamente | Acceso a una máquina macOS |
-| **Umbrales de dedup en campo** | Si 100 km/90 s/0,5 mag acierta durante enjambres reales. Los valores son razonados, no medidos | Telemetría opt-in, o replay contra un catálogo histórico de un enjambre conocido |
-| **Estabilidad de FUNVISIS y GEOFON** | Ninguno de los dos publica un contrato versionado; el formato podría cambiar sin aviso | Tests de contrato + monitoreo del ratio de filas descartadas |
-| **Uso real de las releases** | No hay tags git en el repo, aunque `build.yml` se dispara con ellos. No se puede saber desde aquí qué se distribuyó realmente | Acceso al remoto y a las estadísticas de PyPI |
-| **Por qué el reporte "solo alerta FUNVISIS"** | El commit `b0f832c` menciona el reporte que originó la investigación, pero no su origen ni si el diagnóstico lo resolvió del todo | Issue tracker o el reportante |
+| **ADR-010 sin estimar** | Alto — bloquea la Fase 4 y con ella todo lo que va después | Hacer un *spike* técnico de la extensión GNOME **antes** de comprometer el plan; si no es viable, decidir explícitamente qué significa "imposible de ignorar" bajo Wayland |
+| Deriva de versiones al reconstruir | Medio — `textual` 0.60→8.2 implica una API distinta de la que documentan los ADRs | Fijar el lockfile en la Fase 1 y validar cada dependencia contra su versión objetivo |
+| Empaquetado sin cobertura | Medio — históricamente el área que más releases rompió | Cerrar los 5 huecos P1 de HU-007 en la Fase 9, empezando por la validación de assets |
+| macOS sin validar | Medio — bandeja y autoarranque nunca se probaron en hardware real | Conseguir un runner macOS o declarar el soporte como best-effort en la documentación |
+| Un solo autor / un solo punto de conocimiento | Medio | `lat.md/` mitiga esto: registra la intención que no está en el código |
 
-**Proporción de inferencia**: por debajo del 5 % de las afirmaciones del kit, concentrada
-casi por completo en las personas de las HUs. El resto está anclado a código o a un hash
-de commit. Esa cifra tan baja se debe a tres propiedades poco comunes del repo: 97,9 % de
-conventional commits, 348 tests que documentan el comportamiento esperado, y 18 ADRs que
-ya registraban el *porqué* junto a sus alternativas rechazadas.
+## 6. Criterio global de "reconstrucción completa"
+
+La v2 está terminada cuando:
+
+1. Los **157 casos de prueba** de `04-MATRIZ-PRUEBAS.md` están automatizados y en verde,
+   incluidos los 14 que hoy no existen.
+2. Los **5 escenarios e2e** de C-08 pasan sin modificación conceptual.
+3. `ruff check .`, `mypy src` (strict) y `pytest` están en verde, más la nueva comprobación de
+   código inalcanzable.
+4. CA-004.1 (la alerta no se descarta) se verifica **también bajo Wayland**, o el PRD declara
+   formalmente el alcance del soporte.
+5. Los artefactos SDD de `docs/` están reconciliados según §4 y `lat check` pasa sobre `lat.md/`.

@@ -60,9 +60,18 @@ jobs:
           retention-days: 7
 
   # ── SCA: dependency CVEs ──────────────────────────────────
+  # Six of the fifteen runtime packages only resolve on macOS or Windows
+  # (colorama, pywin32-ctypes, rubicon-objc and the three pyobjc-*). Auditing
+  # from Linux alone reports nine of them and calls that the tree, which is the
+  # declared SCA gap behind REQ-DEP-008. Each platform now resolves and audits
+  # its own dependency set on its own runner.
   pip-audit:
-    name: pip-audit (SCA)
-    runs-on: ubuntu-latest
+    name: pip-audit (SCA, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-python-env
@@ -71,12 +80,44 @@ jobs:
       - run: uv run pip-audit --skip-editable
       - name: pip-audit JSON report
         if: always()
+        # bash on all three: the default shell on the Windows runner is pwsh,
+        # whose redirection writes UTF-16 and produces an unreadable report.
+        shell: bash
         run: uv run pip-audit --skip-editable --format=json > pip-audit-report.json || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pip-audit-report
+          name: pip-audit-report-${{ matrix.os }}
           path: pip-audit-report.json
+          retention-days: 7
+
+  # The lockfile pins one clean resolution, and auditing it proves nothing
+  # about what somebody installing from PyPI gets: the declared *range* is the
+  # only bound the published package carries. That is how `Pillow>=10.0` sat
+  # there admitting 34 advisories while every audit came back green (REQ-DEP-006).
+  pip-audit-lowest:
+    name: pip-audit (SCA, lowest-direct)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # Runtime only. Lowering the dev and security extras too would resolve an
+      # ancient pip-audit and audit the auditor, not the product.
+      - name: Resolve at the minimum every range allows
+        run: uv sync --resolution lowest-direct --no-dev
+      - name: Freeze that tree
+        run: uv pip freeze | grep -viE '^(-e |vigia-eew)' > lowest-direct.txt
+      - name: Audit it
+        # uvx so pip-audit is not itself part of the tree under audit.
+        run: uvx pip-audit --requirement lowest-direct.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lowest-direct-tree
+          path: lowest-direct.txt
           retention-days: 7
 
   # ── Secrets ───────────────────────────────────────────────

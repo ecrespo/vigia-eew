@@ -70,9 +70,7 @@ class LaunchAgentInstaller:
     def install(self) -> None:
         """Write the plist and load it to start on login (RF-22)."""
         self._dir.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            launchagent_plist(self._args, label=self._label), encoding="utf-8"
-        )
+        self.path.write_text(launchagent_plist(self._args, label=self._label), encoding="utf-8")
         self._runner(["launchctl", "load", "-w", str(self.path)])
         self._log.info("autostart_installed path=%s", self.path)
 

@@ -76,6 +76,8 @@ def build_icon(
     toggle_pause: Callable[[], None],
     edit_config: Callable[[], None],
     exit: Callable[[], None],
+    open_panel: Callable[[], None] | None = None,
+    open_history: Callable[[], None] | None = None,
     icon_path: Path | None = None,
     locale_code: str = DEFAULT_LOCALE,
 ) -> Icon:
@@ -91,19 +93,42 @@ def build_icon(
     def _last_alert_text(_item: MenuItem) -> str:
         return state.last_alert or t("tray_no_alerts_yet", locale_code)
 
+    def _guarantee_text(_item: MenuItem) -> str:
+        # The product promises an alert that cannot be ignored. Where it
+        # cannot keep that promise, saying so is the least it owes the user
+        # (REQ-ALE-003, CA-106.2).
+        return t(f"tray_alert_{state.presentation.guarantee}", locale_code)
+
     def _pause_text(_item: MenuItem) -> str:
         key = "tray_resume_notifications" if paused() else "tray_pause_notifications"
         return t(key, locale_code)
 
-    menu = Menu(
+    # Both ways in, in this order: the panel first because it is the one the
+    # product's own user needs, the file second because it is the one that
+    # stays the source of truth (REQ-GUI-005, CA-108.10). `open_panel` is
+    # optional -- the headless frontend has no Tk window to put a panel in,
+    # and losing the file entry there would leave no way in at all.
+    entries = [
         MenuItem(_status_text, action=None, enabled=False),
         MenuItem(_last_alert_text, action=None, enabled=False),
+        MenuItem(_guarantee_text, action=None, enabled=False),
         Menu.SEPARATOR,
         MenuItem(_pause_text, action=lambda icon, item: toggle_pause()),
+    ]
+    if open_panel is not None:
+        entries.append(
+            MenuItem(t("tray_open_panel", locale_code), action=lambda icon, item: open_panel())
+        )
+    if open_history is not None:
+        entries.append(
+            MenuItem(t("tray_open_history", locale_code), action=lambda icon, item: open_history())
+        )
+    entries += [
         MenuItem(t("tray_edit_config", locale_code), action=lambda icon, item: edit_config()),
         Menu.SEPARATOR,
         MenuItem(t("tray_quit", locale_code), action=lambda icon, item: exit()),
-    )
+    ]
+    menu = Menu(*entries)
     return Icon("vigia-eew", icon=image, title="Vigía-eew", menu=menu)
 
 

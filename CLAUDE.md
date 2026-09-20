@@ -13,19 +13,21 @@ its own agent).
 
 ## Knowledge layers — query these before grepping
 
-Three context layers. **All three are local and gitignored** — none ships with a
-clone, so build them once per machine (commands below). They exist so you don't
-rediscover the codebase on every task.
+Three context layers. **`lat.md/` ships with the repository; the other two are local**
+and build once per machine (commands below). They exist so you don't rediscover the
+codebase on every task.
 
-1. **Intent — `lat.md/`** (local, **hand-authored, does not regenerate**). Why the code
-   is the way it is: design decisions, domain rules, rejected alternatives. Run
+1. **Intent — `lat.md/`** (**versioned, hand-authored, does not regenerate**). Why the
+   code is the way it is: design decisions, domain rules, rejected alternatives. Run
    `lat search "<topic>"` **before** changing behavior — several constants that look
    arbitrary (dedup thresholds, the block-list country filter, the local-day boundary)
-   are deliberate. When present, `lat check` must pass before a task is done; it
-   validates every `[[link]]` and every `# @lat:` backlink in the source, and exits
-   cleanly (skipping) when the directory is absent.
-   Unlike the other two, **whoever holds this directory holds the only copy** — the
-   source of truth it was seeded from is the ADR series in `docs/TECHNICAL-DESIGN.md`.
+   are deliberate. `lat check` must pass before a task is done; it validates every
+   `[[link]]` and every `# @lat:` backlink in the source.
+   It is versioned because the code links into it and the gate resolves those links:
+   `tests/test_backlinks.py` fails when a link points at a section that is not there,
+   and it cannot tell "renamed" from "absent" if the directory does not ship. That
+   reverses `e2b83ca`, which un-tracked it when `lat check` — which skips silently on
+   an absent directory — was the only consumer. See the note in `.gitignore`.
 2. **Structure — `.codegraph/`** (local, self-maintaining). What the code is:
    `codegraph query <sym>`, `codegraph callers/callees <sym>`, `codegraph impact <sym>`
    before any non-trivial edit, `codegraph explore <area>` to orient. Never grep for
@@ -39,14 +41,16 @@ rediscover the codebase on every task.
 Layers 2 and 3 rebuild themselves from the AST; **`lat.md/` is maintained by hand and
 cannot be rebuilt**. If you make a non-obvious design decision, add or update its
 section and link the code with `[[src/path.py#Symbol]]` plus a `# @lat: [[section-id]]`
-comment at the code site. The `# @lat:` comments **are** committed, so they keep
-documenting intent inline even where the directory itself is absent.
+comment at the code site. Both directions are checked: `lat check` validates the links
+that run from the layer into the code, and `tests/test_backlinks.py` validates the ones
+written inside the code — in both shapes, which is how eight `# @lat:` comments were
+found pointing at sections that had been renamed.
 
 ```bash
 npm i -g @colbymchenry/codegraph lat.md && uv tool install graphifyy   # one-time
 codegraph init        # build .codegraph/ — tree-sitter, zero LLM tokens
 graphify update .     # build graphify-out/ — AST only, zero LLM tokens
-lat check             # validate the intent layer (finishing gate; skips if absent)
+lat check             # validate the intent layer (finishing gate)
 ```
 
 ## Commands
@@ -85,6 +89,9 @@ semgrep, trivy) pre-push. `build.yml` builds/publishes releases on a `vX.Y.Z` ta
   reconnection with exponential backoff + jitter (`backoff.py`, shared with the supervisor).
 - `ingest/rest_usgs.py` (`RESTReconciler`): USGS polling every 60 s with a **persisted
   cursor**, only reconciles what the WS may have missed; doesn't compete with the push.
+  Its `starttime` (and GEOFON's) is floored at **local midnight today** (RF-41, shared
+  `timeutil.py`) so a fresh install or a stale cursor after an outage can't pull a
+  multi-day backlog.
 - `ingest/rest_geofon.py` (`GEOFONPoller`, RF-39): GFZ Potsdam `fdsnws-event` polling every
   60 s, **text format** (pipe-delimited, not GeoJSON) with its own **persisted cursor**;
   independent global network so an EMSC/USGS outage or catalog gap doesn't leave the agent
@@ -100,11 +107,16 @@ A `pipeline/processor.py` (`Processor`) consumes `raw_queue` and chains
 
 - **Normalize**: maps each source's raw payload to the single internal contract
   `SeismicEvent` (`models.py`), computes distance (`geo.py::haversine_km`) and severity.
-- **Filter**: discards by radius or minimum magnitude (config).
+- **Filter** (`GeoFilter`): discards by radius, minimum magnitude, country (RF-37 — reject
+  only events positively inside *another* country; inert/fail-safe if the country can't be
+  determined) and **event freshness** (RF-40, `[filter] today_only`, on by default — keep
+  only events on the current **local calendar day** per `[notification] timezone`;
+  fail-safe/inert on an invalid tz). The clock is injected for deterministic tests.
 - **Dedup**: intra-source dedup by id, cross-source heuristic (≤100 km, ≤90 s, ≤0.5 mag)
   and handling of EMSC `update`s (updates the in-flight event instead of re-alerting).
   Recent ids/signatures are persisted in `state.py` (`StateStore`, atomic JSON via
-  `platformdirs`).
+  `platformdirs`); `register()` prunes entries older than 24 h before saving (RF-42) so the
+  state file doesn't grow unbounded.
 
 `supervisor.py` (`Supervisor`) orchestrates the asyncio tasks (`ws`, `rest`, `geofon`,
 `funvisis`, `pipeline`) and **restarts each one with backoff on failure**, without taking
@@ -164,8 +176,9 @@ model that generated it (see `git log`).
   User-facing text is internationalized (see `i18n.py`, RF-35) — the source-of-truth
   strings in the codebase are English, with a Spanish translation shipped alongside.
 - Every internal `datetime` is **tz-aware in UTC** (`models.py` validates this and
-  rejects *naive* values); conversion to local time (`America/Caracas`) happens only in
-  `notify/presentation.py`.
+  rejects *naive* values); conversion to local time happens in `notify/presentation.py`
+  (for display) and `timeutil.py` (the shared local-day/local-midnight boundary behind
+  RF-40/RF-41, with the `ZoneInfo` fail-safe both callers rely on).
 - The internal contract (`SeismicEvent`) is the only payload that crosses layers — see
   `API-SPEC.md` §3 for the EMSC/USGS/FUNVISIS/GEOFON field mapping and invariants (distance
   and severity are always derived).

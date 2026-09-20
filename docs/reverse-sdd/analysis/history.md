@@ -1,17 +1,20 @@
 # Análisis del historial git
 
-**Repo:** `/home/user/vigia-eew` · **Commits:** 47 (2026-06-28 → 2026-08-16) · **Conventional commits:** 97.9%
+**Repo:** `/sessions/busy-eloquent-cray/mnt/vigia-eew` · **Commits:** 47 (2026-06-28 → 2026-07-17) · **Conventional commits:** 97.9%
 
 ## Eras (base para 03-EVOLUCION.md)
 
 | Era | Desde | Hasta | Commits | Tipos dominantes |
 |---|---|---|---|---|
-| 2026-Q2 | 2026-06-28 | 2026-06-28 | 7 | feat:5, docs:1, other:1 |
-| 2026-Q3 | 2026-07-03 | 2026-08-16 | 40 | feat:11, chore:10, fix:8 |
+| v0.1.0 | 2026-06-28 | 2026-07-03 | 15 | feat:7, docs:3, fix:2 |
+| v0.1.3 | 2026-07-04 | 2026-07-04 | 13 | feat:5, fix:4, chore:3 |
+| v0.3.0 | 2026-07-05 | 2026-07-05 | 13 | ci:6, chore:4, feat:2 |
+| v0.5.0 | 2026-07-06 | 2026-07-06 | 3 | chore:1, fix:1, feat:1 |
+| v0.6.0 | 2026-07-17 | 2026-07-17 | 3 | docs:1, chore:1, feat:1 |
 
 ## Clusters de features (base para las HUs — CURAR antes de usar)
 
-### `dir:(raiz)` — 20 commits, churn 3743
+### `dir:(raiz)` — 21 commits, churn 3760
 *2026-06-28 → 2026-07-17* · hashes: `737d7fa`…`bd4a555`
 - docs: artefactos SDD, scaffolding y ARCHITECTURE (Fase 0)
 - Initial commit
@@ -22,8 +25,8 @@
 - chore: release v0.2.1
 - chore: release v0.2.0
 
-### `dir:src/vigia_eew` — 17 commits, churn 20364
-*2026-06-28 → 2026-08-16* · hashes: `4fb49d0`…`6e0f133`
+### `dir:src/vigia_eew` — 16 commits, churn 19747
+*2026-06-28 → 2026-07-17* · hashes: `4fb49d0`…`b0f832c`
 - feat: CLI, ensamblaje del agente y modo --simulate (Fase 5)
 - feat: capa de notificación (Fase 4)
 - feat: pipeline de normalización, filtro y dedup (Fase 3)
@@ -59,7 +62,7 @@
 | `CHANGELOG.md` | 22 |
 | `pyproject.toml` | 17 |
 | `docs/IMPLEMENTATION-PLAN.md` | 14 |
-| `src/vigia_eew/app.py` | 11 |
+| `src/vigia_eew/app.py` | 10 |
 | `src/vigia_eew/config.py` | 10 |
 | `docs/TECHNICAL-DESIGN.md` | 10 |
 | `src/vigia_eew/cli.py` | 9 |
@@ -69,8 +72,8 @@
 | `docs/PRD.md` | 9 |
 | `tests/test_cli.py` | 7 |
 | `docs/API-SPEC.md` | 7 |
-| `src/vigia_eew/notify/alert_window.py` | 6 |
 | `docs/DATA-MODEL.md` | 6 |
+| `src/vigia_eew/tray.py` | 6 |
 
 ## Archivos con fixes recurrentes (candidatos a criterios de aceptación y a rediseño en v2)
 
@@ -86,5 +89,4 @@
 
 ## Autores
 
-- Ernesto Crespo: 46 commits
-- Claude: 1 commits
+- Ernesto Crespo: 47 commits

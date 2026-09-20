@@ -29,18 +29,16 @@ The HTTP client (`httpx`) and `sleep` are injected so it's testable without netw
 
 from __future__ import annotations
 
-import asyncio
-import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
-from vigia_eew.config import Filter, GEOFONSource, ReferencePoint
-from vigia_eew.ingest import RawMessage
-from vigia_eew.state import StateStore
-from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
+from vigia_eew.config import GEOFONSource
+from vigia_eew.ingest import RawMessage, mapping
+from vigia_eew.ingest.fdsn import FDSNPoller
+from vigia_eew.timeutil import floor_starttime_ms
 
 _SleepFn = Callable[[float], Any]
 
@@ -49,33 +47,10 @@ _SleepFn = Callable[[float], Any]
 _KM_PER_DEGREE = 111.195
 
 
-class GEOFONPoller:
+class GEOFONPoller(FDSNPoller[GEOFONSource]):
     """Polls GEOFON `fdsnws-event` (text format) with a persisted cursor; emits `RawMessage`."""
 
-    def __init__(
-        self,
-        cfg: GEOFONSource,
-        reference: ReferencePoint,
-        filter_cfg: Filter,
-        state: StateStore,
-        output: asyncio.Queue[RawMessage],
-        *,
-        client: httpx.AsyncClient | None = None,
-        sleep: _SleepFn = asyncio.sleep,
-        timezone: str = "UTC",
-        now: Clock = default_clock,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        self._cfg = cfg
-        self._reference = reference
-        self._filter = filter_cfg
-        self._state = state
-        self._output = output
-        self._client = client
-        self._sleep = sleep
-        self._timezone = timezone
-        self._now = now
-        self._log = logger or logging.getLogger("vigia_eew.ingest.geofon")
+    LOGGER_NAME = "vigia_eew.ingest.geofon"
 
     def _build_params(self, cursor_ms: int | None) -> dict[str, Any]:
         """Builds the FDSN query parameters (API-SPEC §4.2)."""
@@ -103,9 +78,7 @@ class GEOFONPoller:
             raise RuntimeError("GEOFONPoller requires an httpx client (injected or created).")
 
         try:
-            resp = await self._client.get(
-                self._cfg.url, params=params, timeout=self._cfg.timeout_s
-            )
+            resp = await self._client.get(self._cfg.url, params=params, timeout=self._cfg.timeout_s)
         except httpx.HTTPError as exc:
             self._log.warning("geofon_network_error type=%s detail=%s", type(exc).__name__, exc)
             return interval
@@ -130,15 +103,32 @@ class GEOFONPoller:
             self._state.save()
         return interval
 
-    # @lat: [[ingestion#GEOFON is USGS's sibling, and parses text on purpose]]
+    # @lat: [[ingestion#Ingestion sources#GEOFON — an independent global network, USGS's sibling#Why GEOFON parses pipe-delimited text, not GeoJSON]]  # noqa: E501 - a heading path is one token and does not wrap
     async def _process_text(self, text: Any) -> int | None:
         """Parses the pipe-delimited body, enqueues events; returns the max origin time (ms)."""
         if not isinstance(text, str):
             self._log.warning("geofon_body_not_text")
             return None
 
-        columns: list[str] | None = None
         max_time: int | None = None
+        for feature in self._rows(text):
+            if not _is_earthquake(feature):
+                continue
+            await self._output.put(RawMessage(source="GEOFON", action="create", feature=feature))
+            moment = _time_ms(feature)
+            if moment is not None and (max_time is None or moment > max_time):
+                max_time = moment
+        return max_time
+
+    def _rows(self, text: str) -> Iterator[dict[str, str]]:
+        """Yields one `{column: value}` dict per data row (API-SPEC §4.3).
+
+        Split out from the enqueueing loop because they answer different
+        questions: this one is "what does the body say", the other is "what do
+        we do about it". Parsing a corrupt row is also far easier to test
+        without an event loop and a queue standing in the way.
+        """
+        columns: list[str] | None = None
         for line in text.splitlines():
             row = line.strip()
             if not row:
@@ -148,33 +138,17 @@ class GEOFONPoller:
                 columns = [c.strip() for c in row.lstrip("#").split("|")]
                 continue
             if columns is None:
-                # A data row before any header: the shape is unknown, skip the batch.
+                # A data row before any header: the shape is unknown, so the
+                # rest of the batch cannot be trusted either.
                 self._log.warning("geofon_no_header")
-                return max_time
+                return
             values = row.split("|")
             if len(values) != len(columns):
                 self._log.warning(
                     "geofon_malformed_row expected=%d got=%d", len(columns), len(values)
                 )
                 continue
-            feature = {col: val.strip() for col, val in zip(columns, values, strict=True)}
-            if not _is_earthquake(feature):
-                continue
-            await self._output.put(
-                RawMessage(source="GEOFON", action="create", feature=feature)
-            )
-            moment = _time_ms(feature)
-            if moment is not None and (max_time is None or moment > max_time):
-                max_time = moment
-        return max_time
-
-    async def run(self) -> None:
-        """Perpetual polling loop. Only exits when cancelled."""
-        if self._client is None:
-            self._client = httpx.AsyncClient()
-        while True:
-            wait = await self.poll_once()
-            await self._sleep(wait)
+            yield {col: val.strip() for col, val in zip(columns, values, strict=True)}
 
 
 def _is_earthquake(feature: dict[str, str]) -> bool:
@@ -211,3 +185,26 @@ def _retry_after_seconds(headers: Any, *, default: float) -> float:
         return max(default, float(raw))
     except (TypeError, ValueError):
         return default
+
+
+def to_fields(msg: RawMessage) -> dict[str, Any]:
+    """Translates a GEOFON text row into the internal contract (API-SPEC §4.3).
+
+    The poller has already split the `format=text` row into a
+    `{column: value}` dict keyed by the FDSN header names, so every value is
+    a string and the numbers are coerced here.
+    """
+    f = msg.feature
+    return {
+        "id": str(f["EventID"]),
+        "source": "GEOFON",
+        "magnitude": float(f["Magnitude"]),
+        "mag_type": str(f["MagType"]),
+        "place": mapping.clean_text(f.get("EventLocationName")),
+        "region": None,  # GEOFON exposes no separate region; place carries the location.
+        "lat": float(f["Latitude"]),
+        "lon": float(f["Longitude"]),
+        "depth_km": float(f["Depth/km"]),
+        "time_utc": mapping.parse_iso(f["Time"]),
+        "lastupdate_utc": None,
+    }

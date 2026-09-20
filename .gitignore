@@ -18,6 +18,7 @@ env/
 .ruff_cache/
 .coverage
 coverage.xml
+coverage.json
 htmlcov/
 report.xml
 # CI security scan reports (uploaded as artifacts, never committed)
@@ -25,20 +26,28 @@ report.xml
 pip-audit-report.json
 trivy-fs.json
 
-# uv
-uv.lock
-
 # IDE
 .idea/
 .vscode/
 
-# Knowledge layers — kept local, not versioned.
-# `.codegraph/` and `graphify-out/` are derived and rebuild from the AST at zero cost.
-# `lat.md/` is hand-authored and does NOT regenerate: whoever keeps it owns the only
-# copy. Rebuild the other two with `codegraph init` and `graphify update .`.
+# Derived knowledge layers — kept local, not versioned. Both rebuild from the AST
+# at zero cost: `codegraph init` and `graphify update .`.
 .codegraph/
-lat.md/
 graphify-out/
+
+# `lat.md/` IS versioned, and that reverses `e2b83ca`, which un-tracked it.
+# The premise changed underneath that decision rather than the decision being
+# wrong: it was taken when the only consumer was `lat check`, which degrades
+# cleanly to exit 0 when the directory is absent -- so nothing failed.
+#
+# The v1 kit made the intent layer an input to the gate. REQ-OBS-008 asks that
+# drift between a decision and the code fail like a lint, and
+# `tests/test_backlinks.py` (T-128/T-129) resolves every link the code writes
+# into it. Verified by cloning the tree with the directory ignored: that test
+# fails, and the CI `lat check` job has nothing to scan. A hand-authored layer
+# that does not travel also leaves whoever holds the folder owning the only
+# copy -- which `e2b83ca` recorded as a cost it accepted, and which versioning
+# removes.
 
 # Runtime
 *.log
@@ -46,3 +55,8 @@ state.json
 config.toml
 .venv_sandbox/
 .claude/settings.local.json
+vigia-eew-presentacion.pptx
+graphify-out/
+.codegraph/
+.fuse_hidden0000000c00000001
+.probe_sqlite.db-journal

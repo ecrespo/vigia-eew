@@ -56,7 +56,7 @@ class AlertQueue:
         """True if presentation of new alerts is paused (RF-34)."""
         return self._paused
 
-    # @lat: [[notification#Pausing delays alerts, it never drops events]]
+    # @lat: [[notification#Pausing delays presentation, it never drops events]]
     def pause(self) -> None:
         """Stops showing new alerts; they keep queuing up without being lost (RF-34)."""
         self._paused = True
@@ -67,19 +67,35 @@ class AlertQueue:
         self._show_next_if_free()
 
     def enqueue(self, ev: SeismicEvent) -> None:
-        """Enqueues an event; if it's an `update` of the one on screen, refreshes it."""
-        if (
-            ev.action == "update"
-            and self._current is not None
-            and ev.id == self._current.id
-        ):
-            self._current = ev
-            if self._update is not None:
-                self._update(ev)
-            self._log.info("alert_updated id=%s", ev.id)
+        """Enqueues an event; if it's an `update` of the one on screen, refreshes it.
+
+        A *supersede* is the same gesture from a different direction: a
+        network the user ranked higher reported the earthquake on screen
+        (REQ-PIP-010). Its id is its own -- the catalogues do not share one --
+        so it names the alert it overrules instead of matching on identity.
+
+        An arrival that names an alert no longer on screen is **dropped**,
+        never queued. Better data about an earthquake the user already
+        acknowledged is not a second earthquake.
+        """
+        if ev.supersedes is not None:
+            if self._current is not None and ev.supersedes == self._current.id:
+                self._refresh(ev)
+            else:
+                self._log.info("alert_supersede_ignored id=%s supersedes=%s", ev.id, ev.supersedes)
+            return
+        if ev.action == "update" and self._current is not None and ev.id == self._current.id:
+            self._refresh(ev)
             return
         self._pending.append(ev)
         self._show_next_if_free()
+
+    def _refresh(self, ev: SeismicEvent) -> None:
+        """Replaces what the alert on screen is showing, without alerting again."""
+        self._current = ev
+        if self._update is not None:
+            self._update(ev)
+        self._log.info("alert_updated id=%s supersedes=%s", ev.id, ev.supersedes)
 
     def acknowledge(self) -> None:
         """Acknowledges the current alert and shows the next one (CU-5)."""
@@ -100,7 +116,7 @@ class AlertQueue:
         self._log.info("alert_shown id=%s", self._current.id)
 
 
-# @lat: [[architecture#Tkinter owns the main thread; asyncio runs beside it]]
+# @lat: [[architecture#Asyncio and Tkinter split across two threads]]
 class AsyncioTkBridge:
     """Thread-safe bridge from the asyncio loop to the Tkinter thread (ADR-006)."""
 
