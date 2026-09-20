@@ -75,10 +75,6 @@ class Application:
         self._tray_icon: Any = None
         self._tui_app: Any = None
 
-    @property
-    def _locale(self) -> str:
-        return self.wiring.locale
-
     # --- Callbacks that need a running application ---
 
     def _on_tk_thread(self, action: Callable[[], Any]) -> None:
@@ -112,12 +108,15 @@ class Application:
         """Tray callback: opens `config.toml` in the OS's associated app (RF-34)."""
         self.wiring.open_config(self._effective_config_path)
 
+    # Tray callbacks that open a window: panel, About, history -- Tk thread only.
+
     def _open_panel(self) -> None:
-        """Tray callback: opens the configuration panel (REQ-GUI-005)."""
         self._on_tk_thread(lambda: self.wiring.open_panel(self._root, self._effective_config_path))
 
+    def _open_about(self) -> None:
+        self._on_tk_thread(lambda: self.wiring.open_about(self._root))
+
     def _open_history(self) -> None:
-        """Tray callback: opens the history window (REQ-HIS-005)."""
         self._on_tk_thread(lambda: self.wiring.open_history(self._root))
 
     @property
@@ -166,6 +165,7 @@ class Application:
             exit_agent=self._exit_from_tray,
             open_panel=self._open_panel,
             open_history=self._open_history,
+            open_about=self._open_about,
         )
 
     def _wire_tui(self, tui_app: Any) -> AlertController:
@@ -216,14 +216,14 @@ class Application:
         if simulate:
             self._tui_app = VigiaTuiApp(
                 state=self._agent_state,
-                locale_code=self._locale,
+                locale_code=self.wiring.locale,
                 on_start=self._inject_simulated_alert,
             )
             self._ctrl = self.wiring.build_tui_controller(
                 self._tui_app, on_acknowledge=self._after_acknowledge
             )
         else:
-            self._tui_app = VigiaTuiApp(state=self._agent_state, locale_code=self._locale)
+            self._tui_app = VigiaTuiApp(state=self._agent_state, locale_code=self.wiring.locale)
             self._wire_tui(self._tui_app)
         self._log.info("tui_simulation_started" if simulate else "tui_started")
         self._tui_app.run()

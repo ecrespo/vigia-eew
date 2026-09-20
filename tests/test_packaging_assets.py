@@ -346,6 +346,15 @@ def test_the_windows_job_installs_the_compiler_the_installer_needs() -> None:
     assert "vigia-eew-*-setup.exe" in workflow, "the installer is built and never published"
 
 
+def test_the_configuration_has_a_launcher_entry_of_its_own() -> None:
+    """The action is hidden behind a right-click; this one is visible and searchable."""
+    entry = (PACKAGING / "vigia-eew-settings.desktop").read_text(encoding="utf-8")
+    assert "Exec=vigia-eew --settings" in entry
+    assert "Name[es]=Vigía-eew — Configuración" in entry
+    script = (PACKAGING / "build_linux.sh").read_text(encoding="utf-8")
+    assert "/usr/share/applications/vigia-eew-settings.desktop" in script
+
+
 def test_the_desktop_entry_carries_the_settings_action() -> None:
     """The action the launcher shows on right-click, and what GNOME search finds."""
     entry = (PACKAGING / "vigia-eew.desktop").read_text(encoding="utf-8")

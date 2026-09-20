@@ -49,6 +49,24 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "tray_open_panel": {"en": "Configuration…", "es": "Configuración…"},
     "tray_edit_config": {"en": "Edit configuration...", "es": "Editar configuración..."},
     "tray_quit": {"en": "Quit", "es": "Salir"},
+    # What the product is, which version is running, and under what terms
+    # (T-151). The GPL asks an interactive program to state the licence and
+    # the absence of warranty; an agent with no window of its own had nowhere
+    # to say either.
+    "tray_about": {"en": "About…", "es": "Acerca de…"},
+    "about_title": {"en": "About Vigía-eew", "es": "Acerca de Vigía-eew"},
+    "about_description": {
+        "en": "Real-time desktop earthquake alerts.",
+        "es": "Alerta sísmica de escritorio en tiempo real.",
+    },
+    "about_version": {"en": "Version", "es": "Versión"},
+    "about_license": {"en": "License", "es": "Licencia"},
+    "about_warranty": {
+        "en": "This program comes with absolutely no warranty.",
+        "es": "Este programa se distribuye sin ninguna garantía.",
+    },
+    "about_button": {"en": "About…", "es": "Acerca de…"},
+    "about_close": {"en": "Close", "es": "Cerrar"},
     "tray_open_history": {"en": "History…", "es": "Histórico…"},
     # The history view (REQ-HIS-005). Its whole purpose is to answer "why was
     # I not warned about that one?", so the reason has to arrive as a phrase,

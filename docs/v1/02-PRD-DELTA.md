@@ -344,6 +344,17 @@ congelado—; bajo GNOME/Wayland la extensión dibuja el icono y el clic no abre
 quedaban inalcanzables desde el paquete, que es la única forma en que la mayoría lo instala.* ·
 **T-150**
 
+### REQ-GUI-010 `[MUST]` — La aplicación dice qué es y bajo qué términos *(ubicuo)*
+EL SISTEMA DEBERÁ ofrecer una ventana «Acerca de» con el nombre, la versión instalada, el
+copyright, la licencia y la ausencia de garantía, alcanzable desde el icono de bandeja y desde el
+panel de configuración.
+
+*Criterio verificable:* la versión mostrada es la que declara el paquete instalado, no una constante
+escrita a mano.
+*Racional: la GPL pide que un programa interactivo declare licencia y ausencia de garantía, y un
+agente sin ventana propia no tenía dónde decirlo. La versión importa para reportar un fallo: «la
+1.0.0» es una respuesta que el usuario solo puede dar si la interfaz se la muestra.* · **T-151**
+
 ### REQ-GUI-008 `[MUST]` — Las redes se eligen y se ordenan desde la interfaz *(ubicuo)*
 EL SISTEMA DEBERÁ presentar las fuentes sísmicas como una lista donde se pueda habilitar cada una y
 cambiar su orden de prioridad.

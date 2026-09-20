@@ -36,6 +36,7 @@ from vigia_eew.ingest.registry import (
 )
 from vigia_eew.logging_conf import configure_logging
 from vigia_eew.models import SeismicEvent, SeverityLevel
+from vigia_eew.notify import ui_scale
 from vigia_eew.notify.controller import AlertController
 from vigia_eew.notify.presentation import AlertData
 from vigia_eew.notify.sound import SoundPlayer
@@ -71,6 +72,8 @@ class Wiring:
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
         self._panel_window: Any = None
+        self._about_window: Any = None
+        self._fonts_scaled = False
         self._history_window: Any = None
         self._history: HistoryWriter | None = None
 
@@ -335,6 +338,7 @@ class Wiring:
         exit_agent: Callable[[], None],
         open_panel: Callable[[], None] | None = None,
         open_history: Callable[[], None] | None = None,
+        open_about: Callable[[], None] | None = None,
     ) -> tray.TrayIcon | None:
         """Builds the tray icon if enabled (RF-34); best-effort, never fatal."""
         if not self.cfg.notification.tray_icon:
@@ -348,6 +352,7 @@ class Wiring:
                 exit=exit_agent,
                 open_panel=open_panel,
                 open_history=open_history,
+                open_about=open_about,
                 locale_code=self.locale,
                 logger=self._log,
             )
@@ -387,6 +392,7 @@ class Wiring:
             return None
         window = tk.Toplevel(root)
         window.title(t("history_title", self.locale))
+        self.scale_fonts(window)
         HistoryWindow(
             window,
             store,
@@ -423,6 +429,43 @@ class Wiring:
             return self._panel_window
         window = tk.Toplevel(root)
         window.title("Vigía-eew")
-        ConfigPanel(window, PanelModel(ConfigWriter(path)))
+        self.scale_fonts(window)
+        window.geometry(
+            ui_scale.panel_geometry(window.winfo_screenwidth(), window.winfo_screenheight())
+        )
+        window.minsize(*ui_scale.MINIMUM_SIZE)
+        ConfigPanel(
+            window,
+            PanelModel(ConfigWriter(path)),
+            on_about=lambda: self.open_about(root),
+            about_label=t("about_button", ui_scale.PANEL_LOCALE),
+        )
         self._panel_window = window
         return window
+
+    def scale_fonts(self, window: Any) -> None:
+        """Enlarges Tk's named fonts once per interpreter (T-151).
+
+        Once, because the fonts are shared: the panel and the history window
+        live in the same interpreter, and bumping twice would double it. The
+        alert window is unaffected either way -- it sizes its own type, which
+        is the one thing here that must not depend on a default.
+        """
+        if self._fonts_scaled:
+            return
+        from tkinter import font as tkfont
+
+        self._fonts_scaled = True
+        changed = ui_scale.enlarge_fonts(lambda name: tkfont.nametofont(name, root=window))
+        self._log.info("ui_fonts_scaled bump=%d fonts=%s", ui_scale.FONT_BUMP, ",".join(changed))
+
+    def open_about(self, root: Any) -> Any:
+        """Opens the About window (REQ-GUI-010). Tk thread only, like the panel."""
+        from vigia_eew.notify.about_window import open_about as build_about
+
+        if self._about_window is not None and self._about_window.winfo_exists():
+            self._about_window.lift()
+            return self._about_window
+        self.scale_fonts(root)
+        self._about_window = build_about(root, locale_code=ui_scale.PANEL_LOCALE)
+        return self._about_window

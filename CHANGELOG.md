@@ -77,6 +77,16 @@ being true.
   an uninstall that removes the scheduled task. Every icon is generated from one mark
   by `packaging/make_icons.py` (stdlib only), and the pre-packaging validator now
   reads the desktop entry, the `.ico` and the `.icns`.
+- **About window** (REQ-GUI-010) — what the application is, which version is
+  installed, the copyright, the licence and the absence of warranty the GPL asks an
+  interactive program to state. Reachable from the tray's "About…" entry and from a
+  button in the configuration panel; the version is read from the installed package's
+  metadata, not typed into a label.
+- **A configuration panel that can be read** (REQ-GUI-009) — it opens at a size chosen
+  for the screen instead of packing itself into a narrow strip, in type three points
+  larger than Tk's default, with the body scrolling under a footer that stays put (the
+  button that used to fall off the bottom was *Save*). The panel and the About window
+  ship in English, like the configuration schema their labels come from.
 - **`--settings`** (REQ-GUI-009) — opens the configuration panel on its own: no
   ingestion, no tray, no agent. It is what the launcher's *Settings* action and the
   Windows Start Menu shortcut run.

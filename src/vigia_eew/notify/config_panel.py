@@ -38,6 +38,7 @@ from pydantic import BaseModel, ValidationError
 
 from vigia_eew.config import SECTION_PATHS, SOURCE_SECTIONS, Settings, by_priority
 from vigia_eew.config_writer import ConfigWriter, InvalidConfig
+from vigia_eew.notify import ui_scale
 
 FieldKind = Literal["bool", "int", "float", "str", "choice"]
 
@@ -539,6 +540,53 @@ class _PositionControl:
         return str(self._label["text"])
 
 
+class _ScrollShell:
+    """A body that scrolls, under a footer that does not (T-151).
+
+    With larger type and more than two sections open the content outgrows the
+    window, and what falls off the bottom is the Save button -- the one
+    widget whose absence makes the panel useless rather than awkward.
+    """
+
+    def __init__(self, master: Any) -> None:
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.footer = ttk.Frame(master)
+        self.footer.pack(side="bottom", fill="x")
+        canvas = tk.Canvas(master, highlightthickness=0, borderwidth=0)
+        bar = ttk.Scrollbar(master, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        self.body = ttk.Frame(canvas, padding=8)
+        slot = canvas.create_window((0, 0), window=self.body, anchor="nw")
+        # The body decides the scrollable height; the canvas decides the width,
+        # or the rows would keep their natural width and never fill the window.
+        self.body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(slot, width=event.width))
+        self._bind_wheel(canvas)
+
+    def _bind_wheel(self, canvas: Any) -> None:
+        """Wheel scrolling while the pointer is over the body.
+
+        `bind_all` is what reaches the event wherever the pointer sits -- over
+        a label, a checkbox, the canvas itself -- and Enter/Leave is what
+        keeps that global binding from following the pointer out of the panel.
+        """
+        sequences = ("<MouseWheel>", "<Button-4>", "<Button-5>")
+
+        def scroll(event: Any) -> None:
+            units = ui_scale.wheel_units(
+                num=getattr(event, "num", 0) or 0, delta=int(getattr(event, "delta", 0) or 0)
+            )
+            if units:
+                canvas.yview_scroll(units, "units")
+
+        canvas.bind("<Enter>", lambda _e: [canvas.bind_all(s, scroll) for s in sequences])
+        canvas.bind("<Leave>", lambda _e: [canvas.unbind_all(s) for s in sequences])
+
+
 class ConfigPanel:
     """The panel itself: collapsible sections, live errors, save and restore.
 
@@ -552,13 +600,16 @@ class ConfigPanel:
         model: PanelModel,
         *,
         on_saved: Callable[[SaveOutcome], None] | None = None,
+        on_about: Callable[[], None] | None = None,
+        about_label: str = "About…",
     ) -> None:
-        from tkinter import ttk
 
         self.model = model
         self._on_saved = on_saved
-        self._frame = ttk.Frame(master, padding=8)
-        self._frame.pack(fill="both", expand=True)
+        self._on_about = on_about
+        self._about_label = about_label
+        self._shell = _ScrollShell(master)
+        self._frame = self._shell.body
         self.controls: dict[str, Control] = {}
         self._messages: dict[str, Any] = {}
         self._open: dict[str, bool] = {}
@@ -654,7 +705,7 @@ class ConfigPanel:
     def _build_footer(self) -> None:
         from tkinter import ttk
 
-        footer = ttk.Frame(self._frame, padding=(0, 10))
+        footer = ttk.Frame(self._shell.footer, padding=(8, 10))
         footer.pack(fill="x")
         self.save_button = ttk.Button(footer, text="Save", command=self._save)
         self.save_button.pack(side="right")
@@ -662,6 +713,13 @@ class ConfigPanel:
         restore.pack(side="right", padx=6)
         self.status = ttk.Label(footer, text="")
         self.status.pack(side="left")
+        # The tray menu is not reachable on every desktop (REQ-GUI-009); the
+        # panel is, so what the product is and under what terms is reachable
+        # from here too.
+        if self._on_about is not None:
+            ttk.Button(footer, text=self._about_label, command=self._on_about).pack(
+                side="left", padx=12
+            )
 
     # --- Behaviour ---
 

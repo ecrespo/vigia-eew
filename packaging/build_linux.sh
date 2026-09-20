@@ -104,6 +104,11 @@ construir_deb_con_dpkg() {
     install -m 0644 "$RAIZ/LICENSE" "$raiz/usr/share/doc/vigia-eew/copyright"
     install -Dm 0644 "$RAIZ/packaging/vigia-eew.desktop" \
         "$raiz/usr/share/applications/vigia-eew.desktop"
+    # A launcher entry of its own, not only the right-click action: GNOME hides
+    # desktop actions behind a context menu nobody reported finding, and the
+    # configuration is what people are looking for after installing.
+    install -Dm 0644 "$RAIZ/packaging/vigia-eew-settings.desktop" \
+        "$raiz/usr/share/applications/vigia-eew-settings.desktop"
     instalar_iconos_hicolor "$raiz"
     escribir_hooks_deb "$raiz"
 
@@ -139,6 +144,7 @@ CONTROL
 
 # fpm takes `source=destination` pairs; the same files the dpkg path installs.
 MAPEOS_FPM=("$RAIZ/packaging/vigia-eew.desktop=/usr/share/applications/vigia-eew.desktop"
+    "$RAIZ/packaging/vigia-eew-settings.desktop=/usr/share/applications/vigia-eew-settings.desktop"
     "$RAIZ/packaging/icons/vigia-eew.svg=/usr/share/icons/hicolor/scalable/apps/vigia-eew.svg")
 for lado in "${TAMANOS_ICONO[@]}"; do
     MAPEOS_FPM+=("$RAIZ/packaging/icons/vigia-eew-$lado.png=/usr/share/icons/hicolor/${lado}x${lado}/apps/vigia-eew.png")

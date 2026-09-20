@@ -273,3 +273,30 @@ def test_build_icon_stays_quiet_when_the_menu_works(monkeypatch, caplog):
             exit=lambda: None,
         )
     assert not any("tray_menu_unreachable" in record.message for record in caplog.records)
+
+
+# --- T-151 · What the application is, from the icon (REQ-GUI-010) ---
+
+
+def test_the_menu_offers_an_about_entry() -> None:
+    _icon, texts = _menu_texts(open_about=lambda: None)
+
+    assert any("about" in t.lower() for t in texts)
+
+
+def test_the_about_entry_invokes_its_callback() -> None:
+    opened: list[int] = []
+    icon, _texts = _menu_texts(open_about=lambda: opened.append(1))
+
+    for item in icon.menu:
+        if item.text and "about" in str(item.text).lower():
+            item(icon)
+
+    assert opened == [1]
+
+
+def test_without_an_about_callback_the_entry_is_absent() -> None:
+    """Same rule as the panel: an entry with nothing behind it is a dead menu item."""
+    _icon, texts = _menu_texts()
+
+    assert not any("about" in t.lower() for t in texts)

@@ -478,3 +478,38 @@ def test_open_settings_gives_up_when_there_is_no_panel(monkeypatch, tmp_path):
     app.open_settings()
 
     assert root.looped is False
+
+
+# --- T-151 · About, from the tray and from the panel (REQ-GUI-010) ---
+
+
+def test_open_about_schedules_on_the_tk_thread(monkeypatch, tmp_path):
+    """Same thread rule as the panel: the tray callback runs on its own thread."""
+    opened = []
+    import vigia_eew.wiring as wiring_mod
+
+    monkeypatch.setattr(wiring_mod.Wiring, "open_about", lambda self, root: opened.append(root))
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+    app._root = _FakeRoot()
+
+    app._open_about()
+
+    ms, callback = app._root.after_calls[0]
+    assert ms == 0
+    callback()
+    assert opened == [app._root]
+
+
+def test_the_tray_is_built_with_the_about_entry(tmp_path):
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+    app._root = _FakeRoot()
+    captured = {}
+
+    def fake_build_tray(**kwargs):
+        captured.update(kwargs)
+        return None
+
+    app.wiring.build_tray = fake_build_tray  # type: ignore[method-assign]
+    app._build_tray()
+
+    assert callable(captured["open_about"])

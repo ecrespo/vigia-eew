@@ -85,7 +85,8 @@ installation is required — the binary is self-contained.
 
 The `.deb`/`.rpm` packages install a `vigia-eew` command on your `PATH` **and a launcher
 entry**: after installing, *Vigía-eew* appears in your applications menu, and right-clicking it
-offers **Settings** (the configuration panel) and **Test the alert**. The AppImage carries the
+offers **Settings** (the configuration panel) and **Test the alert** — and *Vigía-eew —
+Configuración* is an entry of its own, so the panel is one search away. The AppImage carries the
 same entry; the Windows installer puts *Vigía-eew* and *Vigía-eew — Configuración* in the Start
 Menu; on macOS the `.app` lands in *Applications* like any other.
 
@@ -138,7 +139,7 @@ vigia-eew --settings      # the configuration panel, on its own; no agent, no tr
   networks. Reach it with `vigia-eew --settings`, from the launcher entry's *Settings* action
   (right-click the application icon), from the Start Menu shortcut on Windows, or from the tray
   menu's **"Configuration…"**.
-- The **tray menu**, which also offers **"Edit configuration…"**.
+- The **tray menu**, which also offers **"Edit configuration…"** and **"About…"**.
 - The **file**, which is what lets you version it with Git, copy it between machines, or reach
   it over SSH.
 
@@ -146,6 +147,11 @@ vigia-eew --settings      # the configuration panel, on its own; no agent, no tr
 > falls back to a legacy X11 tray icon: a shell extension still draws the icon, and clicking it
 > does nothing. The log says so (`tray_menu_unreachable`). Use `vigia-eew --settings` or the
 > launcher's *Settings* action — neither needs the tray.
+
+The panel and the About window are in English, like the configuration schema their labels come
+from; the alert, the toast and the tray menu follow `[notification] language`. **"About…"** —
+in the tray menu and in the panel's footer — shows the installed version, the copyright, the
+licence and the warranty notice.
 
 Saving from the panel preserves every comment in the file, keeps the previous version as
 `config.toml.bak`, and refuses to overwrite an edit you made elsewhere while it was open.

@@ -3,7 +3,7 @@
 > Artefacto 07 del kit v1.0 · Specs de origen: [02-PRD-DELTA](02-PRD-DELTA.md) ·
 > [03-API-SPEC-DELTA](03-API-SPEC-DELTA.md) · [04-TECHNICAL-DESIGN-DELTA](04-TECHNICAL-DESIGN-DELTA.md) ·
 > [05-DATA-MODEL-DELTA](05-DATA-MODEL-DELTA.md) · [06-IMPLEMENTATION-PLAN](06-IMPLEMENTATION-PLAN.md)
-> **50 tareas** cubriendo las 9 fases · Commit base `c3a2c29`
+> **51 tareas** cubriendo las 9 fases · Commit base `c3a2c29`
 
 ## Convenciones
 
@@ -568,6 +568,25 @@ ocurra, los binarios de macOS y Windows no existen: esta máquina no puede const
 - **Nota**: hacer funcionar el menú de la bandeja en GNOME es hablar StatusNotifierItem por
   D-Bus — el puente de ADR-010 — y es una funcionalidad aparte. Esto es la puerta, no el puente.
 
+### [x] 2026-09-19 T-151 · La ventana se lee, y dice qué aplicación es
+- **Qué**: tamaño y tipografía por defecto del panel, desplazamiento, ventana «Acerca de», y una
+  entrada de lanzador propia para la configuración.
+- **REQ**: REQ-GUI-009, REQ-GUI-010 · **Depende de**: T-150
+- **Archivos**: `src/vigia_eew/notify/{ui_scale,about,about_window,config_panel}.py`,
+  `src/vigia_eew/{wiring,app,tray,i18n}.py`, `packaging/vigia-eew-settings.desktop`,
+  `packaging/build_linux.sh`, `scripts/check_packaging_assets.py`
+- **Done**: el panel abre a 820x920 con las fuentes nominales de Tk +3 pt y barra de
+  desplazamiento con el pie fijo; «About…» muestra versión, licencia, copyright y ausencia de
+  garantía; capturas verificadas sobre la ventana real.
+- **Reporte que lo abrió**: *"la ventana más grande y tamaño de las letras, se ve pequeño"* y
+  *"coloca toda la interfaz de la configuración y del acerca de en inglés"*.
+- **Decisiones**: (1) las fuentes nominales de Tk son del intérprete, así que se agrandan **una
+  sola vez** por proceso —el panel y el histórico las comparten— y la ventana de alerta no se ve
+  afectada porque dimensiona su propia tipografía; (2) el panel y el «Acerca de» **no se
+  traducen**: las etiquetas del panel salen del esquema de configuración, que es inglés por
+  convención (RNF-10), y media interfaz traducida es peor que ninguna; (3) el pie deja de
+  desplazarse con el contenido — lo que se salía por abajo era el botón *Save*.
+
 ---
 
 ## Matriz de trazabilidad
@@ -576,7 +595,8 @@ Todo requisito en alcance tiene al menos una tarea. Toda tarea cita al menos un 
 
 | Requisito | Tareas | Criterios que lo verifican |
 |---|---|---|
-| REQ-GUI-009 | T-150 | `dpkg -c` con la entrada y los iconos; `--settings` sobre el binario |
+| REQ-GUI-010 | T-151 | La versión mostrada es la que declara el paquete instalado |
+| REQ-GUI-009 | T-150, T-151 | `dpkg -c` con la entrada y los iconos; `--settings` sobre el binario |
 | REQ-DEP-001 | T-101 | CA-101.1, CA-101.2 |
 | REQ-DEP-002 | T-115 | CA-101.3 |
 | REQ-DEP-003 | T-116 | CA-101.3 |
@@ -643,6 +663,8 @@ T-138 es el corte del release.
 | 2026-09-19 | **F8 · T-138** | 🟡 corte preparado | Versión `1.0.0`, changelog de la v1 escrito y `[Sin publicar]` vacía. Las **10 condiciones de corte** pasan a ser verificables: `tests/test_release_cut.py` comprueba que la versión declarada y la anunciada coinciden, que las diez están marcadas y que **ninguna tarea queda sin marcar** — el gate que evita que la lista se desincronice después del tag y no antes. Artefacto de Linux construido, empaquetado y **ejecutado desde el paquete**: smoke `--acknowledge` en verde sobre el binario extraído del `.deb`. Desviación: `build_linux.sh` arma el `.deb` con `dpkg-deb` (siempre presente en Debian/Ubuntu) en vez de exigir `fpm`/Ruby, y **deriva el piso de glibc de la máquina que construye** en lugar de declararlo a ojo. **Lo que falta es un `push`**: rama, PR a `main` y tag `v1.0.0`, que es lo que dispara `build.yml` y produce los tres binarios. No se ejecuta sin que el mantenedor lo pida; hasta entonces macOS y Windows no existen como artefactos |
 
 | 2026-09-19 | **F9 · T-150** | ✅ 1/1 | Hallazgo de campo sobre el `.deb` instalado: el icono de bandeja aparece y su menú no abre, así que el panel de configuración —la funcionalidad central de la F5— era inalcanzable en la sesión que más gente usa (GNOME/Wayland). Causa medida, no supuesta: `pystray.Icon.__module__` es `pystray._xorg` porque el bundle no lleva PyGObject. Dos respuestas: `--settings` abre el panel sin agente ni bandeja, y los tres empaquetados instalan por fin una aplicación —entrada `.desktop` con acción *Settings*, diez iconos hicolor + SVG, `.icns` en el bundle de macOS con versión y categoría, `.ico` en el `.exe` e instalador Inno Setup con accesos directos (uno va directo a la configuración), autostart opcional y desinstalación que retira la tarea programada. Los iconos se **generan** de una sola marca con stdlib (`packaging/make_icons.py`), y el validador previo al empaquetado ahora lee la entrada de escritorio, el `.ico` y el `.icns`; los tres scripts de build lo ejecutan, que es lo que faltó en la construcción local que produjo el `.deb` del reporte. 690 passed, gate completo en verde; `.deb` reconstruido y verificado con `dpkg -c` |
+
+| 2026-09-19 | **F9 · T-151** | ✅ 1/1 | Segunda tanda del mismo reporte, ya con el panel alcanzable: abría como una tira estrecha de letra pequeña y sin decir qué versión era. Tamaño y tipografía por defecto (`notify/ui_scale.py`, decididos sin pantalla y probados sin ella), cuerpo desplazable con el pie fijo —el botón *Save* era lo que se salía—, ventana «Acerca de» con versión leída del paquete instalado, licencia, copyright y la ausencia de garantía que pide la GPL, y una entrada de lanzador propia para la configuración porque la acción de clic derecho nadie la encontró. Panel y «Acerca de» quedan en inglés por decisión. 712 passed, gate completo en verde; verificado con capturas de las dos ventanas reales |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—

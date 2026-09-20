@@ -136,3 +136,38 @@ Two consequences, both deliberate:
 Making the tray menu itself work on GNOME would mean speaking StatusNotifierItem directly over
 D-Bus — `dbus-fast` is already in the bundle for the toasts — which is ADR-010's bridge and a
 feature of its own. This is the door, not the bridge.
+
+## The panel's defaults are decisions, not leftovers
+
+[[src/vigia_eew/notify/ui_scale.py#panel_geometry]] and its neighbours exist because Tk's own
+defaults were being used by omission, and they were the wrong ones.
+
+A window with no geometry is packed to the natural width of its widest row; with every section
+collapsed that row is a button, so the panel opened as a tall narrow strip. It now opens at
+820x920, clamped to the screen it appears on and floored where the labels stop fitting beside
+their controls.
+
+The type is Tk's named fonts plus three points. Three, because the report was not that it was
+marginally small. Those fonts belong to the interpreter rather than to a window, which is why
+[[src/vigia_eew/wiring.py#Wiring]] bumps them **once**: the panel and the history window share
+them, and bumping per window would compound. The alert window is deliberately unaffected — it
+sizes its own type, and the one thing here that must never depend on a default is the window
+whose whole job is to be impossible to miss.
+
+The body scrolls and the footer does not. What fell off the bottom of an overfull panel was the
+Save button, which is the difference between awkward and useless.
+
+### The panel and the About window are not translated
+
+`PANEL_LOCALE` is English and does not follow `[notification] language`.
+
+The panel's field labels are derived from the configuration schema (ADR-020), and those names are
+English by convention (RNF-10). Translating the frame around them would produce half a translation
+— Spanish buttons over English field names — which reads worse than either language alone. The
+alert, the toast and the tray menu are translated, because every word in them is written by hand
+for the person reading it.
+
+[[src/vigia_eew/notify/about.py#about_info]] follows the panel for the same reason, and carries
+the licence and warranty notice the GPL asks an interactive program to state. Its version is read
+from the installed package's metadata: a version typed into a label is wrong one release later,
+and it is the first thing anybody reporting a bug is asked for.

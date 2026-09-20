@@ -71,6 +71,7 @@ REQUIRED: tuple[Asset, ...] = (
 #: an icon nobody installed gives a grey square. None of it raises anywhere.
 LAUNCHER: tuple[Asset, ...] = (
     Asset("packaging/vigia-eew.desktop", "desktop"),
+    Asset("packaging/vigia-eew-settings.desktop", "desktop"),
     Asset("packaging/icons/vigia-eew.svg", "svg"),
     Asset("packaging/icon.ico", "ico"),
     Asset("packaging/icon.icns", "icns"),
