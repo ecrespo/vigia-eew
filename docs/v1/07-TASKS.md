@@ -3,7 +3,7 @@
 > Artefacto 07 del kit v1.0 · Specs de origen: [02-PRD-DELTA](02-PRD-DELTA.md) ·
 > [03-API-SPEC-DELTA](03-API-SPEC-DELTA.md) · [04-TECHNICAL-DESIGN-DELTA](04-TECHNICAL-DESIGN-DELTA.md) ·
 > [05-DATA-MODEL-DELTA](05-DATA-MODEL-DELTA.md) · [06-IMPLEMENTATION-PLAN](06-IMPLEMENTATION-PLAN.md)
-> **49 tareas** cubriendo las 9 fases · Commit base `c3a2c29`
+> **50 tareas** cubriendo las 9 fases · Commit base `c3a2c29`
 
 ## Convenciones
 
@@ -544,12 +544,39 @@ ocurra, los binarios de macOS y Windows no existen: esta máquina no puede const
 
 ---
 
+## Fase 9 · Integración de escritorio (hallazgo de campo)
+
+> Fase abierta **después** del corte, por un reporte de uso del `.deb` de la v1.0.0: *"el icono
+> aparece pero no tiene opciones para ver la parte de configuración"*. No es una funcionalidad
+> nueva: es la v1.0.0 entregando por el paquete lo que ya entregaba por el código.
+
+### [x] 2026-09-19 T-150 · El paquete instala una aplicación, no un binario
+- **Qué**: entrada de escritorio + iconos en los tres empaquetados, y una puerta a la
+  configuración que no pase por la bandeja (`--settings`).
+- **REQ**: REQ-GUI-009 (nuevo, deriva de REQ-GUI-005) · **RF**: RF-28, RF-29, RF-30 ·
+  **Depende de**: T-137 (el panel), T-108 (el validador de recursos)
+- **Archivos**: `src/vigia_eew/{cli,app,tray,wiring}.py`, `packaging/{make_icons.py,
+  vigia-eew.desktop,vigia-eew.iss,icon.ico,icon.icns,icons/}`, `packaging/build_*.{sh,ps1}`,
+  `packaging/vigia-eew.spec`, `scripts/check_packaging_assets.py`, `.github/workflows/build.yml`
+- **Done**: `dpkg -c` del `.deb` muestra `/usr/share/applications/vigia-eew.desktop` y los diez
+  iconos bajo `hicolor`; `desktop-file-validate` sin avisos; `vigia-eew --settings` abre el panel
+  **desde el binario empaquetado**, verificado sobre `dist/vigia-eew`.
+- **Causa raíz**: pystray elige backend al importarse — AppIndicator si hay PyGObject, y el
+  XEmbed heredado (`_xorg`) si no. Un binario de PyInstaller no lleva PyGObject, así que siempre
+  cae en `_xorg`: bajo GNOME/Wayland la extensión dibuja el icono y el clic no llega a nada.
+  `tray.menu_reachable` lo nombra en el log; la configuración deja de depender de la bandeja.
+- **Nota**: hacer funcionar el menú de la bandeja en GNOME es hablar StatusNotifierItem por
+  D-Bus — el puente de ADR-010 — y es una funcionalidad aparte. Esto es la puerta, no el puente.
+
+---
+
 ## Matriz de trazabilidad
 
 Todo requisito en alcance tiene al menos una tarea. Toda tarea cita al menos un requisito.
 
 | Requisito | Tareas | Criterios que lo verifican |
 |---|---|---|
+| REQ-GUI-009 | T-150 | `dpkg -c` con la entrada y los iconos; `--settings` sobre el binario |
 | REQ-DEP-001 | T-101 | CA-101.1, CA-101.2 |
 | REQ-DEP-002 | T-115 | CA-101.3 |
 | REQ-DEP-003 | T-116 | CA-101.3 |
@@ -614,6 +641,8 @@ T-138 es el corte del release.
 | 2026-09-19 | **F6 · T-142 a T-144** | ✅ 3/3 | `history.py`: una fila por **llegada evaluada**, con el motivo de cada descarte. SQLite (E-05, ADR-025) con `PRAGMA user_version`, migraciones en transacción y los cinco índices; tiempos en ISO-8601 (el orden lexicográfico es el cronológico) y `distance_km` almacenada, no recalculada. `HistoryWriter` mantiene la escritura **fuera** del camino llegada→presentación: cola, tarea supervisada e hilo de trabajo. Lo mejor-esfuerzo se verifica en tres niveles: almacén que no abre, escritura que falla, registrador que lanza — ninguno cuesta una alerta. Retención configurable, 90 días por defecto **declarado como estimación**. 575 passed (con GUI real bajo Xvfb), 568 también en 3.13; binario reconstruido y smoke completo `--acknowledge` en verde con `tomlkit` y `sqlite3` empaquetados. **Hallazgo:** la suite escribía un `history.sqlite3` real en el directorio de datos del desarrollador — el mismo descuido que `conftest.py` ya evitaba un directorio más allá; corregido. **Condición de corte 10 sigue abierta**: F6 entrega el almacén, F7 la vista consultable |
 | 2026-09-19 | **F7 · T-145 a T-149** | ✅ 5/5 | Consulta del histórico con filtros que combinan en AND, orden por columna y paginación — sin SQL construido en ningún punto: filtros estáticos con valores ligados y el orden como búsqueda en una tabla de sentencias. Listado con el **motivo** de cada descarte en palabras (es/en), mapa de OpenStreetMap bajo demanda con caché LRU fuera del directorio de estado, y **un solo filtro gobernando las dos vistas**. 663 passed con las pruebas de ventana real incluidas. Verificado rompiendo: AND→OR (5 fallos), caché desactivada y anillo de prefetch (4 fallos), control ausente en el panel (nombra las 4 rutas). **Tres hallazgos:** (1) `ImageTk.PhotoImage` sin `master` se liga al intérprete equivocado —`image "pyimage2" doesn't exist`— y solo aparece con dos raíces Tk; (2) **la suite descargaba teselas reales de OpenStreetMap** (12 archivos en `~/.cache/vigia-eew/`), ahora aislada y con guarda propia; (3) el smoke del binario era **intermitente** —una sola pulsación de ENTER contra una ventana que aún no tenía foco—, corregido y verificado 5 veces seguidas. El CI pasa a ejecutar las pruebas de ventana real: ya instalaba Xvfb, y `config_panel` sube de 66 % a 91 % medido |
 | 2026-09-19 | **F8 · T-138** | 🟡 corte preparado | Versión `1.0.0`, changelog de la v1 escrito y `[Sin publicar]` vacía. Las **10 condiciones de corte** pasan a ser verificables: `tests/test_release_cut.py` comprueba que la versión declarada y la anunciada coinciden, que las diez están marcadas y que **ninguna tarea queda sin marcar** — el gate que evita que la lista se desincronice después del tag y no antes. Artefacto de Linux construido, empaquetado y **ejecutado desde el paquete**: smoke `--acknowledge` en verde sobre el binario extraído del `.deb`. Desviación: `build_linux.sh` arma el `.deb` con `dpkg-deb` (siempre presente en Debian/Ubuntu) en vez de exigir `fpm`/Ruby, y **deriva el piso de glibc de la máquina que construye** en lugar de declararlo a ojo. **Lo que falta es un `push`**: rama, PR a `main` y tag `v1.0.0`, que es lo que dispara `build.yml` y produce los tres binarios. No se ejecuta sin que el mantenedor lo pida; hasta entonces macOS y Windows no existen como artefactos |
+
+| 2026-09-19 | **F9 · T-150** | ✅ 1/1 | Hallazgo de campo sobre el `.deb` instalado: el icono de bandeja aparece y su menú no abre, así que el panel de configuración —la funcionalidad central de la F5— era inalcanzable en la sesión que más gente usa (GNOME/Wayland). Causa medida, no supuesta: `pystray.Icon.__module__` es `pystray._xorg` porque el bundle no lleva PyGObject. Dos respuestas: `--settings` abre el panel sin agente ni bandeja, y los tres empaquetados instalan por fin una aplicación —entrada `.desktop` con acción *Settings*, diez iconos hicolor + SVG, `.icns` en el bundle de macOS con versión y categoría, `.ico` en el `.exe` e instalador Inno Setup con accesos directos (uno va directo a la configuración), autostart opcional y desinstalación que retira la tarea programada. Los iconos se **generan** de una sola marca con stdlib (`packaging/make_icons.py`), y el validador previo al empaquetado ahora lee la entrada de escritorio, el `.ico` y el `.icns`; los tres scripts de build lo ejecutan, que es lo que faltó en la construcción local que produjo el `.deb` del reporte. 690 passed, gate completo en verde; `.deb` reconstruido y verificado con `dpkg -c` |
 
 **Si al implementar se descubre que la especificación estaba mal: parar, actualizar la
 especificación —o abrir una propuesta de cambio en [`docs/sdd/changes/`](../sdd/changes/README.md)—

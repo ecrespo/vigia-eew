@@ -80,11 +80,14 @@ installation is required — the binary is self-contained.
 | **Linux** | `vigia-eew-*-x86_64.AppImage` | `chmod +x vigia-eew-*.AppImage && ./vigia-eew-*.AppImage` |
 | **Linux (Debian/Ubuntu)** | `vigia-eew_*_amd64.deb` | `sudo apt install ./vigia-eew_*_amd64.deb` |
 | **Linux (Fedora/RHEL)** | `vigia-eew-*.x86_64.rpm` | `sudo dnf install ./vigia-eew-*.x86_64.rpm` |
-| **Windows** | `vigia-eew.exe` | Double-click, or run it from a terminal. |
+| **Windows** | `vigia-eew-*-setup.exe` | Run the installer: Start Menu entries, optional desktop shortcut and optional autostart. (`vigia-eew.exe` alone still works, unpackaged.) |
 | **macOS** | `vigia-eew-*.dmg` | Open the `.dmg` and drag the app to *Applications*. |
 
-The `.deb`/`.rpm` packages install a `vigia-eew` command on your `PATH`; the AppImage, `.exe`,
-and `.app` are run directly.
+The `.deb`/`.rpm` packages install a `vigia-eew` command on your `PATH` **and a launcher
+entry**: after installing, *Vigía-eew* appears in your applications menu, and right-clicking it
+offers **Settings** (the configuration panel) and **Test the alert**. The AppImage carries the
+same entry; the Windows installer puts *Vigía-eew* and *Vigía-eew — Configuración* in the Start
+Menu; on macOS the `.app` lands in *Applications* like any other.
 
 ### Option B — From source (Python 3.11+)
 
@@ -123,11 +126,26 @@ from the bundled template at the path below; you can also copy
 | **macOS** | `~/Library/Application Support/vigia-eew/config.toml` |
 | **Windows** | `%LOCALAPPDATA%\vigia-eew\config.toml` |
 
-You can also point at any file explicitly with `--config <path>`. The desktop tray icon offers
-two ways into it, deliberately: **"Configuration…"** opens a panel covering every setting, with
-live validation and a reorderable list of seismic networks; **"Edit configuration…"** opens the
-file itself in your editor (creating it from the template if needed), which is what lets you
-version it with Git, copy it between machines, or reach it over SSH.
+You can also point at any file explicitly with `--config <path>`.
+
+**Three ways into the settings**, deliberately:
+
+```bash
+vigia-eew --settings      # the configuration panel, on its own; no agent, no tray
+```
+
+- The **panel** — every setting, with live validation and a reorderable list of seismic
+  networks. Reach it with `vigia-eew --settings`, from the launcher entry's *Settings* action
+  (right-click the application icon), from the Start Menu shortcut on Windows, or from the tray
+  menu's **"Configuration…"**.
+- The **tray menu**, which also offers **"Edit configuration…"**.
+- The **file**, which is what lets you version it with Git, copy it between machines, or reach
+  it over SSH.
+
+> **On GNOME/Wayland the tray menu may not open at all.** Without PyGObject installed, pystray
+> falls back to a legacy X11 tray icon: a shell extension still draws the icon, and clicking it
+> does nothing. The log says so (`tray_menu_unreachable`). Use `vigia-eew --settings` or the
+> launcher's *Settings* action — neither needs the tray.
 
 Saving from the panel preserves every comment in the file, keeps the previous version as
 `config.toml.bak`, and refuses to overwrite an edit you made elsewhere while it was open.

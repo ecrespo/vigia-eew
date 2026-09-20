@@ -415,7 +415,7 @@ def test_the_tray_is_built_with_both_ways_into_the_configuration(tmp_path):
     assert any("edit configuration" in t.lower() for t in texts)
 
 
-# --- `--settings` · the panel with no agent behind it (REQ-GUI-006) ---
+# --- `--settings` · the panel with no agent behind it (REQ-GUI-009) ---
 
 
 class _FakePanelWindow:

@@ -67,6 +67,19 @@ being true.
   did alert.
 - **Development container and contribution guide** (REQ-DEV-001..004) — the
   environment comes up in one step, with a virtual display for the real-window tests.
+- **The packages install an application, not just a binary** (RF-28..RF-30) — the
+  `.deb`, `.rpm` and AppImage ship a desktop entry with a **Settings** action and the
+  full icon set under `hicolor`, and the `.deb` rebuilds the desktop and icon caches
+  on install; the macOS bundle carries its `.icns`, its version and its category, and
+  the `.dmg` the `/Applications` symlink that makes it drag-to-install; Windows gets
+  an **Inno Setup installer** with Start Menu entries — one of them opens the
+  configuration panel directly — an optional desktop shortcut, optional autostart and
+  an uninstall that removes the scheduled task. Every icon is generated from one mark
+  by `packaging/make_icons.py` (stdlib only), and the pre-packaging validator now
+  reads the desktop entry, the `.ico` and the `.icns`.
+- **`--settings`** (REQ-GUI-009) — opens the configuration panel on its own: no
+  ingestion, no tray, no agent. It is what the launcher's *Settings* action and the
+  Windows Start Menu shortcut run.
 
 ### Changed
 - **BREAKING — minimum Python is now 3.13** (`requires-python = ">=3.13"`,
@@ -97,6 +110,13 @@ being true.
   by a test written to fail first, and a second defect found only by running the
   suite under coverage: `Supervisor.run()` discarded a stop requested before it
   started.
+- **The configuration was unreachable on GNOME/Wayland** — the tray icon appeared
+  and its menu never opened, so the panel and "Edit configuration…" could not be
+  got to from a packaged install. pystray falls back to a legacy X11 tray icon when
+  PyGObject is absent, which a frozen build always is: under Wayland a shell
+  extension still draws the icon and the click reaches nothing. The agent now says
+  so in the log (`tray_menu_unreachable`) instead of showing an icon that silently
+  does nothing, and the configuration no longer depends on the tray at all.
 - **No binary is published without having been run** (REQ-OPS-008) — v0.1.x shipped
   twice with a packaging resource that was missing only at runtime. Each of the three
   build jobs now launches what it just built and requires it to present an alert;

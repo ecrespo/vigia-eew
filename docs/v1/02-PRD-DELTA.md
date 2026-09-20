@@ -332,6 +332,18 @@ nacional.* · **B-40**
 - **La prioridad no altera el orden ni la concurrencia de las consultas.** Las fuentes siguen siendo
   independientes (REQ-ING-010); serializarlas por prioridad retrasaría la alerta.
 
+### REQ-GUI-009 `[MUST]` — El panel se alcanza sin la bandeja *(ubicuo)*
+EL SISTEMA DEBERÁ ofrecer una vía de acceso al panel de configuración que no dependa del icono de
+bandeja, y los paquetes de los tres SO DEBERÁN exponerla en el lanzador del escritorio.
+
+*Criterio verificable:* `vigia-eew --settings` abre el panel sin arrancar el agente, y el paquete
+instalado ofrece esa acción desde el menú de aplicaciones.
+*Racional: no es una preferencia de diseño, es un hallazgo de campo. pystray elige su backend al
+importarse y cae en el icono XEmbed heredado cuando no hay PyGObject —que es siempre, en un binario
+congelado—; bajo GNOME/Wayland la extensión dibuja el icono y el clic no abre nada. REQ-GUI-001..005
+quedaban inalcanzables desde el paquete, que es la única forma en que la mayoría lo instala.* ·
+**T-150**
+
 ### REQ-GUI-008 `[MUST]` — Las redes se eligen y se ordenan desde la interfaz *(ubicuo)*
 EL SISTEMA DEBERÁ presentar las fuentes sísmicas como una lista donde se pueda habilitar cada una y
 cambiar su orden de prioridad.

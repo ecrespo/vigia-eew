@@ -196,7 +196,7 @@ class Application:
         root.mainloop()
 
     def open_settings(self) -> None:
-        """Opens the configuration panel alone, with no agent behind it (REQ-GUI-006)."""
+        """Opens the configuration panel alone, with no agent behind it (REQ-GUI-009)."""
         # @lat: [[configuration#A door into the panel that is not the tray]]
         root = self._new_root()
         window = self.wiring.open_panel(root, self._effective_config_path)
