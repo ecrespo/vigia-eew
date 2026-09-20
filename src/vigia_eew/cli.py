@@ -1,7 +1,8 @@
 """Console entry point `vigia-eew` (RF-26, RF-21).
 
-Starts the full agent (`vigia-eew`) or the notification test (`--simulate`),
-accepts a config path (`--config`) and a quick check (`--check-config`).
+Starts the full agent (`vigia-eew`), the notification test (`--simulate`) or the
+configuration panel alone (`--settings`); accepts a config path (`--config`) and a
+quick check (`--check-config`).
 Autostart install/uninstall was added in Phase 6.
 
 The application factory (`create_app`) is injectable so the CLI dispatch can be
@@ -34,6 +35,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--simulate",
         action="store_true",
         help="Injects a simulated earthquake (M6.1 La Guaira) to test the alert (RF-21).",
+    )
+    parser.add_argument(
+        "--settings",
+        action="store_true",
+        help="Opens the configuration panel on its own, without starting the agent.",
     )
     parser.add_argument(
         "--tui",
@@ -100,7 +106,11 @@ def _run_agent(args: argparse.Namespace, create_app: Callable[..., Any] | None) 
         cfg, manual_reference=has_manual_reference(args.config), config_path=args.config
     )
 
-    if args.tui:
+    if args.settings:
+        # Before the other modes on purpose: `--settings` is the door the
+        # desktop entry knocks on, and it opens the panel and nothing else.
+        app.open_settings()
+    elif args.tui:
         app.run_tui(simulate=args.simulate)
     elif args.simulate:
         app.simulate()

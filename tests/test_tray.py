@@ -14,6 +14,7 @@ from vigia_eew.tray import (
     _open_command,
     build_icon,
     default_icon_path,
+    menu_reachable,
     open_config,
 )
 
@@ -197,3 +198,78 @@ def test_without_a_panel_the_file_entry_is_still_there() -> None:
 
     assert any("edit configuration" in t.lower() for t in texts)
     assert not any(t.lower().startswith("configuration") for t in texts)
+
+
+# --- Whether the icon's menu can be opened at all (pure) ---
+
+
+def test_menu_is_reachable_with_the_appindicator_backend():
+    """StatusNotifierItem is what a GNOME shell extension speaks; the menu works."""
+    assert (
+        menu_reachable(
+            backend="pystray._appindicator",
+            env={"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"},
+            platform="linux",
+        )
+        is True
+    )
+
+
+def test_menu_is_unreachable_with_the_x11_tray_on_wayland():
+    """Without PyGObject pystray falls back to `_xorg`: an XEmbed icon nobody hosts.
+
+    The icon still appears -- a GNOME extension picks it up -- and clicking it
+    opens nothing, which is the failure this predicate exists to name.
+    """
+    assert (
+        menu_reachable(
+            backend="pystray._xorg",
+            env={"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"},
+            platform="linux",
+        )
+        is False
+    )
+
+
+def test_the_x11_tray_is_fine_on_a_real_x11_session():
+    """Under X11 an XEmbed host is the normal case; nothing to warn about."""
+    assert (
+        menu_reachable(backend="pystray._xorg", env={"XDG_SESSION_TYPE": "x11"}, platform="linux")
+        is True
+    )
+
+
+def test_macos_and_windows_are_never_the_x11_case():
+    assert menu_reachable(backend="pystray._darwin", env={}, platform="darwin") is True
+    assert menu_reachable(backend="pystray._win32", env={}, platform="win32") is True
+
+
+def test_build_icon_warns_when_the_menu_cannot_be_opened(monkeypatch, caplog):
+    """An icon whose menu never opens has to say so; the user sees only the icon."""
+    import vigia_eew.tray as tray_mod
+
+    monkeypatch.setattr(tray_mod, "menu_reachable", lambda **kw: False)
+    with caplog.at_level("WARNING"):
+        build_icon(
+            state=AgentState(),
+            paused=lambda: False,
+            toggle_pause=lambda: None,
+            edit_config=lambda: None,
+            exit=lambda: None,
+        )
+    assert any("tray_menu_unreachable" in record.message for record in caplog.records)
+
+
+def test_build_icon_stays_quiet_when_the_menu_works(monkeypatch, caplog):
+    import vigia_eew.tray as tray_mod
+
+    monkeypatch.setattr(tray_mod, "menu_reachable", lambda **kw: True)
+    with caplog.at_level("WARNING"):
+        build_icon(
+            state=AgentState(),
+            paused=lambda: False,
+            toggle_pause=lambda: None,
+            edit_config=lambda: None,
+            exit=lambda: None,
+        )
+    assert not any("tray_menu_unreachable" in record.message for record in caplog.records)

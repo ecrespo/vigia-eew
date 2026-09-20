@@ -413,3 +413,68 @@ def test_the_tray_is_built_with_both_ways_into_the_configuration(tmp_path):
     texts = [str(i.text) for i in icon._icon.menu if i.text is not None]
     assert any(t.lower().startswith("configuration") for t in texts)
     assert any("edit configuration" in t.lower() for t in texts)
+
+
+# --- `--settings` · the panel with no agent behind it (REQ-GUI-006) ---
+
+
+class _FakePanelWindow:
+    def __init__(self):
+        self.protocols: dict[str, object] = {}
+
+    def protocol(self, name, callback):
+        self.protocols[name] = callback
+
+
+class _FakeSettingsRoot(_FakeRoot):
+    def __init__(self):
+        super().__init__()
+        self.looped = False
+        self.destroyed = False
+
+    def mainloop(self):
+        self.looped = True
+
+    def destroy(self):
+        self.destroyed = True
+
+
+def _settings_app(monkeypatch, tmp_path, *, window):
+    import vigia_eew.wiring as wiring_mod
+
+    root = _FakeSettingsRoot()
+    monkeypatch.setattr(wiring_mod.Wiring, "open_panel", lambda self, r, path: window)
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+    monkeypatch.setattr(app, "_new_root", lambda: root)
+    return app, root
+
+
+def test_open_settings_runs_the_panel_on_its_own_loop(monkeypatch, tmp_path):
+    """No ingestion, no tray, no bridge: one window and the loop that draws it."""
+    window = _FakePanelWindow()
+    app, root = _settings_app(monkeypatch, tmp_path, window=window)
+
+    app.open_settings()
+
+    assert root.looped is True
+    assert "WM_DELETE_WINDOW" in window.protocols
+
+
+def test_closing_the_panel_ends_the_process(monkeypatch, tmp_path):
+    """Closing the only window has to end the loop, or the process outlives its UI."""
+    window = _FakePanelWindow()
+    app, root = _settings_app(monkeypatch, tmp_path, window=window)
+    app.open_settings()
+
+    window.protocols["WM_DELETE_WINDOW"]()
+
+    assert root.destroyed is True
+
+
+def test_open_settings_gives_up_when_there_is_no_panel(monkeypatch, tmp_path):
+    """A panel that could not be built leaves nothing to loop over."""
+    app, root = _settings_app(monkeypatch, tmp_path, window=None)
+
+    app.open_settings()
+
+    assert root.looped is False

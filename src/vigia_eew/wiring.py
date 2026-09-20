@@ -349,6 +349,7 @@ class Wiring:
                 open_panel=open_panel,
                 open_history=open_history,
                 locale_code=self.locale,
+                logger=self._log,
             )
             return tray.TrayIcon(icon)
         except Exception as exc:  # noqa: BLE001 - deliberate best-effort (RF-34)

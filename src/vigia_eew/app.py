@@ -9,7 +9,8 @@ What is left here is the part that is genuinely about running:
   - the ADR-006 concurrency model: **Tkinter on the main thread**, the
     **asyncio loop on a worker thread**, events crossing via `AsyncioTkBridge`;
   - `execute()`, the full agent; `run_tui()`, the headless dashboard (RF-36);
-    `simulate()`, one injected event and no network (RF-21);
+    `simulate()`, one event and no network (RF-21); `open_settings()`, the
+    configuration panel alone;
   - the callbacks that need a *running* application -- pause, exit,
     what happens once an alert is acknowledged;
   - shutdown, which has to work whichever order the threads got started in
@@ -193,6 +194,15 @@ class Application:
         ctrl.enqueue(simulated_event(self.cfg.reference, self.cfg.severity))
         self._log.info("simulation_started")
         root.mainloop()
+
+    def open_settings(self) -> None:
+        """Opens the configuration panel alone, with no agent behind it (REQ-GUI-006)."""
+        # @lat: [[configuration#A door into the panel that is not the tray]]
+        root = self._new_root()
+        window = self.wiring.open_panel(root, self._effective_config_path)
+        if window is not None:
+            window.protocol("WM_DELETE_WINDOW", root.destroy)  # closing the only window ends it
+            root.mainloop()
 
     def run_tui(self, *, simulate: bool = False) -> None:
         """Starts the agent with the headless TUI dashboard (RF-36, ADR-013).

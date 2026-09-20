@@ -107,3 +107,32 @@ there is only ever one list.
 
 A network turned off stays in the list. Disabled is not deleted, and it has to be visible to be
 turned back on.
+
+## A door into the panel that is not the tray
+
+[[src/vigia_eew/app.py#Application]]`.open_settings()` runs the panel on its own: no ingestion, no
+bridge, no tray, one window and the loop that draws it. `vigia-eew --settings` is that mode, and
+the desktop entry's *Settings* action is what invokes it in practice.
+
+It exists because the tray entry is not reachable everywhere it appears. pystray selects its
+backend when it is imported: AppIndicator — StatusNotifierItem over D-Bus — when PyGObject is
+installed, and `_xorg`, a legacy XEmbed icon drawn with python-xlib, when it is not. A PyInstaller
+build carries no PyGObject and no GTK typelibs, so a packaged agent always lands on `_xorg`.
+
+Under X11 that backend is fine. Under GNOME/Wayland it fails in the one way that looks like
+success: a shell extension still shows the icon, so the agent looks configurable, and the click
+that should open the menu reaches nothing at all. That is the report this section comes from — the
+icon was there, and "Configuración…" could not be got to.
+
+Two consequences, both deliberate:
+
+- [[src/vigia_eew/tray.py#menu_reachable]] names the case in the log instead of leaving an icon
+  that silently does nothing. It is a warning, not a failure: the icon is still worth showing for
+  its status text, and the agent must never die over its decoration (RF-34).
+- The configuration stops depending on the tray at all. `--settings` needs no icon, no D-Bus and
+  no extension, and the packaged desktop entry carries it as an action, so the path from "I
+  installed it" to "I configured it" survives a session where the tray is decorative.
+
+Making the tray menu itself work on GNOME would mean speaking StatusNotifierItem directly over
+D-Bus — `dbus-fast` is already in the bundle for the toasts — which is ADR-010's bridge and a
+feature of its own. This is the door, not the bridge.

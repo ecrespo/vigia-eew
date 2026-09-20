@@ -15,7 +15,7 @@ import os
 import subprocess
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -49,6 +49,27 @@ def _open_command(path: Path) -> list[str] | None:
     return ["xdg-open", str(path)]
 
 
+def menu_reachable(*, backend: str, env: Mapping[str, str], platform: str) -> bool:
+    """Whether an icon built on `backend` can actually open its menu.
+
+    pystray picks its backend at import time: AppIndicator (StatusNotifierItem
+    over D-Bus) when PyGObject is installed, and `_xorg` -- a legacy XEmbed
+    tray icon drawn with python-xlib -- when it is not. A frozen build carries
+    no PyGObject, so it always lands on `_xorg`.
+
+    Under X11 that is fine. Under Wayland it is the worst kind of broken: a
+    GNOME extension still shows the icon, so the agent looks configurable, and
+    the click that should open the menu reaches nothing. Naming it in the log
+    is the difference between "the tray is unavailable" -- which the user can
+    act on -- and an icon that silently does nothing.
+    """
+    if platform in ("darwin", "win32"):
+        return True
+    if backend != "pystray._xorg":
+        return True
+    return not (env.get("WAYLAND_DISPLAY") or env.get("XDG_SESSION_TYPE") == "wayland")
+
+
 def open_config(path: Path, *, logger: logging.Logger | None = None) -> None:
     """Opens `config.toml` with the OS's associated app; creates it if missing (RF-34)."""
     log = logger or logging.getLogger("vigia_eew.tray")
@@ -80,9 +101,21 @@ def build_icon(
     open_history: Callable[[], None] | None = None,
     icon_path: Path | None = None,
     locale_code: str = DEFAULT_LOCALE,
+    logger: logging.Logger | None = None,
 ) -> Icon:
     """Assembles the `pystray.Icon` with its menu; does not start it (see `TrayIcon`)."""
     from pystray import Icon, Menu, MenuItem  # lazy: backend connects to X at import
+
+    log = logger or logging.getLogger("vigia_eew.tray")
+    if not menu_reachable(backend=Icon.__module__, env=os.environ, platform=sys.platform):
+        # Not fatal, and not silent either: the icon appears and its menu does
+        # not, so the way into the configuration is `vigia-eew --settings`
+        # (what the desktop entry's action runs).
+        log.warning(
+            "tray_menu_unreachable backend=%s detail=%s",
+            Icon.__module__,
+            "no AppIndicator backend on a Wayland session; use `vigia-eew --settings`",
+        )
 
     image = Image.open(icon_path or default_icon_path())
 
