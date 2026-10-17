@@ -1,0 +1,34 @@
+# Grafo de imports A NIVEL DE ARCHIVO (complemento del análisis por directorio)
+# Generado en la Fase 1 de arch-evaluator para verificar el ciclo reportado por dep_graph.py
+
+modulos_archivo=40  aristas=97
+CICLOS (SCC) A NIVEL DE ARCHIVO = 0   <-- refuta el ciclo de dep_graph.py
+
+## Fan-out por archivo (top 10)
+   25  vigia_eew.app
+    5  vigia_eew.pipeline.processor
+    5  vigia_eew.notify.controller
+    4  vigia_eew.tui
+    4  vigia_eew.cli
+    4  vigia_eew.tray
+    4  vigia_eew.pipeline.dedup
+    4  vigia_eew.pipeline.normalize
+    4  vigia_eew.ingest.rest_usgs
+    4  vigia_eew.ingest.ws_emsc
+
+## Fan-in por archivo (top 10)
+   14  vigia_eew.config   (fan-out 0)
+   14  vigia_eew.models   (fan-out 0)
+    7  vigia_eew.i18n   (fan-out 0)
+    7  vigia_eew.ingest   (fan-out 1)
+    5  vigia_eew.notify.presentation   (fan-out 2)
+    5  vigia_eew.agent_state   (fan-out 0)
+    5  vigia_eew.subprocess_env   (fan-out 0)
+    4  vigia_eew.state   (fan-out 2)
+    3  vigia_eew.geo   (fan-out 0)
+    3  vigia_eew.timeutil   (fan-out 0)
+
+## Co-cambio de la tríada de composición (git log --no-merges, 47 commits)
+  src/vigia_eew/app.py + src/vigia_eew/config.py: co=7  n_a=10 n_b=10  confianza=0.70
+  src/vigia_eew/app.py + src/vigia_eew/cli.py: co=6  n_a=10 n_b=9  confianza=0.67
+  src/vigia_eew/config.py + src/vigia_eew/cli.py: co=5  n_a=10 n_b=9  confianza=0.56

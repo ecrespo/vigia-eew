@@ -1,111 +1,104 @@
 # 02 — Stack tecnológico
 
-> Generado por ingeniería inversa el 2026-08-16. Commit de referencia: `6e0f133`.
-> Versiones "declaradas" salen de `pyproject.toml`; las "resueltas" son las que se
-> instalaron realmente al verificar el repo (2026-08-16). **No hay lockfile versionado**
-> — ver RR-1 en riesgos.
+> Commit de referencia: `c3a2c29` · Fecha: 2026-09-06
+> Versiones exactas tomadas de `uv.lock`; los rangos vienen de `pyproject.toml`.
 
-## 1. Lenguajes y tamaño
+## 1. Resumen ejecutivo
 
-| Lenguaje | LOC | Uso |
-|---|---|---|
-| Python | 9.197 | Todo el agente y los tests |
-| YAML | 455 | GitHub Actions, pre-commit |
-| Shell / PowerShell | 122 | Scripts de empaquetado nativo |
+| Categoría | Tecnología |
+|---|---|
+| Lenguaje | Python ≥ 3.11 (usa `tomllib` de stdlib) `[VERIFY: pyproject.toml:14]` |
+| Concurrencia | asyncio (un proceso, tareas supervisadas) |
+| UI escritorio | Tkinter (stdlib) + `pystray` bandeja |
+| UI terminal | Textual (`--tui`) |
+| Validación / config | pydantic 2 sobre `tomllib` |
+| Cliente HTTP | `httpx` (async) |
+| Cliente WebSocket | `websockets` |
+| Persistencia | **JSON atómico en disco** vía `platformdirs` — sin base de datos |
+| Empaquetado | hatchling (wheel/PyPI) + PyInstaller (binarios) |
+| Gestor de proyecto | `uv` |
+| CI/CD | GitHub Actions (`ci.yml`, `security.yml`, `build.yml`) |
+| Contenedores / IaC | **ninguno** — es un agente de escritorio, no un servicio |
 
-**Python `>=3.11`** `[VERIFY: pyproject.toml:14]` — el piso lo fija `tomllib`, que entró a
-la stdlib en 3.11 y evita una dependencia de parseo TOML. Clasificadores declaran soporte
-hasta 3.13 `[VERIFY: pyproject.toml:26]`.
+## 2. Lenguajes
 
-## 2. Dependencias de runtime
-
-| Paquete | Declarado | Resuelto | Para qué | Evidencia |
+| Lenguaje | LOC | Rol | Versión | Evidencia |
 |---|---|---|---|---|
-| `websockets` | `>=12.0` | 17.0.1 | Canal push EMSC, keepalive nativo | `[VERIFY: pyproject.toml:32]` |
-| `httpx` | `>=0.27` | 0.28.1 | REST async (USGS, GEOFON, FUNVISIS, geoloc) | `[VERIFY: pyproject.toml:33]` |
-| `pydantic` | `>=2.6` | 2.13.4 | Validación de modelos y config | `[VERIFY: pyproject.toml:34]` |
-| `desktop-notifier` | `>=5.0` | 6.2.0 | Toast nativo multiplataforma | `[VERIFY: pyproject.toml:35]` |
-| `platformdirs` | `>=4.0` | 4.11.3 | Rutas de config/estado por SO | `[VERIFY: pyproject.toml:36]` |
-| `tzdata` | `>=2024.1` | 2026.3 | Zona `America/Caracas` en Win/macOS | `[VERIFY: pyproject.toml:37]` |
-| `pystray` | `>=0.19` | 0.19.5 | Ícono de bandeja | `[VERIFY: pyproject.toml:38]` |
-| `Pillow` | `>=10.0` | 12.3.0 | Imagen del ícono (requisito de pystray) | `[VERIFY: pyproject.toml:39]` |
-| `textual` | `>=0.60` | 8.2.8 | Dashboard TUI headless | `[VERIFY: pyproject.toml:40]` |
+| Python | 9.186 (`src` 4.387 · `tests` 4.714 · `packaging` 85) | todo el sistema | ≥ 3.11, `target-version = "py311"` | `[VERIFY: pyproject.toml:87]` |
+| YAML | 455 | workflows de CI y acción compuesta | — | `[VERIFY: .github/workflows/ci.yml:7]` |
+| Shell / PowerShell | 122 | scripts de build por plataforma | — | `[VERIFY: packaging/build_linux.sh:1]` |
 
-**Tkinter no aparece aquí**: viene con CPython, y esa es exactamente la razón por la que
-se eligió sobre PyQt/PySide (ADR-003). El costo es una UI más sobria; el beneficio, cero
-peso de instalación para la garantía central del producto.
+> La cifra de 251.255 LOC del script crudo incluye `.venv_sandbox/`; ver `00-INVENTARIO.md` §2.
 
-Tres dependencias son **excepciones documentadas** a la regla de "cero dependencias extra"
-del proyecto, y las tres son de frontends opcionales: `pystray`+`Pillow` (bandeja) y
-`textual` (TUI). Ninguna hace red ni telemetría.
+## 3. Dependencias de runtime
 
-## 3. Dependencias de desarrollo y build
+| Dependencia | Rango declarado | Versión en lockfile | Rol | Evidencia de uso |
+|---|---|---|---|---|
+| `websockets` | ≥ 12.0 | **16.0** | canal push EMSC, keepalive nativo | `[VERIFY: src/vigia_eew/ingest/ws_emsc.py:37]` |
+| `httpx` | ≥ 0.27 | **0.28.1** | REST async a USGS/GEOFON/FUNVISIS/geo-IP | `[VERIFY: src/vigia_eew/ingest/rest_usgs.py:42]` |
+| `pydantic` | ≥ 2.6 | **2.13.4** | contrato interno y validación de config | `[VERIFY: src/vigia_eew/models.py:51]` |
+| `desktop-notifier` | ≥ 5.0 | **6.2.0** | toast nativo multiplataforma | `[VERIFY: src/vigia_eew/notify/toast.py:40]` |
+| `platformdirs` | ≥ 4.0 | **4.10.0** | rutas de estado/config por SO | `[VERIFY: src/vigia_eew/state.py:28]` |
+| `tzdata` | ≥ 2024.1 | **2026.2** | zona `America/Caracas` en Win/macOS | `[VERIFY: src/vigia_eew/timeutil.py:23]` |
+| `pystray` | ≥ 0.19 | **0.19.5** | ícono de bandeja | `[VERIFY: src/vigia_eew/tray.py:110]` |
+| `Pillow` | ≥ 10.0 | **12.3.0** | imagen del ícono (requisito de pystray) | `[VERIFY: src/vigia_eew/tray.py:72]` |
+| `textual` | ≥ 0.60 | **8.2.8** | dashboard TUI headless | `[VERIFY: src/vigia_eew/tui.py:101]` |
 
-| Grupo | Paquetes | Evidencia |
+**Sin dependencias geoespaciales.** El punto-en-polígono es Python puro sobre un GeoJSON reducido
+que se genera en el repo `[VERIFY: src/vigia_eew/geocode.py:89]`, `[VERIFY: packaging/build_countries_geojson.py:1]`.
+
+Módulos de stdlib que hacen trabajo estructural: `tomllib` (config), `zoneinfo` (día local),
+`tkinter` (ventana de alerta), `asyncio`, `threading` (bandeja y puente).
+
+## 4. Persistencia
+
+No hay motor de base de datos. El estado vive en un único `state.json` escrito de forma **atómica**
+`[VERIFY: src/vigia_eew/state.py:61]`, en la ruta por SO de `platformdirs`
+`[VERIFY: src/vigia_eew/state.py:28]`. Contiene: ids alertados, firmas recientes, cursores
+USGS/GEOFON y la ubicación geo-IP cacheada `[VERIFY: src/vigia_eew/models.py:133]`.
+Poda a 24 h en `prune()` `[VERIFY: src/vigia_eew/state.py:129]`.
+
+La configuración es `config.toml`, **solo lectura** (`tomllib`), sembrada desde una plantilla
+empaquetada en el primer arranque `[VERIFY: src/vigia_eew/config.py:176]`.
+
+## 5. Infraestructura y despliegue
+
+- **Contenedores/IaC**: ninguno, por diseño (un proceso por máquina de usuario).
+- **Distribución**: wheel a PyPI (hatchling) + binarios congelados con PyInstaller
+  `[VERIFY: packaging/vigia-eew.spec:1]`, construidos por plataforma
+  `[VERIFY: packaging/build_linux.sh:1]`, `[VERIFY: packaging/build_macos.sh:1]`,
+  `[VERIFY: packaging/build_windows.ps1:1]`.
+- **Arranque automático**: unidad systemd `--user`, LaunchAgent o tarea programada, generados como
+  **strings puros** y aplicados por subprocess `[VERIFY: src/vigia_eew/autostart/linux_systemd.py:26]`.
+- **CI**: `ci.yml` (ruff → mypy → pytest+cobertura) en PRs a `develop`
+  `[VERIFY: .github/workflows/ci.yml:27]`; `security.yml` (bandit, pip-audit, gitleaks, semgrep,
+  trivy) en PRs a `main`; `build.yml` publica en tags `vX.Y.Z`.
+
+## 6. Testing y calidad
+
+| Herramienta | Versión (lock) | Configuración |
 |---|---|---|
-| `dev` | pytest ≥8 (9.1.1), pytest-asyncio (1.4.0), pytest-cov (7.1.0), ruff ≥0.5 (0.16.3), mypy ≥1.10 (2.3.1), pre-commit ≥3.7 | `[VERIFY: pyproject.toml:53]` |
-| `packaging` | pyinstaller ≥6.0 | `[VERIFY: pyproject.toml:63]` |
-| `security` | bandit ≥1.8, pip-audit ≥2.7 | `[VERIFY: pyproject.toml:68]` |
+| pytest | 9.1.1 | `asyncio_mode = "auto"` |
+| pytest-asyncio | 1.4.0 | — |
+| pytest-cov | 7.1.0 | `branch = true` |
+| ruff | 0.15.20 | `line-length = 100`, reglas `E,F,I,UP,B` `[VERIFY: pyproject.toml:87]` |
+| mypy | 2.1.0 | `strict = true`, `python_version = 3.11` `[VERIFY: pyproject.toml:93]` |
+| pre-commit | 4.6.0 | rápidas por commit, pesadas en pre-push `[VERIFY: .pre-commit-config.yaml:1]` |
 
-- **Gestor**: `uv`; **backend de build**: `hatchling` `[VERIFY: pyproject.toml:6]`.
-- **Layout `src/`** `[VERIFY: pyproject.toml:76]` — evita importar el paquete desde el
-  directorio de trabajo y que los tests pasen por accidente.
-- **Entry point de consola**: `vigia-eew = "vigia_eew.cli:main"`
-  `[VERIFY: pyproject.toml:50]`.
-
-## 4. Configuración de calidad
-
-| Herramienta | Configuración | Evidencia |
-|---|---|---|
-| ruff | line-length 100, reglas `E,F,I,UP,B`, target py311 | `[VERIFY: pyproject.toml:86]` |
-| mypy | **`strict = true`** + `warn_unused_ignores` | `[VERIFY: pyproject.toml:94]` |
-| pytest | `asyncio_mode = "auto"`, testpaths `tests` | `[VERIFY: pyproject.toml:82]` |
-| coverage | `branch = true` | `[VERIFY: pyproject.toml:106]` |
-| bandit | excluye `tests/` (asserts y subprocess son ruido ahí) | `[VERIFY: pyproject.toml:104]` |
-
-Un solo `ignore_missing_imports`, para `pystray`, que no publica stubs
-`[VERIFY: pyproject.toml:98]`. Que mypy strict pase sobre 40 módulos con una única
-excepción es una señal fuerte de la salud del tipado.
-
-## 5. Infraestructura y CI/CD
-
-Tres workflows de GitHub Actions, con una acción compuesta común que instala `uv` y
-sincroniza el proyecto `[VERIFY: .github/actions/setup-python-env/action.yml:1]`.
-
-| Workflow | Dispara en | Contenido | Evidencia |
-|---|---|---|---|
-| `ci.yml` | push/PR a `develop` | ruff, mypy, pytest+cobertura en jobs paralelos | `[VERIFY: .github/workflows/ci.yml:27]` |
-| `security.yml` | PR a `main` | bandit y semgrep (SAST), pip-audit y trivy (SCA), gitleaks (secretos); cada uno sube su reporte | `[VERIFY: .github/workflows/security.yml:23]` |
-| `build.yml` | tag `vX.Y.Z` | wheel+sdist, `.exe` Windows, `.dmg` macOS, AppImage+`.deb`/`.rpm` Linux, publicación a PyPI | `[VERIFY: .github/workflows/build.yml:21]` |
-
-El build es genuinamente multiplataforma: usa `windows-latest`, `macos-latest` y
-`ubuntu-latest` `[VERIFY: .github/workflows/build.yml:34]`, más `fpm` y
-`linuxdeploy`/`appimagetool` instalados en el runner
-`[VERIFY: .github/workflows/build.yml:71]`.
-
-`.pre-commit-config.yaml` replica el gate localmente: las verificaciones rápidas por
-commit y las pesadas (pytest, pip-audit, semgrep, trivy) en pre-push.
-
-## 6. Persistencia e integraciones
-
-- **Sin base de datos.** El estado es un único JSON escrito atómicamente
-  `[VERIFY: src/vigia_eew/state.py:33]` en el directorio de datos del usuario resuelto por
-  `platformdirs` `[VERIFY: src/vigia_eew/state.py:28]`.
-- **Sin servidor, sin API propia, sin autenticación.** Cuatro integraciones salientes de
-  solo lectura sobre HTTP/WS público, más `ipapi.co` una única vez.
-- **Assets embebidos** en el paquete: WAVs por severidad, `tray_icon.png` y
-  `countries.geojson` (Natural Earth 1:110m, ~186 KiB, dominio público) —
-  `[VERIFY: src/vigia_eew/geocode.py:32]`. Elegir un asset embebido en vez de una
-  dependencia geoespacial mantiene el binario liviano y elimina la red por evento.
+**344 pruebas** en 35 archivos `test_*.py`. Las pruebas de GUI real están tras `VIGIA_GUI_TESTS=1`;
+la suite por defecto corre headless.
 
 ## 7. Riesgos para la reconstrucción
 
-| # | Riesgo | Evidencia | Acción propuesta para v2 |
+| Riesgo | Severidad | Detalle | Acción para la v2 |
 |---|---|---|---|
-| RR-1 | **`uv.lock` está gitignoreado** → builds no reproducibles; el CI cachea sobre `pyproject.toml` como workaround | `[VERIFY: .gitignore:29]`, `27e4b45` | Versionar el lockfile. Es el riesgo más accionable de esta tabla |
-| RR-2 | Rangos abiertos (`>=`) en todas las dependencias; lo resuelto ya divergió mucho de lo declarado (websockets 12→17, textual 0.60→8.2, mypy 1.10→2.3) | `[VERIFY: pyproject.toml:31]` | Fijar techos mayores (`>=x,<y+1`) al menos en `textual` y `websockets`, que cambiaron de major varias veces |
-| RR-3 | **Tkinter bajo Wayland** no puede forzar topmost/focus de forma confiable; ADR-010 lo reconoce y su solución (D-Bus + extensión GNOME) nunca se implementó | Sin módulo D-Bus en `src/` | Decisión explícita en el diseño de v2 antes de comprometerse con Tkinter — es la garantía central del producto |
-| RR-4 | `pystray` requiere `run()` en el hilo principal en macOS (requisito de Cocoa), lo que choca con Tkinter; nunca se validó en hardware macOS | ADR-012; `[VERIFY: src/vigia_eew/tray.py:110]` | Validar en macOS real o declarar la bandeja como no soportada ahí |
-| RR-5 | FUNVISIS se consume por **HTTP plano** (no ofrece HTTPS válido) | ADR-015 | Aceptable (dato público, solo lectura), pero re-verificar si FUNVISIS habilitó TLS |
-| RR-6 | Dos tests del suite por defecto exigen display real | `[VERIFY: tests/test_tray.py:81]` | Marcarlos con el mismo guard `VIGIA_GUI_TESTS=1` que los smokes de Tkinter, o correr CI bajo `xvfb` |
-| RR-7 | Endpoints externos sin contrato estable: FUNVISIS es un JSON de su mapa web, GEOFON entrega texto pipe-delimitado | `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:83]` | Tests de contrato contra respuestas reales grabadas, para detectar cambios de formato antes que el usuario |
+| **Deriva mayor entre rango y lockfile** | Alta | `websockets` 12→**16**, `textual` 0.60→**8.2**, `mypy` 1.10→**2.1**, `Pillow` 10→**12**. Los rangos `>=` no protegen de cambios rompientes | Fijar límites superiores (`>=16,<17`) o commitear el lock |
+| **Tkinter bajo Wayland** | Alta | El compositor puede negar *topmost* y foco; la garantía central del producto queda sin cumplir | Implementar ADR-010 (D-Bus + extensión GNOME) o adoptar un frontend nativo |
+| **`pystray` en macOS** | Media | Cocoa exige `run()` en el hilo principal, en conflicto con Tk; nunca se validó en hardware macOS | Validar en macOS real o declarar la bandeja no soportada allí |
+| **`uv.lock` ignorado en git** | Media | La CI cachea por `pyproject.toml` porque el lock no está versionado `[COMMITS: 27e4b45]` | Versionar el lock: builds reproducibles |
+| **Endpoint FUNVISIS sin HTTPS** | Baja | Aceptado por ser público y de solo lectura | Revisar si FUNVISIS publica TLS |
+| **Duplicación FDSN USGS/GEOFON** | Baja | Dos parsers para la misma familia de servicio | Unificar solo si entra una 5ª fuente |
+| **Sin base de datos** | Baja (informativa) | `state.json` completo en memoria; adecuado a la escala actual | Mantener; revisar si el histórico crece |
+
+Nada del stack está EOL. Python 3.11 sigue soportado; el mínimo podría subirse a 3.12 en la v2 sin
+coste, ya que la única razón del piso 3.11 es `tomllib`.

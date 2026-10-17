@@ -1,32 +1,80 @@
 {
-  "repo": "/home/user/vigia-eew",
+  "repo": "/sessions/busy-eloquent-cray/mnt/vigia-eew",
   "total_commits_analyzed": 47,
   "date_range": [
     "2026-06-28",
-    "2026-08-16"
+    "2026-07-17"
   ],
   "conventional_commit_pct": 97.9,
   "authors": [
     [
       "Ernesto Crespo",
-      46
-    ],
-    [
-      "Claude",
-      1
+      47
     ]
   ],
-  "tags": [],
+  "tags": [
+    {
+      "tag": "v0.1.0",
+      "date": "2026-07-03"
+    },
+    {
+      "tag": "v0.1.1",
+      "date": "2026-07-03"
+    },
+    {
+      "tag": "v0.1.2",
+      "date": "2026-07-03"
+    },
+    {
+      "tag": "v0.1.3",
+      "date": "2026-07-04"
+    },
+    {
+      "tag": "v0.2.0",
+      "date": "2026-07-04"
+    },
+    {
+      "tag": "v0.2.1",
+      "date": "2026-07-04"
+    },
+    {
+      "tag": "v0.3.0",
+      "date": "2026-07-05"
+    },
+    {
+      "tag": "v0.3.1",
+      "date": "2026-07-05"
+    },
+    {
+      "tag": "v0.4.0",
+      "date": "2026-07-05"
+    },
+    {
+      "tag": "v0.4.1",
+      "date": "2026-07-05"
+    },
+    {
+      "tag": "v0.5.0",
+      "date": "2026-07-06"
+    },
+    {
+      "tag": "v0.6.0",
+      "date": "2026-07-17"
+    }
+  ],
   "eras": [
     {
-      "label": "2026-Q2",
+      "label": "v0.1.0",
       "from": "2026-06-28",
-      "to": "2026-06-28",
-      "commits": 7,
+      "to": "2026-07-03",
+      "commits": 15,
       "types": {
-        "feat": 5,
-        "docs": 1,
-        "other": 1
+        "feat": 7,
+        "docs": 3,
+        "other": 1,
+        "fix": 2,
+        "chore": 1,
+        "test": 1
       },
       "top_subjects": [
         "docs: artefactos SDD, scaffolding y ARCHITECTURE (Fase 0)",
@@ -37,45 +85,105 @@
       ],
       "hash_range": [
         "4fb49d0",
-        "406cde0"
+        "5b79ff1"
       ]
     },
     {
-      "label": "2026-Q3",
-      "from": "2026-07-03",
-      "to": "2026-08-16",
-      "commits": 40,
+      "label": "v0.1.3",
+      "from": "2026-07-04",
+      "to": "2026-07-04",
+      "commits": 13,
       "types": {
-        "fix": 8,
-        "chore": 10,
-        "feat": 11,
-        "test": 1,
-        "docs": 3,
-        "refactor": 1,
-        "ci": 6
+        "chore": 3,
+        "feat": 5,
+        "fix": 4,
+        "refactor": 1
       },
       "top_subjects": [
         "feat!: translate entire codebase to English, add i18n (RF-35)",
-        "feat: GEOFON independent global-network source (RF-39, Phase 14)",
         "feat: headless TUI dashboard (--tui, RF-36, Phase 11)",
         "feat: ícono de bandeja del sistema (RF-34, Fase 10)",
-        "feat: autoarranque multiplataforma y flags de CLI (Fase 6)"
+        "feat: country notification filter (RF-37, Phase 12)",
+        "feat: detección automática de ubicación por IP (RF-33, Fase 9)"
       ],
       "hash_range": [
-        "c38d9f6",
-        "6e0f133"
+        "70480a3",
+        "c20a59b"
+      ]
+    },
+    {
+      "label": "v0.3.0",
+      "from": "2026-07-05",
+      "to": "2026-07-05",
+      "commits": 13,
+      "types": {
+        "chore": 4,
+        "ci": 6,
+        "fix": 1,
+        "feat": 2
+      },
+      "top_subjects": [
+        "feat: add FUNVISIS as a Venezuela-only local coverage source (RF-05)",
+        "ci: add CI + security workflows and pre-commit hooks",
+        "feat: seed config.toml from bundled template on first run (RF-24)",
+        "ci: publish to PyPI after all packages build",
+        "fix: make the agent import-safe on a headless host (RF-36)"
+      ],
+      "hash_range": [
+        "2edb1d1",
+        "a06f7a1"
+      ]
+    },
+    {
+      "label": "v0.5.0",
+      "from": "2026-07-06",
+      "to": "2026-07-06",
+      "commits": 3,
+      "types": {
+        "chore": 1,
+        "fix": 1,
+        "feat": 1
+      },
+      "top_subjects": [
+        "feat: GEOFON independent global-network source (RF-39, Phase 14)",
+        "fix: use HTTPS for the GEOFON fdsnws-event endpoint",
+        "chore: release v0.5.0"
+      ],
+      "hash_range": [
+        "d4a6ab0",
+        "ade1199"
+      ]
+    },
+    {
+      "label": "v0.6.0",
+      "from": "2026-07-17",
+      "to": "2026-07-17",
+      "commits": 3,
+      "types": {
+        "docs": 1,
+        "chore": 1,
+        "feat": 1
+      },
+      "top_subjects": [
+        "feat: event freshness filter, bounded REST backlog, prune() wiring (RF-40/RF-41/RF-42, Phase 15)",
+        "chore: release v0.6.0",
+        "docs: update RF-40/41/42 implementation details in CLAUDE.md"
+      ],
+      "hash_range": [
+        "c3a2c29",
+        "b0f832c"
       ]
     }
   ],
   "clusters": [
     {
       "cluster": "dir:(raiz)",
-      "commits": 20,
+      "commits": 21,
       "first": "2026-06-28",
       "last": "2026-07-17",
-      "churn": 3743,
+      "churn": 3760,
       "types": {
-        "docs": 2,
+        "docs": 3,
         "other": 1,
         "fix": 5,
         "chore": 10,
@@ -103,6 +211,7 @@
         "583eafe",
         "97161ba",
         "d4a6ab0",
+        "c3a2c29",
         "bd4a555"
       ],
       "subjects_sample": [
@@ -118,15 +227,14 @@
     },
     {
       "cluster": "dir:src/vigia_eew",
-      "commits": 17,
+      "commits": 16,
       "first": "2026-06-28",
-      "last": "2026-08-16",
-      "churn": 20364,
+      "last": "2026-07-17",
+      "churn": 19747,
       "types": {
         "feat": 14,
         "fix": 1,
-        "refactor": 1,
-        "docs": 1
+        "refactor": 1
       },
       "probable_noise": false,
       "hashes": [
@@ -145,8 +253,7 @@
         "10bb72d",
         "a06f7a1",
         "ade1199",
-        "b0f832c",
-        "6e0f133"
+        "b0f832c"
       ],
       "subjects_sample": [
         "feat: CLI, ensamblaje del agente y modo --simulate (Fase 5)",
@@ -243,7 +350,7 @@
     ],
     [
       "src/vigia_eew/app.py",
-      11
+      10
     ],
     [
       "src/vigia_eew/config.py",
@@ -282,10 +389,6 @@
       7
     ],
     [
-      "src/vigia_eew/notify/alert_window.py",
-      6
-    ],
-    [
       "docs/DATA-MODEL.md",
       6
     ],
@@ -294,19 +397,23 @@
       6
     ],
     [
-      "src/vigia_eew/supervisor.py",
-      5
-    ],
-    [
-      "src/vigia_eew/notify/queue.py",
-      5
-    ],
-    [
-      "src/vigia_eew/pipeline/dedup.py",
+      "src/vigia_eew/notify/alert_window.py",
       5
     ],
     [
       "src/vigia_eew/pipeline/normalize.py",
+      5
+    ],
+    [
+      "src/vigia_eew/ingest/__init__.py",
+      5
+    ],
+    [
+      "src/vigia_eew/models.py",
+      5
+    ],
+    [
+      "src/vigia_eew/state.py",
       5
     ]
   ],
@@ -1350,6 +1457,21 @@
       "deleted": 70
     },
     {
+      "hash": "c3a2c29582e71992b3eca5fbebaeaab16a6c7c2e",
+      "short": "c3a2c29",
+      "date": "2026-07-17",
+      "author": "Ernesto Crespo",
+      "subject": "docs: update RF-40/41/42 implementation details in CLAUDE.md",
+      "type": "docs",
+      "scope": null,
+      "conventional": true,
+      "files": [
+        "CLAUDE.md"
+      ],
+      "added": 13,
+      "deleted": 4
+    },
+    {
       "hash": "bd4a5559b01f649715fe3791e7ea6cff72102482",
       "short": "bd4a555",
       "date": "2026-07-17",
@@ -1402,37 +1524,6 @@
       ],
       "added": 600,
       "deleted": 64
-    },
-    {
-      "hash": "6e0f1331b7995c575c672c0f75f84df796221156",
-      "short": "6e0f133",
-      "date": "2026-08-16",
-      "author": "Claude",
-      "subject": "docs: add graph-first knowledge layers (intent, structure, meaning)",
-      "type": "docs",
-      "scope": null,
-      "conventional": true,
-      "files": [
-        ".codegraph/.gitignore",
-        ".gitignore",
-        "CLAUDE.md",
-        "lat.md/architecture.md",
-        "lat.md/configuration.md",
-        "lat.md/ingestion.md",
-        "lat.md/lat.md",
-        "lat.md/notification.md",
-        "lat.md/pipeline.md",
-        "src/vigia_eew/app.py",
-        "src/vigia_eew/ingest/rest_funvisis.py",
-        "src/vigia_eew/ingest/rest_geofon.py",
-        "src/vigia_eew/notify/alert_window.py",
-        "src/vigia_eew/notify/queue.py",
-        "src/vigia_eew/pipeline/dedup.py",
-        "src/vigia_eew/pipeline/filter.py",
-        "src/vigia_eew/supervisor.py"
-      ],
-      "added": 617,
-      "deleted": 0
     }
   ]
 }

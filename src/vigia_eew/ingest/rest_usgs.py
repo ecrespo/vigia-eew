@@ -23,49 +23,24 @@ The HTTP client (`httpx`) and `sleep` are injected to test without network.
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
-from vigia_eew.config import Filter, ReferencePoint, USGSSource
-from vigia_eew.ingest import RawMessage
-from vigia_eew.state import StateStore
-from vigia_eew.timeutil import Clock, default_clock, floor_starttime_ms
+from vigia_eew.config import USGSSource
+from vigia_eew.ingest import RawMessage, mapping
+from vigia_eew.ingest.fdsn import FDSNPoller
+from vigia_eew.timeutil import floor_starttime_ms
 
 _SleepFn = Callable[[float], Any]
 
 
-class RESTReconciler:
+class RESTReconciler(FDSNPoller[USGSSource]):
     """USGS FDSN polling with a persisted cursor; publishes `RawMessage` onto `output`."""
 
-    def __init__(
-        self,
-        cfg: USGSSource,
-        reference: ReferencePoint,
-        filter_cfg: Filter,
-        state: StateStore,
-        output: asyncio.Queue[RawMessage],
-        *,
-        client: httpx.AsyncClient | None = None,
-        sleep: _SleepFn = asyncio.sleep,
-        timezone: str = "UTC",
-        now: Clock = default_clock,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        self._cfg = cfg
-        self._reference = reference
-        self._filter = filter_cfg
-        self._state = state
-        self._output = output
-        self._client = client
-        self._sleep = sleep
-        self._timezone = timezone
-        self._now = now
-        self._log = logger or logging.getLogger("vigia_eew.ingest.rest")
+    LOGGER_NAME = "vigia_eew.ingest.rest"
 
     def _build_params(self, cursor_ms: int | None) -> dict[str, Any]:
         """Builds the FDSN query parameters (API-SPEC §2.2, §2.3)."""
@@ -99,9 +74,7 @@ class RESTReconciler:
             raise RuntimeError("RESTReconciler requires an httpx client (injected or created).")
 
         try:
-            resp = await self._client.get(
-                self._cfg.url, params=params, timeout=self._cfg.timeout_s
-            )
+            resp = await self._client.get(self._cfg.url, params=params, timeout=self._cfg.timeout_s)
         except httpx.HTTPError as exc:
             self._log.warning("usgs_network_error type=%s detail=%s", type(exc).__name__, exc)
             return interval
@@ -145,14 +118,6 @@ class RESTReconciler:
                 max_time = moment
         return max_time
 
-    async def run(self) -> None:
-        """Perpetual polling loop. Only exits when cancelled."""
-        if self._client is None:
-            self._client = httpx.AsyncClient()
-        while True:
-            wait = await self.poll_once()
-            await self._sleep(wait)
-
 
 def _retry_after_seconds(headers: Any, *, default: float) -> float:
     """Reads `Retry-After` (seconds) from the headers; uses `default` if missing or invalid."""
@@ -172,3 +137,26 @@ def _time_ms(feature: dict[str, Any]) -> int | None:
         return None
     time_value = properties.get("time")
     return time_value if isinstance(time_value, int) else None
+
+
+def to_fields(msg: RawMessage) -> dict[str, Any]:
+    """Translates a USGS Feature into the internal contract (API-SPEC §5.1).
+
+    USGS uses camelCase `magType`, epoch-millisecond timestamps, the id on
+    the Feature itself, and coordinates as `[lon, lat, depth]`.
+    """
+    p = msg.feature["properties"]
+    coords = msg.feature["geometry"]["coordinates"]
+    return {
+        "id": str(msg.feature["id"]),
+        "source": "USGS",
+        "magnitude": float(p["mag"]),
+        "mag_type": str(p["magType"]),
+        "place": p.get("place"),
+        "region": None,  # USGS exposes no Flynn region; deriving it is out of v1 scope.
+        "lat": float(coords[1]),
+        "lon": float(coords[0]),
+        "depth_km": float(coords[2]),
+        "time_utc": mapping.epoch_ms_to_utc(p["time"]),
+        "lastupdate_utc": mapping.epoch_ms_optional(p.get("updated")),
+    }

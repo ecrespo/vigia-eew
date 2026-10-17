@@ -6,12 +6,15 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from vigia_eew.agent_state import AgentState
 from vigia_eew.tray import (
     TrayIcon,
     _open_command,
     build_icon,
     default_icon_path,
+    menu_reachable,
     open_config,
 )
 
@@ -136,6 +139,7 @@ def test_stop_calls_stop_and_waits_for_the_thread():
 # --- Headless import safety (RF-36): the agent must import with no X display ---
 
 
+@pytest.mark.integration
 def test_app_imports_without_display():
     # pystray connects to its GUI backend at import; importing it lazily keeps
     # `vigia_eew.app` (and `--tui` on a headless server) import-safe without a display.
@@ -147,3 +151,152 @@ def test_app_imports_without_display():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- T-137 · Both ways in are offered (REQ-GUI-005, CA-108.10) ---
+
+
+def _menu_texts(**overrides):
+    icon = build_icon(
+        state=AgentState(),
+        paused=lambda: False,
+        toggle_pause=lambda: None,
+        edit_config=lambda: None,
+        exit=lambda: None,
+        **overrides,
+    )
+    return icon, [str(i.text) for i in icon.menu if i.text is not None]
+
+
+def test_the_menu_offers_the_panel_and_the_file() -> None:
+    """CA-108.10: the panel is another way in, not a replacement for the file.
+
+    The file is what lets somebody version it with Git, copy it between
+    machines and edit it over SSH. Replacing it with a panel would take all
+    three away.
+    """
+    _icon, texts = _menu_texts(open_panel=lambda: None)
+
+    assert any("configuration…" in t.lower() and "edit" not in t.lower() for t in texts)
+    assert any("edit configuration" in t.lower() for t in texts)
+
+
+def test_the_panel_entry_invokes_its_callback() -> None:
+    opened: list[int] = []
+    icon, _texts = _menu_texts(open_panel=lambda: opened.append(1))
+
+    for item in icon.menu:
+        if item.text and str(item.text).lower().startswith("configuration"):
+            item(icon)
+
+    assert opened == [1]
+
+
+def test_without_a_panel_the_file_entry_is_still_there() -> None:
+    """The TUI has no panel (REQ-GUI-006 is deferred) and must not lose the file."""
+    _icon, texts = _menu_texts()
+
+    assert any("edit configuration" in t.lower() for t in texts)
+    assert not any(t.lower().startswith("configuration") for t in texts)
+
+
+# --- Whether the icon's menu can be opened at all (pure) ---
+
+
+def test_menu_is_reachable_with_the_appindicator_backend():
+    """StatusNotifierItem is what a GNOME shell extension speaks; the menu works."""
+    assert (
+        menu_reachable(
+            backend="pystray._appindicator",
+            env={"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"},
+            platform="linux",
+        )
+        is True
+    )
+
+
+def test_menu_is_unreachable_with_the_x11_tray_on_wayland():
+    """Without PyGObject pystray falls back to `_xorg`: an XEmbed icon nobody hosts.
+
+    The icon still appears -- a GNOME extension picks it up -- and clicking it
+    opens nothing, which is the failure this predicate exists to name.
+    """
+    assert (
+        menu_reachable(
+            backend="pystray._xorg",
+            env={"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0"},
+            platform="linux",
+        )
+        is False
+    )
+
+
+def test_the_x11_tray_is_fine_on_a_real_x11_session():
+    """Under X11 an XEmbed host is the normal case; nothing to warn about."""
+    assert (
+        menu_reachable(backend="pystray._xorg", env={"XDG_SESSION_TYPE": "x11"}, platform="linux")
+        is True
+    )
+
+
+def test_macos_and_windows_are_never_the_x11_case():
+    assert menu_reachable(backend="pystray._darwin", env={}, platform="darwin") is True
+    assert menu_reachable(backend="pystray._win32", env={}, platform="win32") is True
+
+
+def test_build_icon_warns_when_the_menu_cannot_be_opened(monkeypatch, caplog):
+    """An icon whose menu never opens has to say so; the user sees only the icon."""
+    import vigia_eew.tray as tray_mod
+
+    monkeypatch.setattr(tray_mod, "menu_reachable", lambda **kw: False)
+    with caplog.at_level("WARNING"):
+        build_icon(
+            state=AgentState(),
+            paused=lambda: False,
+            toggle_pause=lambda: None,
+            edit_config=lambda: None,
+            exit=lambda: None,
+        )
+    assert any("tray_menu_unreachable" in record.message for record in caplog.records)
+
+
+def test_build_icon_stays_quiet_when_the_menu_works(monkeypatch, caplog):
+    import vigia_eew.tray as tray_mod
+
+    monkeypatch.setattr(tray_mod, "menu_reachable", lambda **kw: True)
+    with caplog.at_level("WARNING"):
+        build_icon(
+            state=AgentState(),
+            paused=lambda: False,
+            toggle_pause=lambda: None,
+            edit_config=lambda: None,
+            exit=lambda: None,
+        )
+    assert not any("tray_menu_unreachable" in record.message for record in caplog.records)
+
+
+# --- T-151 · What the application is, from the icon (REQ-GUI-010) ---
+
+
+def test_the_menu_offers_an_about_entry() -> None:
+    _icon, texts = _menu_texts(open_about=lambda: None)
+
+    assert any("about" in t.lower() for t in texts)
+
+
+def test_the_about_entry_invokes_its_callback() -> None:
+    opened: list[int] = []
+    icon, _texts = _menu_texts(open_about=lambda: opened.append(1))
+
+    for item in icon.menu:
+        if item.text and "about" in str(item.text).lower():
+            item(icon)
+
+    assert opened == [1]
+
+
+def test_without_an_about_callback_the_entry_is_absent() -> None:
+    """Same rule as the panel: an entry with nothing behind it is a dead menu item."""
+    _icon, texts = _menu_texts()
+
+    assert not any("about" in t.lower() for t in texts)

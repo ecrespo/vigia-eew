@@ -22,7 +22,7 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 🛰️ **Real WebSocket push (EMSC)** as the primary channel — no constant polling.
 - 🔁 **REST fallback (USGS FDSN)** that reconciles and recovers anything the WebSocket may drop.
 - 🇻🇪 **FUNVISIS local coverage (Venezuela only)**: polls the Venezuelan national network so the small local quakes (M2–3) that EMSC/USGS don't catalog still trigger alerts. Polling (no push); enabled by default, harmless elsewhere (its events fall outside your radius).
-- 🚨 **Non-dismissable alert**: a front-most window, with sound, that only closes on acknowledgment.
+- 🚨 **Non-dismissable alert**: a front-most window, with sound, that only closes on acknowledgment. **Where "front-most" is guaranteed, and where it is not — see [Scope of the alert guarantee](#scope-of-the-alert-guarantee).**
 - 📍 **Configurable geographic filter**: reference point, radius in km, and minimum magnitude — auto-detected by IP geolocation if you don't set one manually.
 - 🌎 **Optional country filter**: only notify earthquakes in your own country (offshore/coastal quakes kept), determined offline — opt-in, off by default.
 - 🟢 **Cross-platform**: Linux, Windows, and macOS, with autostart on login.
@@ -30,6 +30,40 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake.
 - 🖥️ **System tray icon**: connection status, last alert, pause/resume notifications, edit config, quit — best-effort, never blocks startup if unavailable on your desktop.
 - ⌨️ **Headless TUI dashboard (`--tui`)**: run the agent on a server over SSH with no display — a terminal dashboard with live status, an alerts log, and a non-dismissable modal alert (ENTER acknowledges). Combine with `--simulate` to test it.
+
+## Scope of the alert guarantee
+
+The product's central promise is an alert that is hard to ignore: a window above everything else,
+that only closes when you acknowledge it. **That promise does not hold equally everywhere, and the
+honest thing is to say where.**
+
+| Desktop session | Above every window | Why |
+|---|---|---|
+| **Windows** | ✅ Guaranteed | The platform honours always-on-top for an application window |
+| **macOS** | ✅ Guaranteed | Same |
+| **Linux · X11** | ✅ Guaranteed | X11 honours always-on-top and focus requests from the alert window |
+| **Linux · Wayland** | ⚠️ **Not guaranteed** | The compositor owns window stacking. The toolkit's always-on-top request is **accepted** and then silently dropped, so another window can cover the alert |
+| Anything else | ❓ Not confirmed | The session could not be identified. The alert is shown; being above everything is not verified there |
+
+The alert is always **shown**, with its sound and its desktop notification, in every one of these.
+What varies is whether it can place itself above whatever you are looking at.
+
+**How the Wayland row was established**, since it is a claim about somebody else's software: on a
+GNOME/Wayland session, the topmost request (measured with Tk's `wm_attributes("-topmost", True)`,
+before the GUI moved to Flet) returns successfully and reading the attribute back gives `0`. The
+same call, on the same machine, under a plain X server gives `1`.
+Nothing at the call site can tell the difference — which is why the agent reasons about the session
+rather than trusting the return value.
+
+**Your own machine tells you which row it is on.** The tray menu shows it, and the agent logs it at
+startup:
+
+```
+presentation_guarantee session=wayland guarantee=degraded
+```
+
+If you are on GNOME and need the guarantee today, an X11 login session provides it. Closing this
+gap on Wayland is tracked as ADR-010.
 
 ## Installation
 
@@ -47,11 +81,15 @@ installation is required — the binary is self-contained.
 | **Linux** | `vigia-eew-*-x86_64.AppImage` | `chmod +x vigia-eew-*.AppImage && ./vigia-eew-*.AppImage` |
 | **Linux (Debian/Ubuntu)** | `vigia-eew_*_amd64.deb` | `sudo apt install ./vigia-eew_*_amd64.deb` |
 | **Linux (Fedora/RHEL)** | `vigia-eew-*.x86_64.rpm` | `sudo dnf install ./vigia-eew-*.x86_64.rpm` |
-| **Windows** | `vigia-eew.exe` | Double-click, or run it from a terminal. |
+| **Windows** | `vigia-eew-*-setup.exe` | Run the installer: Start Menu entries, optional desktop shortcut and optional autostart. (`vigia-eew.exe` alone still works, unpackaged.) |
 | **macOS** | `vigia-eew-*.dmg` | Open the `.dmg` and drag the app to *Applications*. |
 
-The `.deb`/`.rpm` packages install a `vigia-eew` command on your `PATH`; the AppImage, `.exe`,
-and `.app` are run directly.
+The `.deb`/`.rpm` packages install a `vigia-eew` command on your `PATH` **and a launcher
+entry**: after installing, *Vigía-eew* appears in your applications menu, and right-clicking it
+offers **Settings** (the configuration panel) and **Test the alert** — and *Vigía-eew —
+Configuración* is an entry of its own, so the panel is one search away. The AppImage carries the
+same entry; the Windows installer puts *Vigía-eew* and *Vigía-eew — Configuración* in the Start
+Menu; on macOS the `.app` lands in *Applications* like any other.
 
 ### Option B — From source (Python 3.11+)
 
@@ -90,9 +128,45 @@ from the bundled template at the path below; you can also copy
 | **macOS** | `~/Library/Application Support/vigia-eew/config.toml` |
 | **Windows** | `%LOCALAPPDATA%\vigia-eew\config.toml` |
 
-You can also point at any file explicitly with `--config <path>`. From the desktop tray icon,
-**"Edit configuration…"** opens the file currently in use (creating it from the template if
-needed).
+You can also point at any file explicitly with `--config <path>`.
+
+**Three ways into the settings**, deliberately:
+
+```bash
+vigia-eew --settings      # the configuration panel, on its own; no agent, no tray
+```
+
+- The **panel** — every setting, with live validation and a reorderable list of seismic
+  networks. Reach it with `vigia-eew --settings`, from the launcher entry's *Settings* action
+  (right-click the application icon), from the Start Menu shortcut on Windows, or from the tray
+  menu's **"Configuration…"**.
+- The **tray menu**, which also offers **"Edit configuration…"** and **"About…"**.
+- The **file**, which is what lets you version it with Git, copy it between machines, or reach
+  it over SSH.
+
+> **On GNOME/Wayland the tray menu may not open at all.** Without PyGObject installed, pystray
+> falls back to a legacy X11 tray icon: a shell extension still draws the icon, and clicking it
+> does nothing. The log says so (`tray_menu_unreachable`). Use `vigia-eew --settings` or the
+> launcher's *Settings* action — neither needs the tray.
+
+The panel and the About window are in English, like the configuration schema their labels come
+from; the alert, the toast and the tray menu follow `[notification] language`. **"About…"** —
+in the tray menu and in the panel's footer — shows the installed version, the copyright, the
+licence and the warranty notice.
+
+Saving from the panel preserves every comment in the file, keeps the previous version as
+`config.toml.bak`, and refuses to overwrite an edit you made elsewhere while it was open.
+**Changes apply when the agent restarts** — the configuration is read once, at startup.
+
+**"History…"** opens the record of every earthquake the agent evaluated — alerted or discarded,
+and *why* it was discarded — as a filterable table with a map beside it. It is a local SQLite
+file that never leaves your machine; entries older than `[history] retention_days` (90 by
+default) are removed when the agent starts, and `enabled = false` turns the whole thing off.
+
+The map draws tiles from OpenStreetMap, **only while it is open**, and caches them so a zone you
+have already looked at is not requested again. While it is open the provider can infer roughly
+which area you are looking at; with no connection and nothing cached the map says it is
+unavailable and the table carries on working.
 
 **Most useful settings** (see `config.toml.example` for the full schema):
 
@@ -194,6 +268,10 @@ disabled — same "impossible to ignore" contract as the desktop window). Keys: 
 pause/resume notifications, **`q`** quit. There is no tray icon or toast in this mode.
 
 ## Development
+
+> Contributing? **[CONTRIBUTING.md](CONTRIBUTING.md)** has the full picture: the devcontainer,
+> the quality gate, the testing conventions and the commit format. The rest of this section is
+> the short version.
 
 The project uses a `src/` layout, so it must be installed in **editable mode** before
 running the tests or the CLI from a checkout (otherwise `import vigia_eew` fails).

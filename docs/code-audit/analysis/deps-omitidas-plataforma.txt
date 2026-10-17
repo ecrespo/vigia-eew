@@ -1,0 +1,6 @@
+colorama==0.4.6
+pyobjc-core==12.2.1
+pyobjc-framework-cocoa==12.2.1
+pyobjc-framework-quartz==12.2.1
+pywin32-ctypes==0.2.3
+rubicon-objc==0.5.6

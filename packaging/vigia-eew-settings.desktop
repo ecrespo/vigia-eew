@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Vigía-eew — Settings
+Name[es]=Vigía-eew — Configuración
+GenericName=Earthquake alert settings
+GenericName[es]=Configuración de alertas sísmicas
+Comment=Configure the earthquake alert agent without starting it
+Comment[es]=Configurar el agente de alerta sísmica sin arrancarlo
+Exec=vigia-eew --settings
+TryExec=vigia-eew
+Icon=vigia-eew
+Terminal=false
+Categories=System;Monitor;
+Keywords=vigia;settings;configuración;configuracion;ajustes;sismo;earthquake;
+StartupNotify=false
+StartupWMClass=vigia-eew

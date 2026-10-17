@@ -1,6 +1,10 @@
 """IP-based location detection (RF-33) — best-effort, non-blocking at startup.
 
-When the user doesn't configure `[reference]` in `config.toml`, `Application` falls
+Why this is resolved once at startup rather than on every run, why it lives in the
+wiring rather than in `config.py`, and why a failure is never cached:
+[[lat.md/state#Persisted state#Reference point resolution happens once, in the application layer]].
+
+When the user doesn't configure `[reference]` in `config.toml`, the wiring falls
 back to `detect_ip_location()` to estimate the geographic reference point by querying
 a public HTTPS IP-geolocation service (`ipapi.co`, no API key). Any failure (network,
 timeout, unexpected status, invalid JSON, or missing fields) is translated to `None`:

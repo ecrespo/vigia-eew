@@ -23,12 +23,25 @@ silently dropped real alert. The clock is injected for deterministic tests.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from vigia_eew.config import Filter
 from vigia_eew.models import SeismicEvent
 from vigia_eew.timeutil import Clock, default_clock, local_date
 
 _CountryOf = Callable[[float, float], str | None]
+
+
+@dataclass(frozen=True, slots=True)
+class FilterVerdict:
+    """Whether the event is alertable, and which check said otherwise.
+
+    `reason` is one of "radius", "magnitude", "country" or "freshness", and is
+    None when the event was accepted.
+    """
+
+    accepted: bool
+    reason: str | None
 
 
 class GeoFilter:
@@ -50,26 +63,40 @@ class GeoFilter:
         self._now = now
 
     def accepts(self, ev: SeismicEvent) -> bool:
-        """True if the event passes the radius, magnitude, country, and freshness checks."""
-        if ev.distance_km > self._cfg.radius_km or ev.magnitude < self._cfg.min_magnitude:
-            return False
-        if not self._passes_country(ev):
-            return False
-        return self._passes_freshness(ev)
+        """True if the event passes the radius, magnitude, country and freshness checks."""
+        return self.verdict(ev).accepted
 
-    # @lat: [[pipeline#The country filter is a block-list, not an allow-list]]
+    def verdict(self, ev: SeismicEvent) -> FilterVerdict:
+        """The same decision, with the name of the check that rejected it.
+
+        "Filtered out" answers the wrong question. The one people ask is *why*
+        they were not warned, and radius, magnitude, country and freshness are
+        four very different answers -- one of them is a misconfigured home
+        location and another is a working filter doing its job (REQ-OBS-002).
+
+        Why the country check rejects rather than admits, and why freshness
+        uses the local calendar day rather than UTC:
+        [[lat.md/pipeline#Processing pipeline#Filtering: radius, magnitude, country, freshness]].
+        """
+        if ev.distance_km > self._cfg.radius_km:
+            return FilterVerdict(False, "radius")
+        if ev.magnitude < self._cfg.min_magnitude:
+            return FilterVerdict(False, "magnitude")
+        if not self._passes_country(ev):
+            return FilterVerdict(False, "country")
+        if not self._passes_freshness(ev):
+            return FilterVerdict(False, "freshness")
+        return FilterVerdict(True, None)
+
+    # @lat: [[pipeline#Processing pipeline#Filtering: radius, magnitude, country, freshness#Country filter is a block-list, not an allow-list]]  # noqa: E501 - a heading path is one token and does not wrap
     def _passes_country(self, ev: SeismicEvent) -> bool:
         """Reject only if the event is positively inside another country (RF-37)."""
-        if (
-            not self._cfg.country_filter
-            or self._user_country is None
-            or self._country_of is None
-        ):
+        if not self._cfg.country_filter or self._user_country is None or self._country_of is None:
             return True
         event_country = self._country_of(ev.lat, ev.lon)
         return event_country is None or event_country == self._user_country
 
-    # @lat: [[pipeline#Only today's earthquakes are alerted]]
+    # @lat: [[pipeline#Processing pipeline#Filtering: radius, magnitude, country, freshness#Freshness uses the local calendar day rather than UTC]]  # noqa: E501 - a heading path is one token and does not wrap
     def _passes_freshness(self, ev: SeismicEvent) -> bool:
         """Reject events that didn't originate on the current local day (RF-40).
 

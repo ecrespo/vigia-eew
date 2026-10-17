@@ -1,14 +1,17 @@
 {
-  "repo": "/home/user/vigia-eew",
+  "repo": "/sessions/busy-eloquent-cray/mnt/vigia-eew",
   "languages_loc": {
-    "Python": 9197,
+    "Python": 251255,
     "YAML": 455,
     "Shell": 122
   },
   "manifests": [
+    ".venv_sandbox/lib/python3.10/site-packages/pkg_resources/tests/data/my-test-package-source/setup.py",
     "pyproject.toml"
   ],
-  "lockfiles": [],
+  "lockfiles": [
+    "uv.lock"
+  ],
   "frameworks_detected": [
     "Pydantic",
     "httpx",
@@ -70,6 +73,7 @@
   ],
   "infra": [],
   "test_dirs": [
+    ".venv_sandbox/lib/python3.10/site-packages/pkg_resources/tests",
     "tests"
   ]
 }

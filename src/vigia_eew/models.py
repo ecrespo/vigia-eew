@@ -35,6 +35,19 @@ def _require_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC)
 
 
+def _require_aware_utc(value: datetime) -> datetime:
+    """Same as `_require_utc` for a field that cannot be None.
+
+    Written as a check rather than an `assert`: assertions are removed by
+    `python -O`, and this one is the last thing standing between a naive
+    datetime and the freshness rules that decide whether to alert.
+    """
+    validated = _require_utc(value)
+    if validated is None:  # pragma: no cover - a required field is never None
+        raise ValueError("a required timestamp cannot be None")
+    return validated
+
+
 def classify_severity(magnitude: float, info_max: float, warning_max: float) -> SeverityLevel:
     """Classifies the severity of an earthquake by its magnitude (RF-13).
 
@@ -52,6 +65,11 @@ class SeismicEvent(BaseModel):
     """Normalized seismic event that flows between the agent's layers (RF-07)."""
 
     id: str
+    #: Correlation id of the arrival this event came from (REQ-OBS-002,
+    #: ADR-021). Internal only -- invariant I-4 keeps it out of every outgoing
+    #: request. Defaulted so that constructing an event by hand, as the
+    #: simulation and the tests do, does not have to invent one.
+    trace_id: str = ""
     source: Source
     magnitude: float
     mag_type: str
@@ -65,6 +83,12 @@ class SeismicEvent(BaseModel):
     distance_km: float = Field(ge=0)
     severity: SeverityLevel
     action: Action = "create"
+    #: Id of the arrival this one overrules, when a higher-priority network
+    #: reported the same earthquake (REQ-PIP-010, ADR-026). Set only on the
+    #: refresh the pipeline emits, and it is what lets the alert queue
+    #: recognise a revision of the alert on screen even though the two
+    #: arrivals carry different ids -- they come from different catalogues.
+    supersedes: str | None = None
 
     @field_validator("time_utc", "lastupdate_utc")
     @classmethod
@@ -80,7 +104,13 @@ class SeismicEvent(BaseModel):
     def signature(self) -> EventSignature:
         """Produces the signature used for inter-source deduplication (RF-09)."""
         return EventSignature(
-            lat=self.lat, lon=self.lon, time_utc=self.time_utc, magnitude=self.magnitude
+            lat=self.lat,
+            lon=self.lon,
+            time_utc=self.time_utc,
+            magnitude=self.magnitude,
+            trace_id=self.trace_id,
+            source=self.source,
+            event_id=self.id,
         )
 
 
@@ -91,13 +121,21 @@ class EventSignature(BaseModel):
     lon: float
     time_utc: datetime
     magnitude: float
+    #: Journey that alerted this signature, so a later arrival of the same
+    #: earthquake can be linked to it instead of losing its own (REQ-OBS-002).
+    #: Defaulted: state files written before v1.0 carry no trace ids.
+    trace_id: str = ""
+    #: Which network reported it, and under which id. The network is what the
+    #: deduplicator compares against the priority order (REQ-PIP-010); the id
+    #: is what lets a superseding arrival replace this signature rather than
+    #: leave a second one behind. Both defaulted for state written before v1.0.
+    source: str = ""
+    event_id: str = ""
 
     @field_validator("time_utc")
     @classmethod
     def _validate_utc(cls, v: datetime) -> datetime:
-        validated = _require_utc(v)
-        assert validated is not None  # time_utc is required here
-        return validated
+        return _require_aware_utc(v)
 
 
 class AlertedId(BaseModel):
@@ -107,6 +145,8 @@ class AlertedId(BaseModel):
     source: str
     time_utc: datetime
     acknowledged_utc: datetime | None = None  # acknowledge audit trail (OBJ-1)
+    #: See `EventSignature.trace_id`. Defaulted for state written before v1.0.
+    trace_id: str = ""
 
     @field_validator("time_utc", "acknowledged_utc")
     @classmethod
@@ -125,9 +165,7 @@ class DetectedLocation(BaseModel):
     @field_validator("detected_utc")
     @classmethod
     def _validate_utc(cls, v: datetime) -> datetime:
-        validated = _require_utc(v)
-        assert validated is not None  # detected_utc is required here
-        return validated
+        return _require_aware_utc(v)
 
 
 class AppState(BaseModel):

@@ -121,9 +121,7 @@ async def test_no_cursor_uses_local_midnight_floor(tmp_path):
 async def test_fresh_cursor_is_honored_unchanged(tmp_path):
     """A cursor from earlier the same local day is used as-is, not overridden."""
     client = _FakeClient(_FakeResp(payload=_collection()))
-    rec, state = _reconciler(
-        tmp_path, client, now=lambda: datetime(2026, 6, 28, 20, 0, tzinfo=UTC)
-    )
+    rec, state = _reconciler(tmp_path, client, now=lambda: datetime(2026, 6, 28, 20, 0, tzinfo=UTC))
     state.update_usgs_cursor(1782639238852)  # 2026-06-28T13:33:58Z, same local day as `now`
     await rec.poll_once()
 
@@ -136,9 +134,7 @@ async def test_stale_cursor_is_floored_to_local_midnight(tmp_path):
     """A cursor from a previous local day (e.g. after a multi-day outage) is floored,
     not used as-is — bounding how much backlog is fetched (RF-41)."""
     client = _FakeClient(_FakeResp(payload=_collection()))
-    rec, state = _reconciler(
-        tmp_path, client, now=lambda: datetime(2026, 7, 17, 9, 0, tzinfo=UTC)
-    )
+    rec, state = _reconciler(tmp_path, client, now=lambda: datetime(2026, 7, 17, 9, 0, tzinfo=UTC))
     state.update_usgs_cursor(1782639238852)  # 2026-06-28, weeks before `now`
     await rec.poll_once()
 

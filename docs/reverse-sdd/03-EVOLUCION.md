@@ -1,124 +1,148 @@
 # 03 — Evolución del sistema
 
-> Derivado del historial git (59 commits, 2026-06-28 → 2026-08-16). Cada afirmación
-> histórica cita sus hashes.
+> 58 commits (47 sin merges), 2026-06-28 → 2026-07-17. Eras delimitadas por tags de release.
+> Autor único: Ernesto Crespo. 97,9 % conventional commits.
 
-**Nota sobre las eras**: el script propuso eras por trimestre (2026-Q2 / 2026-Q3) porque
-el repo **no tiene tags git**. Ese corte no dice nada útil aquí — 40 de 47 commits caen en
-un solo trimestre. Las eras de abajo se derivan de los commits `chore: release`, que sí
-marcan hitos reales de producto. Que las releases no estén tageadas es en sí un hallazgo:
-`build.yml` se dispara con tags `vX.Y.Z` `[VERIFY: .github/workflows/build.yml:8]`, así
-que los tags existen en el remoto o los binarios nunca se construyeron desde esta rama.
+```mermaid
+timeline
+    title Vigía-eew — capacidades por era
+    v0.1.0 (28 jun – 3 jul) : Núcleo completo, de contrato a alerta : Autoarranque y binarios
+    v0.1.3 (4 jul) : Ubicación automática : Bandeja del sistema : Inglés + i18n : TUI headless
+    v0.3.0 (5 jul) : CI y seguridad : Semilla de config : FUNVISIS
+    v0.5.0 (6 jul) : GEOFON, cuarta fuente
+    v0.6.0 (17 jul) : Frescura de eventos y estado acotado
+```
 
-## Era 0 — Fundación completa en un día (2026-06-28 → 2026-07-03) → v0.1.0
+## Era 1 — v0.1.0 (2026-06-28 → 2026-07-03, 15 commits)
 
-El proyecto arrancó **por los specs, no por el código**: el segundo commit del repo son
-los artefactos SDD completos (PRD, API-Spec, Technical Design, Data Model, Implementation
-Plan, ARCHITECTURE) `[COMMITS: 737d7fa]`. Todo lo que vino después ejecuta ese plan.
+**Qué ganó el sistema**: existir, de punta a punta. En seis días pasó de un `LICENSE` a un agente
+que ingiere sismos de dos redes, los filtra, deduplica y muestra una alerta no descartable, con
+autoarranque y binarios por plataforma.
 
-En un solo día se construyeron las fases 1 a 5: modelos, config, estado y logging
-`[COMMITS: b5c5371]`; ingestión EMSC/USGS y supervisor `[COMMITS: fc0ca99]`; pipeline de
-normalización, filtro y dedup `[COMMITS: b40c20b]`; capa de notificación
-`[COMMITS: fb50326]`; y CLI con modo simulación `[COMMITS: 4fb49d0]`. Cinco días después
-llegaron autoarranque `[COMMITS: 5b79ff1]`, tests de resiliencia end-to-end
-`[COMMITS: f49d139]` y empaquetado multiplataforma `[COMMITS: b6413e3]`.
+El orden fue estrictamente SDD: primero los artefactos de especificación `[COMMITS: 737d7fa]`,
+luego una fase por commit — dominio `[COMMITS: b5c5371]`, ingesta y supervisor
+`[COMMITS: fc0ca99]`, pipeline `[COMMITS: b40c20b]`, notificación `[COMMITS: fb50326]`, CLI y
+ensamblaje `[COMMITS: 4fb49d0]`, autoarranque `[COMMITS: 5b79ff1]`, pruebas de resiliencia
+`[COMMITS: f49d139]` y empaquetado `[COMMITS: b6413e3]`.
 
-**Lo que el sistema ganó**: de cero a un agente funcional y distribuible. La arquitectura
-de hoy —cuatro capas, supervisor, efectos inyectados— ya estaba completa aquí; todo lo
-posterior añade fuentes y frontends sin cambiarla. Es la señal más fuerte a favor del
-enfoque SDD de este repo.
+**Clusters activos**: C-01 … C-09. **Mayor churn**: `fb50326` (1.084 líneas, capa de notificación).
 
-## Era 1 — El empaquetado muerde (2026-07-03 → 2026-07-04) → v0.1.1 … v0.1.3
+**Contexto técnico**: el stack quedó fijado aquí y no cambió después — asyncio + Tkinter +
+pydantic + httpx/websockets. Los dos primeros fixes del proyecto fueron de empaquetado, no de
+lógica: un ícono placeholder con resolución inválida rompía `linuxdeploy`
+`[COMMITS: 7b1c71c, c38d9f6]`.
 
-Tres releases seguidas, las tres por fallos de empaquetado y ninguna por lógica de
-negocio: un ícono placeholder con resolución inválida rompió el build de AppImage
-`[COMMITS: 7b1c71c]` y luego linuxdeploy `[COMMITS: c38d9f6]`; después
-`desktop_notifier.resources` faltaba en el binario PyInstaller `[COMMITS: bdc2a9d]`.
+## Era 2 — v0.1.3 → v0.2.1 (2026-07-04, 13 commits)
 
-**Lección**: el código estaba probado, el *artefacto* no. Tres releases de parche
-consecutivas sobre el mismo tema son el patrón de fixes más claro del historial.
+**Qué ganó el sistema**: dejó de asumir cosas sobre su usuario. Detecta su ubicación por IP cuando
+no hay `[reference]` configurado `[COMMITS: c20a59b]`, muestra estado y controles en una bandeja
+`[COMMITS: fb3fe14]`, habla el idioma del SO `[COMMITS: 7f9132e]` y corre sin escritorio gracias
+al dashboard TUI `[COMMITS: 7f98980]`.
 
-## Era 2 — Contexto del usuario y frontends alternativos (2026-07-04) → v0.2.0
+**El evento estructural del proyecto ocurre aquí**: `7f9132e` (`feat!`) traduce **todo** el código,
+la documentación y los nombres de módulo del español al inglés, renombra assets
+(`critico.wav` → `critical.wav`) e introduce `i18n.py`. Es el commit más invasivo de la historia y
+la lección más transferible: nacer en el idioma final. Le sigue `e49404d`, que unifica los imports
+a absolutos.
 
-El agente deja de asumir que el usuario configuró algo. Detección automática de ubicación
-por IP `[COMMITS: c20a59b]` — antes, quien no editaba `config.toml` obtenía un filtro
-centrado en Caracas sin saberlo. Luego el ícono de bandeja `[COMMITS: fb3fe14]` para poder
-ver estado y pausar sin depender de la terminal, y el dashboard TUI
-`[COMMITS: 7f98980]` para servidores headless por SSH.
+**Fixes de esta era**: dos correcciones consecutivas de recorte de contenido en la ventana de
+alerta `[COMMITS: f90c796, f0960ac]` — la hora se cortaba por falta de `wraplength` y el detalle
+chocaba contra el borde inferior. Un tercero, `bdc2a9d`, añade `desktop_notifier.resources` al
+binario PyInstaller, y `a02607f` sanea `LD_LIBRARY_PATH` al lanzar binarios del sistema desde el
+onefile.
 
-En medio, el cambio más invasivo del historial: **traducción de todo el código base al
-inglés con i18n** `[COMMITS: 7f9132e]`, marcado `feat!` (breaking), seguido inmediatamente
-de la migración a imports absolutos `[COMMITS: e49404d]`.
+**Clusters activos**: C-05, C-10, C-11, C-12, C-13, C-09.
 
-Dos fixes de layout en la ventana de alerta muestran que la garantía central seguía
-madurando: la hora se recortaba por falta de `wraplength` `[COMMITS: f90c796]` y el
-contenido chocaba contra el borde inferior `[COMMITS: f0960ac]`.
+## Era 3 — v0.3.0 → v0.4.1 (2026-07-05, 13 commits)
 
-## Era 3 — Precisión de notificación (2026-07-04 → 2026-07-05) → v0.2.1, v0.3.0
+**Qué ganó el sistema**: red de seguridad de proceso y su primera fuente local. Se añaden los
+workflows de CI y seguridad más los hooks de pre-commit `[COMMITS: 97b2a8e]`, la publicación a
+PyPI `[COMMITS: 5ee3b1d, f51da9c]`, la siembra automática de `config.toml`
+`[COMMITS: a06f7a1]`, el filtro de país offline `[COMMITS: a3a4a1a]` y FUNVISIS como tercera
+fuente `[COMMITS: 10bb72d]`.
 
-Filtro de notificación por país `[COMMITS: a3a4a1a]`, resolviendo que un sismo a 80 km
-puede estar en otro país. Se implementó como block-list y no como allow-list — decisión
-deliberada, porque los sismos más peligrosos de Venezuela son *offshore* y no caen dentro
-de ningún polígono terrestre.
+**Era dominada por CI** (6 de 13 commits son `ci:`), con tres iteraciones sobre el mismo problema:
+el runner necesitaba Python gestionado por `uv` para disponer de tkinter `[COMMITS: 0e707a1]`, la
+caché tuvo que cambiar de clave porque `uv.lock` está en `.gitignore` `[COMMITS: 27e4b45]`, y el
+token de PyPI solo resolvía atado al *environment* `[COMMITS: f51da9c]`.
 
-Después, sembrado automático de `config.toml` desde plantilla en el primer arranque
-`[COMMITS: a06f7a1]`: el usuario nuevo ya no parte de un archivo inexistente.
+Un fix funcional relevante: `651c024` hace el agente **import-safe en host headless**, condición
+para que la CI pueda importar el paquete sin display.
 
-También aquí, un fix revelador: sanear `LD_LIBRARY_PATH` al lanzar binarios del sistema
-`[COMMITS: a02607f]`, porque el bundle onefile de PyInstaller hacía que el reproductor de
-sonido cargara las librerías del bundle en vez de las del sistema.
+**Nota de trazabilidad**: el commit de FUNVISIS dice `(RF-05)` en su asunto, pero el requisito que
+implementa es **RF-38** según ADR-015. Discrepancia del mensaje, no del código.
 
-## Era 4 — Redundancia de fuentes (2026-07-05 → 2026-07-06) → v0.4.0, v0.5.0
+## Era 4 — v0.5.0 (2026-07-06, 3 commits)
 
-De dos fuentes a cuatro. FUNVISIS `[COMMITS: 10bb72d]` para los sismos locales M2–3 que
-EMSC y USGS no catalogan, con seen-set en memoria porque el endpoint no admite cursor.
-GEOFON `[COMMITS: ade1199]` como cuarta red global independiente, para que un punto ciego
-compartido entre EMSC y USGS no deje al agente mudo; corregido de inmediato a HTTPS
+**Qué ganó el sistema**: redundancia global real. GEOFON entra como cuarta fuente
+`[COMMITS: ade1199]` — independiente de EMSC y USGS, con cursor propio y parser de texto
+pipe-delimitado en vez de GeoJSON, porque el soporte GeoJSON de GEOFON no pudo confirmarse en
+verificación en vivo. El único commit posterior de la era corrige el endpoint a HTTPS
 `[COMMITS: 8e0064a]`.
 
-En paralelo se endureció la infraestructura: workflows de CI y seguridad más pre-commit
-`[COMMITS: 97b2a8e]`, con tres fixes de CI en cadena `[COMMITS: 27e4b45, 0e707a1, f51da9c]`
-— entre ellos "usar Python gestionado por uv para que tkinter esté disponible", el mismo
-problema de entorno que sigue vivo hoy (ver `01-ARQUITECTURA.md` DT-5). Y un fix de fondo:
-hacer el agente importable en un host headless `[COMMITS: 651c024]`.
+Con cuatro fuentes, el dedup cruzado pasa a comparar entre cuatro catálogos sin cambiar la
+heurística, que ya era agnóstica al número de fuentes.
 
-## Era 5 — La corrección de frescura (2026-07-17) → v0.6.0
+## Era 5 — v0.6.0 (2026-07-17, 3 commits)
 
-Un solo commit `[COMMITS: b0f832c]`, y el más interesante del historial. Investigando un
-reporte de que el agente solo alertaba eventos de FUNVISIS, aparecieron **dos defectos
-distintos**: ningún ingestor filtraba por *cuándo* ocurrió el sismo (un cursor rancio tras
-días apagado podía surfacear un backlog de días), y `StateStore.prune()` existía con test
-unitario propio desde la fase 1 pero **ninguna ruta de ejecución lo llamaba jamás** — el
-estado crecía sin límite.
+**Qué ganó el sistema**: dejó de poder alertar sobre el pasado. Un único commit
+`[COMMITS: b0f832c]` entrega tres cosas ligadas: el filtro de frescura por día local (RF-40), el
+piso de `starttime` en medianoche local para las consultas REST (RF-41) y el cableado de
+`prune()` — que existía con test propio desde la fase 1 pero **ninguna ruta de ejecución llamaba**
+(RF-42).
 
-**Lección para la v2**: `prune()` tenía cobertura de tests y aun así estaba muerto. Un test
-unitario prueba que una función *funciona*, no que alguien la *llama*. Los tests de
-integración del pipeline son los que habrían detectado esto.
+Es la era más reveladora del proyecto: las tres correcciones salieron de investigar un solo
+síntoma reportado ("el agente solo alerta de FUNVISIS") y destaparon dos defectos distintos y
+reales. `c3a2c29` cierra actualizando `CLAUDE.md`.
 
-## Era 6 — Capas de conocimiento (2026-08-16)
+## Patrones observados
 
-Instalación de las tres capas de contexto (lat.md, CodeGraph, Graphify) y redacción de la
-capa de intención `[COMMITS: 6e0f133]`. No cambia comportamiento; hace consultable el
-*porqué* que hasta entonces vivía disperso en 18 ADRs.
+**Ritmo.** Explosión inicial (28 jun – 6 jul: 55 commits en 9 días), luego silencio de 11 días y
+un cierre quirúrgico el 17 de julio. El patrón es de proyecto personal construido en una ráfaga
+intensiva, seguido de mantenimiento dirigido por uso real.
+
+**Disciplina SDD sostenida.** Cada feature toca su código, sus tests, `CHANGELOG.md` y los
+artefactos en `docs/` en el mismo commit. `docs/IMPLEMENTATION-PLAN.md` se tocó 14 veces —
+sincronizado con el código, no abandonado. Dos ADRs (015 y 016) se escribieron *retroactivamente*,
+lo que el propio Technical Design admite: única grieta documentada de la disciplina.
+
+**Fixes recurrentes y su lectura.**
+
+| Archivo | Fixes | Síntoma de diseño |
+|---|---|---|
+| `packaging/build_linux.sh` | 2 `[COMMITS: 7b1c71c, c38d9f6]` | assets de empaquetado sin validación de formato en CI |
+| `notify/alert_window.py` | 2 `[COMMITS: f90c796, f0960ac]` | layout Tk sin restricciones de tamaño explícitas; se corrigió por síntoma, dos veces |
+| `tray.py` | 2 `[COMMITS: fb3fe14, a06f7a1]` | la ruta de config real vivía en dos sitios hasta que `Application` recibió `config_path` |
+| `pyproject.toml` | 2 `[COMMITS: bdc2a9d]` | recursos de terceros faltantes en el binario congelado |
+
+**Puntos calientes de acoplamiento.** `app.py` (10 toques), `config.py` (10) y `cli.py` (9) se
+modifican en **casi toda** feature nueva. No es deuda accidental: es el precio de una raíz de
+composición explícita. Pero marca los tres archivos donde un cambio mal hecho rompe más cosas —
+lo confirma el análisis de grafo (`app.py::Application` es el segundo nodo de mayor
+intermediación del sistema, ver `docs/CONTEXT_REPORT.md`).
+
+**Direcciones abandonadas.** Ninguna: no hay commits `revert:` ni features eliminadas. Lo único
+diseñado y no construido es el frontend D-Bus del ADR-010 `[COMMITS: 230b0b8]`, que sigue
+pendiente, no descartado.
 
 ## Lecciones para la v2
 
-1. **Empaquetar es una feature, no un paso final.** Cuatro de los fixes del historial son
-   de artefacto, no de lógica `[COMMITS: 7b1c71c, c38d9f6, bdc2a9d, a02607f]`. En la v2 el
-   build de binarios debe existir desde la fase 1 y validar sus propios assets, en vez de
-   aparecer en la fase 8 y descubrirse roto en producción.
-2. **Cobertura ≠ ejecución.** `prune()` estuvo muerto durante 14 releases con test verde
-   `[COMMITS: b0f832c]`. Añadir a la v2 una verificación de que las funciones públicas del
-   dominio tienen al menos un llamador en ruta de ejecución.
-3. **Nacer en inglés, con i18n desde el día uno.** La migración tardía `[COMMITS: 7f9132e]`
-   fue un breaking change que tocó todo el árbol.
-4. **Decidir Wayland antes de escribir la UI.** ADR-010 documenta a fondo el problema y su
-   solución, y nunca se implementó. Es el mayor riesgo abierto: la promesa "imposible de
-   ignorar" es frágil justo en el escritorio Linux por defecto.
-5. **Fijar el entorno de tests, no solo las dependencias.** Los fixes de CI
-   `[COMMITS: 0e707a1, 651c024]` y los dos tests que hoy exigen display real son el mismo
-   problema recurrente: el suite asume un entorno gráfico que no siempre existe.
-6. **El acoplamiento se concentró donde era predecible.** `app.py` (11 toques) y
-   `config.py` (10) crecen con cada feature porque son el punto de cableado. Un registro de
-   componentes o un contenedor de composición en la v2 evitaría que cada feature nueva
-   modifique el mismo archivo.
+1. **Nacer en inglés, con i18n desde la fase 1.** La traducción tardía `[COMMITS: 7f9132e]` tocó
+   más de 30 archivos y renombró assets binarios. Ver HU-010.
+2. **Resolver Wayland antes de prometer "imposible de ignorar".** Es el único requisito central
+   sin implementación que lo garantice en el entorno de escritorio más común de Linux hoy. Ver
+   `01-ARQUITECTURA.md` §7 y la Fase 1 del plan de reconstrucción.
+3. **Cablear lo que se escribe.** `prune()` vivió con test verde y cero llamadas durante 14 fases
+   `[COMMITS: b0f832c]`. Una comprobación de código muerto en el gate de calidad lo habría
+   detectado el primer día. Ver HU-016.
+4. **Versionar el lockfile.** `uv.lock` en `.gitignore` obligó a cachear CI por `pyproject.toml`
+   `[COMMITS: 27e4b45]` y hoy hay saltos de versión mayores entre rango declarado y lock
+   (`websockets` 12→16, `textual` 0.60→8.2). Ver `02-STACK-TECNOLOGICO.md` §7.
+5. **Validar los assets del empaquetado en CI.** Dos releases se rompieron por un PNG inválido
+   `[COMMITS: 7b1c71c, c38d9f6]`. Un chequeo de dimensiones/formato en el build lo cubre. Ver HU-007.
+6. **Fijar restricciones de layout, no parchear recortes.** Los dos fixes de `alert_window.py`
+   `[COMMITS: f90c796, f0960ac]` atacaron síntomas. La v2 debe especificar el contrato de tamaño
+   de la ventana como criterio de aceptación verificable. Ver HU-004.
+7. **Frescura y acotación del estado son requisitos, no optimizaciones.** Ambos se descubrieron en
+   producción `[COMMITS: b0f832c]`. En la v2 pertenecen al Data Model y al pipeline desde el
+   inicio. Ver HU-016.

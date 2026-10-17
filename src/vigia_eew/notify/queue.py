@@ -1,13 +1,13 @@
-"""Alert queue and asyncio<->Tk bridge (RF-20, RF-11, ADR-006).
+"""Alert queue and asyncio<->UI bridge (RF-20, RF-11, ADR-006).
 
 `AlertQueue` shows **one alert at a time** and in arrival order (RF-20): acknowledging
 the current one shows the next. An `update` of the event on screen **refreshes it in
 place** without generating a new alert (RF-11). The queue is pure logic (injected
-callbacks): it knows nothing about Tkinter, so it can be tested without a screen.
+callbacks): it knows nothing about the UI toolkit, so it can be tested without a screen.
 
-`AsyncioTkBridge` crosses the thread boundary from ADR-006: the asyncio loop publishes
-events to a thread-safe `queue.Queue` and the Tk thread drains them periodically with
-`widget.after`.
+`AsyncioUiBridge` crosses the thread boundary from ADR-006: the asyncio loop publishes
+events to a thread-safe `queue.Queue` and the UI thread drains them periodically with
+`widget.after` -- which `FletShell` provides, thread-safe.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class AlertQueue:
         """True if presentation of new alerts is paused (RF-34)."""
         return self._paused
 
-    # @lat: [[notification#Pausing delays alerts, it never drops events]]
+    # @lat: [[notification#Pausing delays presentation, it never drops events]]
     def pause(self) -> None:
         """Stops showing new alerts; they keep queuing up without being lost (RF-34)."""
         self._paused = True
@@ -67,19 +67,35 @@ class AlertQueue:
         self._show_next_if_free()
 
     def enqueue(self, ev: SeismicEvent) -> None:
-        """Enqueues an event; if it's an `update` of the one on screen, refreshes it."""
-        if (
-            ev.action == "update"
-            and self._current is not None
-            and ev.id == self._current.id
-        ):
-            self._current = ev
-            if self._update is not None:
-                self._update(ev)
-            self._log.info("alert_updated id=%s", ev.id)
+        """Enqueues an event; if it's an `update` of the one on screen, refreshes it.
+
+        A *supersede* is the same gesture from a different direction: a
+        network the user ranked higher reported the earthquake on screen
+        (REQ-PIP-010). Its id is its own -- the catalogues do not share one --
+        so it names the alert it overrules instead of matching on identity.
+
+        An arrival that names an alert no longer on screen is **dropped**,
+        never queued. Better data about an earthquake the user already
+        acknowledged is not a second earthquake.
+        """
+        if ev.supersedes is not None:
+            if self._current is not None and ev.supersedes == self._current.id:
+                self._refresh(ev)
+            else:
+                self._log.info("alert_supersede_ignored id=%s supersedes=%s", ev.id, ev.supersedes)
+            return
+        if ev.action == "update" and self._current is not None and ev.id == self._current.id:
+            self._refresh(ev)
             return
         self._pending.append(ev)
         self._show_next_if_free()
+
+    def _refresh(self, ev: SeismicEvent) -> None:
+        """Replaces what the alert on screen is showing, without alerting again."""
+        self._current = ev
+        if self._update is not None:
+            self._update(ev)
+        self._log.info("alert_updated id=%s supersedes=%s", ev.id, ev.supersedes)
 
     def acknowledge(self) -> None:
         """Acknowledges the current alert and shows the next one (CU-5)."""
@@ -100,9 +116,9 @@ class AlertQueue:
         self._log.info("alert_shown id=%s", self._current.id)
 
 
-# @lat: [[architecture#Tkinter owns the main thread; asyncio runs beside it]]
-class AsyncioTkBridge:
-    """Thread-safe bridge from the asyncio loop to the Tkinter thread (ADR-006)."""
+# @lat: [[architecture#Asyncio and Flet split across two threads]]
+class AsyncioUiBridge:
+    """Thread-safe bridge from the asyncio loop to the UI (Flet) thread (ADR-006)."""
 
     def __init__(self, *, sink: _Sink, logger: logging.Logger | None = None) -> None:
         self._queue: _stdqueue.Queue[SeismicEvent] = _stdqueue.Queue()
@@ -114,7 +130,7 @@ class AsyncioTkBridge:
         self._queue.put_nowait(ev)
 
     def drain(self) -> None:
-        """Empties the queue delivering each event to the sink (on the Tk thread)."""
+        """Empties the queue delivering each event to the sink (on the UI thread)."""
         while True:
             try:
                 ev = self._queue.get_nowait()
@@ -123,7 +139,7 @@ class AsyncioTkBridge:
             self._sink(ev)
 
     def start_polling(self, widget: object, interval_ms: int = 100) -> None:
-        """Schedules periodic draining of the queue on the Tkinter loop."""
+        """Schedules periodic draining of the queue on the UI loop."""
 
         def tick() -> None:
             self.drain()

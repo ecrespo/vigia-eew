@@ -1,163 +1,157 @@
 # Plan de remediación — vigia-eew
 
-> Deriva de `01-INFORME-AUDITORIA.md` (commit `8742c54`). **No hay P1**, así que la Fase 1
-> del plan estándar queda vacía y el trabajo arranca en los P2.
+**Base:** `01-INFORME-AUDITORIA.md` (commit `c3a2c29`, 2026-09-06).
+**0 hallazgos P1 · 5 P2 · 8 P3.** El plan es de endurecimiento, no de rescate: el repositorio no
+tiene deuda de seguridad, tiene **huecos de gate**.
 
-## Fase 0 — Guardrails
+Esfuerzo: **S** ≤ 1 h · **M** ≤ media jornada · **L** > 1 jornada.
 
-**No hay nada que instalar.** El repo ya tiene `.pre-commit-config.yaml` con las ocho
-dimensiones repartidas en dos etapas y con paridad de comandos frente a
-`ci.yml`/`security.yml` `[VERIFY: .pre-commit-config.yaml:9]`.
+---
 
-La comparación contra la plantilla de la skill arrojó **dos huecos**, ambos de calidad y
-ninguno de seguridad; van como R-05 y R-06 (Fase 3) porque son P3, no bloqueantes:
+## Fase 0 — Guardrails (antes de tocar código)
 
-| Hook de la plantilla | ¿Presente? | Comentario |
-|---|---|---|
-| gitleaks | ✅ | v8.21.2, misma versión que `security.yml` |
-| ruff (lint) | ✅ | vía `uv run`, paridad con CI |
-| mypy strict | ✅ | |
-| bandit medium+ | ✅ | |
-| pytest (pre-push) | ✅ | |
-| pip-audit (pre-push) | ✅ | |
-| semgrep (pre-push) | ✅ | |
-| trivy fs (pre-push) | ✅ | best-effort si el binario existe |
-| hooks de higiene | ✅ | trailing-whitespace, check-yaml/toml, large-files |
-| **lizard / complejidad** | ❌ | → R-05 |
-| **ruff format --check** | ❌ | solo corre `ruff check`, no el formateador |
+Aplicar `.pre-commit-config.yaml.propuesto` (en este mismo directorio), que **añade** hooks al
+config existente sin quitar ninguno. Congela el estado actual: nada nuevo entra peor de lo que
+está. Todo lo demás del plan depende de esta fase.
 
-Lo único que conviene hacer antes de tocar código es **R-01**: sin lockfile versionado, el
-resto de verificaciones de este plan no son reproducibles entre máquinas.
+```bash
+cp docs/code-audit/.pre-commit-config.yaml.propuesto .pre-commit-config.yaml
+uv run pre-commit install                       # instala pre-commit y pre-push
+uv run pre-commit run --all-files               # primera pasada: fallará en R-02
+```
+
+**Verificación:** `uv run pre-commit validate-config .pre-commit-config.yaml` → sin errores, y
+`uv run pre-commit run --all-files --hook-stage pre-push` termina describiendo qué falla.
+
+---
 
 ## Fase 1 — P1
 
-Ninguno. La postura de seguridad del repo es sólida: 0 secretos en 48 commits, 0 CVEs,
-0 hallazgos SAST de severidad media o alta.
+**Vacía.** No se encontró ningún hallazgo P1: sin secretos en árbol ni historia, sin SAST HIGH,
+sin CVE alcanzable en runtime.
 
-## Fase 2 — P2 (4 ítems)
+---
 
-### R-01 · Versionar el lockfile y acotar los rangos (P2-1)
+## Fase 2 — P2 (5 ítems)
 
-- **Fix:**
-  1. Quitar `uv.lock` de `.gitignore:29` y commitearlo:
-     `uv lock && git add -f uv.lock .gitignore`
-  2. Revertir el workaround del caché de CI a su valor por defecto:
-     en `.github/actions/setup-python-env/action.yml:18`, `cache-dependency-glob:
-     pyproject.toml` → `uv.lock`.
-  3. Poner techo mayor a las dependencias que ya saltaron de major, como mínimo
-     `websockets>=17,<18` y `textual>=8,<9` `[VERIFY: pyproject.toml:32]`,
-     `[VERIFY: pyproject.toml:40]`.
-- **Esfuerzo:** S
-- **Riesgo del fix:** el `uv.lock` inicial congela lo que resuelva la máquina que lo
-  genere; conviene generarlo en CI o en un entorno limpio, no en un portátil con caché.
-  Acotar los rangos puede requerir un ajuste si alguna transitiva pide más.
-- **Verificación:**
-  `git ls-files uv.lock` devuelve la ruta · `uv run pip-audit --skip-editable` →
-  `No known vulnerabilities found` · dos clones limpios del repo resuelven el mismo árbol.
+### R-01 · Exigir un umbral de cobertura por módulo (P2-1)
 
-### R-02 · Separar los tests de integración con un marker (P2-2)
+- **Fix:** añadir el gate a la CI, no solo la medición. En `.github/workflows/ci.yml:53`, tras
+  `--cov-report=term-missing`, añadir `--cov-fail-under=70`. Y en `pyproject.toml`, umbrales
+  diferenciados con `[tool.coverage.report]`:
 
-- **Fix:**
-  1. Registrar el marker en `pyproject.toml`, junto a la config de pytest existente
-     `[VERIFY: pyproject.toml:81]`:
-     ```toml
-     [tool.pytest.ini_options]
-     markers = ["integration: exercises several real components together (no network)"]
-     ```
-  2. Marcar los 5 tests de `tests/test_resilience.py` (y cualquier otro que monte el
-     pipeline real, p. ej. `[VERIFY: tests/test_tui.py:169]`) con
-     `@pytest.mark.integration`.
-  3. En `ci.yml`, separar en dos pasos: `pytest -m "not integration"` y
-     `pytest -m integration`, para que el fallo diga de qué capa viene.
-- **Esfuerzo:** S
-- **Riesgo del fix:** ninguno funcional; es etiquetado.
-- **Verificación:** `pytest -m integration -q` → 5+ tests seleccionados ·
-  `pytest -m "not integration" -q` → el resto · re-ejecutar
-  `python3 scripts/detect_stack.py .` → `integration_count > 0`.
+  ```toml
+  [tool.coverage.report]
+  fail_under = 70
+  exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+  ```
 
-### R-03 · Que el suite por defecto corra de verdad sin display (P2-3)
+  Antes de fijar el número, ejecutar una vez `uv run pytest --cov=vigia_eew --cov-branch
+  --cov-report=term-missing` y **calibrar con el valor real** — este informe no pudo medirlo
+  (Python 3.10 en el entorno de auditoría). Aplicar los mínimos por criticidad: `pipeline/` y
+  `state.py` (lógica que decide si alertar) ≥ 85 % con *branch coverage*; `ingest/` ≥ 70 %;
+  `tray.py`, `alert_window.py`, `sound.py` (adaptadores de E/S) ≥ 40 %.
+- **Esfuerzo:** S · **Riesgo del fix:** que la CI empiece a fallar si algún módulo está por
+  debajo. Es el objetivo; calibrar el umbral inicial al valor medido y subirlo por escalones.
+- **Verificación:** `uv run pytest --cov=vigia_eew --cov-branch --cov-fail-under=70` → exit 0, y
+  bajar `fail_under` a un valor imposible debe hacerlo fallar (prueba de que el gate muerde).
 
-- **Fix:** elegir una de las dos, no ambas.
-  - **(a) Coherente con lo que ya documenta el repo** — añadir el guard existente a los
-    dos tests, igual que los smokes de Tkinter:
-    ```python
-    @pytest.mark.skipif(not os.environ.get("VIGIA_GUI_TESTS"), reason="needs a display")
-    ```
-    en `[VERIFY: tests/test_tray.py:81]` y `[VERIFY: tests/test_app.py:175]`.
-  - **(b) Conservar la cobertura** — ejecutar el CI y el hook bajo `xvfb-run -a`, y
-    corregir `[VERIFY: CLAUDE.md:139]`, que hoy afirma que el suite corre headless.
+### R-02 · Poner `ruff format` en el gate y formatear los 19 archivos (P2-2)
 
-  Recomiendo **(a)**: mantiene la promesa de "headless por defecto" que el resto del
-  proyecto respeta, y esos dos tests solo verifican que se ensambla el menú de la bandeja
-  — cobertura que la opción (b) compraría a cambio de una dependencia de sistema en todas
-  las máquinas de desarrollo.
-- **Esfuerzo:** S
-- **Riesgo del fix:** con (a) se pierde cobertura de `build_icon` en el suite por defecto;
-  queda cubierta al correr con `VIGIA_GUI_TESTS=1`.
-- **Verificación:** en un entorno sin `DISPLAY`, `pytest -q` → 0 failed (hoy: 2 failed).
+- **Fix:** añadir el hook `ruff-format` (incluido en el config propuesto) y ejecutar una vez
+  `uv run ruff format .` en un commit **aislado**, sin cambios funcionales, para que el ruido de
+  diff no contamine ningún PR de producto.
+- **Esfuerzo:** S · **Riesgo del fix:** ninguno funcional; el commit tocará 19 archivos y hará
+  ruido en `git blame`. Registrarlo en `.git-blame-ignore-revs`.
+- **Verificación:** `uv run ruff format --check .` → `79 files already formatted`, exit 0.
 
-### R-04 · Extraer el cableado de `app.py` (P2-4)
+### R-03 · Separar unitarias de integración con markers (P2-3)
 
-- **Fix:** mover las fábricas a un módulo de composición propio (`wiring.py` o
-  `composition.py`), dejando `Application` como orquestador de ciclo de vida:
-  `_build_supervisor` `[VERIFY: src/vigia_eew/app.py:85]`, `_build_geo_filter`
-  `[VERIFY: src/vigia_eew/app.py:137]`, `_build_controller`
-  `[VERIFY: src/vigia_eew/app.py:158]` y `_build_tray`
-  `[VERIFY: src/vigia_eew/app.py:178]`. Son funciones puras de construcción: se pueden
-  testear sin instanciar la app.
-- **Esfuerzo:** M
-- **Riesgo del fix:** `app.py` es el hotspot #1 del repo y su cobertura es del 64 %;
-  refactorizarlo con esa red de seguridad es el riesgo real. **Hacerlo después de R-02**,
-  con los tests de integración ya identificados, y subir antes la cobertura de las rutas
-  `execute`/`run_tui` que hoy no se ejercitan (líneas 400-451).
-- **Verificación:** `pytest -q` → 345 passed · `wc -l src/vigia_eew/app.py` < 300 ·
-  `pytest --cov=vigia_eew.app` → ≥ 64 % (no debe bajar).
+- **Fix:** declarar los markers en `pyproject.toml:81` y etiquetar los tests e2e:
+
+  ```toml
+  [tool.pytest.ini_options]
+  testpaths = ["tests"]
+  asyncio_mode = "auto"
+  markers = [
+      "integration: cruza componentes reales (pipeline completo, supervisor + ingestores)",
+      "gui: requiere Tkinter real (VIGIA_GUI_TESTS=1)",
+  ]
+  ```
+
+  Marcar con `@pytest.mark.integration` los 5 de `tests/test_resilience.py` y con
+  `@pytest.mark.gui` los tres `test_smoke_*` de `tests/test_alert_window.py:139,157,174`
+  (hoy usan `skipif` sobre una variable de entorno; el marker es explícito y componible).
+  Luego: pre-commit corre `pytest -m "not integration and not gui"`, CI corre todo.
+- **Esfuerzo:** S · **Riesgo del fix:** ninguno; los markers no cambian el comportamiento.
+- **Verificación:** `uv run pytest -m integration --collect-only -q` → 5 tests;
+  `uv run pytest -m "not integration" --collect-only -q` → 339.
+
+### R-04 · Cubrir DRY y complejidad en el gate (P2-4)
+
+- **Fix:** el config propuesto añade tres hooks locales: `jscpd` (umbral 3 %), `lizard`
+  (`--CCN 15 --length 200`) y `flake8 --select=CCR001 --max-cognitive-complexity=12`. Ninguno
+  bloquea hoy salvo CCR001, que fallaría en los dos casos de P3-5 — arreglarlos en la Fase 3 o
+  subir temporalmente el umbral a 16 con un TODO fechado.
+- **Esfuerzo:** S · **Riesgo del fix:** el gate se vuelve más lento (~5 s con jscpd). Si molesta,
+  mover jscpd a la etapa pre-push.
+- **Verificación:** `npx jscpd src --min-tokens 70 --threshold 3` → exit 0;
+  `uv run lizard src --CCN 15 --length 200 -w` → sin avisos.
+
+### R-05 · Actualizar `pip` en el entorno de desarrollo (P2-5)
+
+- **Fix:** no es dependencia declarada del proyecto, sino transitiva de `pip-audit` vía `pip-api`.
+  Basta con `uv lock --upgrade-package pip` y confirmar que el lock resuelve `pip>=26.2`.
+  Alternativamente, esperar a la próxima actualización de `pip-audit`.
+- **Esfuerzo:** S · **Riesgo del fix:** ninguno; no toca runtime ni artefactos distribuidos.
+- **Verificación:** `grep -A1 'name = "pip"' uv.lock` → `version = "26.2"` o superior; y
+  `uv run pip-audit --skip-editable` → sin `CVE-2026-13346`.
+- **Alternativa aceptable:** riesgo aceptado y documentado, dado que `pip` no viaja en el wheel ni
+  en los binarios PyInstaller. Si se elige esta vía, dejarlo escrito con fecha de revisión.
+
+---
 
 ## Fase 3 — P3 (batch)
 
-| # | Ítem | Fix | Esfuerzo | Verificación |
-|---|---|---|---|---|
-| R-05 | Complejidad sin gate (P3-2, P3-3) | Añadir al pre-commit: `lizard src --CCN 12 --warnings_only --exit_code 1` y `flake8 --select=CCR001 --max-cognitive-complexity=12 src/`. Antes de activarlo, bajar `_process_text` `[VERIFY: src/vigia_eew/ingest/rest_geofon.py:134]` extrayendo el parseo de fila, y `main()` `[VERIFY: src/vigia_eew/cli.py:56]` con un despacho por diccionario | M | `lizard src --CCN 12 -w` → sin avisos · `flake8 --select=CCR001` → vacío |
-| R-06 | `ruff format` no verificado | Añadir el hook `ruff format --check .` (el repo ya usa ruff, solo falta el formateador) | S | `ruff format --check .` → `N files already formatted` |
-| R-07 | Duplicación USGS↔GEOFON (P3-1) | **No actuar todavía.** 0,85 % está en verde y ADR-016 difirió la abstracción a propósito. Extraer un `FdsnPoller` base con el parser parametrizado **cuando entre la tercera fuente FDSN** — es la regla de tres, y el ADR ya la anticipó | L (diferido) | `jscpd src --min-tokens 70` → clones sobre `ingest/` en 0 |
-| R-08 | Ruido de escaneo en artefactos generados (P3-5) | Crear `.gitleaksignore` con `graphify-out/` y `.codegraph/`, y añadir `--skip-dirs graphify-out,.codegraph` al hook de trivy `[VERIFY: .pre-commit-config.yaml:83]` | S | `gitleaks detect --source . --no-git` → `no leaks found` |
-| R-09 | Sincronización por reloj de pared (P3-4) | En `[VERIFY: tests/test_processor.py:106]`, sustituir `asyncio.sleep(0.05)` por una espera sobre condición (`await asyncio.wait_for(cap.first_alert, timeout=1)`) o por el `sleep` inyectado que ya usa el resto del suite | S | `pytest tests/test_processor.py -q -p no:randomly` estable en 20 ejecuciones |
-| R-10 | Tests sin aserción (P3-6) | Añadir aserción sobre el efecto observable en los 4 tests "no debe lanzar": que se emitió el log, o que el backend no se invocó | S | Los 4 tests fallan si se vacía el cuerpo de la función bajo prueba |
-| R-11 | `logging_conf` sin verificación | Crear `tests/test_logging_conf.py`: timestamp en UTC, ambos handlers registrados, rotación, y que un directorio no escribible **no** impida arrancar | M | `pytest tests/test_logging_conf.py -q` → ≥ 4 tests · cobertura de `logging_conf.py` con aserciones reales |
+| # | Fix | Esfuerzo | Verificación |
+|---|---|---|---|
+| P3-1 | Extraer el constructor y el bucle de cursor comunes de `rest_usgs.py`/`rest_geofon.py` a una base `FDSNCursorPoller`. **Solo si entra una tercera fuente FDSN** — con dos, ADR-016 ya descartó la abstracción y el clon es de 39 líneas sobre 9.186 | M | `npx jscpd src` → clones de producción en 0 |
+| P3-2 | Reducir `Application`: extraer las fábricas (`_build_supervisor`, `_build_controller`, `_build_tray`, `_build_geo_filter`) a un módulo `wiring.py`, dejando `Application` como orquestador de los tres modos | M | `lizard src/vigia_eew/app.py` → NLOC < 300; `mypy src` sigue limpio |
+| P3-3 | Sustituir la escalera de `normalize.py:55` por un registro `dict[Source, Callable]` poblado en el módulo. Reduce de ≥5 a 3 los archivos a tocar por fuente nueva | S | Añadir una fuente ficticia en un test y comprobar que solo requiere el mapper y el `Literal` |
+| P3-4 | Agrupar los 12 métodos públicos de `StateStore` en vistas cohesivas (alertas / cursores / ubicación) o documentar explícitamente que es una fachada deliberada sobre un único documento | S | `solid-signals.txt` → sin clases con >10 públicos, o nota de diseño en `lat.md/state.md` |
+| P3-5 | Bajar la complejidad cognitiva de `cli.py:56` (13) y `rest_geofon.py:133` (16). En el segundo, extraer el parseo de fila a una función pura `_parse_row` — mejora además el testeo del caso "fila corrupta" | S | `flake8 --select=CCR001 --max-cognitive-complexity=12 src/` → exit 0 |
+| P3-6 | Reemplazar `asyncio.sleep(0.05)` por espera sobre un `asyncio.Event` o el reloj inyectado que ya usa el resto de la suite | S | `grep -n 'asyncio.sleep(0\.' tests/` → sin resultados |
+| P3-7 | Dar assert real a los tres tests de "no lanza": comprobar el efecto observable (que se registró el warning, que el estado no cambió), no solo la ausencia de excepción | S | Los tres tests fallan si se vacía el cuerpo de la función bajo prueba |
+| P3-8 | Extraer el fixture duplicado de `test_resilience.py:157` / `test_ws_emsc.py:43` a `conftest.py` | S | `npx jscpd tests` → 1 clon menos |
+| — | Sustituir los dos `assert` de `models.py:99,129` por `if ... raise ValueError`, para que sobrevivan a `python -O` | S | `bandit -r src --severity-level=low` → sin B101 |
 
-## Orden recomendado
+---
 
-```
-R-01 (lockfile)  →  R-02 (markers)  →  R-03 (headless)  →  R-08, R-06, R-09, R-10 (batch S)
-                                            ↓
-                                    R-11 (logging)  →  R-05 (complejidad + gate)  →  R-04 (app.py)
-                                                                                          ↓
-                                                                              R-07 (diferido: 3ª fuente FDSN)
-```
+## Fase 4 — Cerrar los gaps de tooling del propio informe
 
-R-01 primero porque hace reproducible todo lo demás. R-04 al final porque es el único con
-riesgo real de regresión y se beneficia de que R-02 y R-11 ya hayan reforzado la red.
+Estos no son defectos del repo: son datos que esta auditoría no pudo producir.
+
+| Gap | Acción | Verificación |
+|---|---|---|
+| Cobertura sin medir | Ejecutar la suite en Python ≥3.11 y anotar el valor real en este plan (entrada R-01) | `coverage.xml` con `line-rate` por paquete |
+| Semgrep no ejecutado | Descargar el SARIF del último run de `security.yml` en `main` y revisar los hallazgos | artefacto `semgrep-sarif` sin findings de severidad ERROR |
+| Gitleaks no ejecutado | Revisar el artefacto `gitleaks-sarif` del último run | 0 hallazgos, coincidiendo con detect-secrets |
+| Trivy no ejecutado | Revisar el artefacto `trivy-fs` del último run | 0 HIGH/CRITICAL |
+
+---
 
 ## Seguimiento
 
-| Ítem | Prioridad | Dueño | Verificación | Estado |
+| Ítem | Prioridad | Esfuerzo | Verificación | Estado |
 |---|---|---|---|---|
-| R-01 Lockfile versionado | P2 | | `git ls-files uv.lock` no vacío | pendiente |
-| R-02 Marker de integración | P2 | | `pytest -m integration` selecciona ≥5 | pendiente |
-| R-03 Suite headless | P2 | | `pytest -q` sin `DISPLAY` → 0 failed | pendiente |
-| R-04 Extraer cableado | P2 | | `app.py` < 300 líneas, cobertura no baja | pendiente |
-| R-05 Gate de complejidad | P3 | | `lizard --CCN 12 -w` sin avisos | pendiente |
-| R-06 `ruff format --check` | P3 | | hook en verde | pendiente |
-| R-07 Unificar pollers FDSN | P3 | | diferido a la 3ª fuente | diferido |
-| R-08 Ignorar artefactos generados | P3 | | `gitleaks` → 0 en árbol | pendiente |
-| R-09 Quitar sleep de test | P3 | | 20 ejecuciones estables | pendiente |
-| R-10 Aserciones en 4 tests | P3 | | fallan con la función vaciada | pendiente |
-| R-11 Tests de logging | P3 | | ≥4 tests nuevos | pendiente |
+| Fase 0 · pre-commit propuesto | — | S | `pre-commit validate-config` | pendiente |
+| R-01 · umbral de cobertura | P2 | S | `pytest --cov-fail-under` muerde | pendiente |
+| R-02 · `ruff format` en gate | P2 | S | `ruff format --check .` exit 0 | pendiente |
+| R-03 · markers unit/integration | P2 | S | `pytest -m integration` → 5 | pendiente |
+| R-04 · DRY + complejidad en gate | P2 | S | `jscpd --threshold 3` exit 0 | pendiente |
+| R-05 · actualizar `pip` | P2 | S | `pip-audit` sin CVE-2026-13346 | pendiente |
+| Fase 3 · P3 batch (9 ítems) | P3 | M | ver tabla | pendiente |
+| Fase 4 · cerrar gaps del informe | — | S | artefactos de CI revisados | pendiente |
 
-## Riesgos aceptados
-
-| Riesgo | Razón |
-|---|---|
-| FUNVISIS se consume por HTTP plano `[VERIFY: src/vigia_eew/config.py:79]` | La fuente no ofrece HTTPS válido para ese endpoint. El dato es público y de solo lectura, no cruzan credenciales ni datos del usuario, y la alternativa es perder la cobertura sísmica local de Venezuela. Documentado en ADR-015. **Revisar periódicamente** si FUNVISIS habilita TLS |
-| La IP de origen queda expuesta a `ipapi.co` `[VERIFY: src/vigia_eew/geoloc.py:39]` | Única excepción de privacidad del proyecto. Se dispara solo por *ausencia* de configuración, ocurre una vez y se cachea, y se desactiva por completo definiendo `[reference]`. Documentado en ADR-011 |
-| Semgrep no verificado en esta auditoría | El registry está bloqueado por la política de red de **este entorno**, no del proyecto. `security.yml` lo ejecuta en cada PR a `main`. Sin acción |
+**Ruta crítica realista:** Fases 0 a 2 son **cinco tareas de tamaño S**. Una tarde de trabajo
+cierra los cinco P2 y deja las ocho dimensiones con gate propio.

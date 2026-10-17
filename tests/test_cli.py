@@ -17,6 +17,7 @@ class _FakeApp:
         self.simulated = False
         self.executed = False
         self.tui_simulate: bool | None = None
+        self.settings_opened = False
         _FakeApp.created.append(self)
 
     def simulate(self):
@@ -27,6 +28,9 @@ class _FakeApp:
 
     def run_tui(self, *, simulate=False):
         self.tui_simulate = simulate
+
+    def open_settings(self):
+        self.settings_opened = True
 
 
 def _create(cfg, **kwargs):
@@ -75,7 +79,7 @@ def test_tui_with_simulate_invokes_run_tui_simulate():
     assert rc == 0
     app = _FakeApp.created[-1]
     assert app.tui_simulate is True
-    assert app.simulated is False  # goes to run_tui, not the Tk simulate()
+    assert app.simulated is False  # goes to run_tui, not the Flet simulate()
 
 
 def test_check_config_does_not_create_app(capsys):
@@ -165,3 +169,35 @@ def test_uninstall_autostart_invokes_uninstall():
     assert rc == 0
     assert inst.uninstalled is True
     assert _FakeApp.created == []
+
+
+# --- Opening the configuration panel on its own (`--settings`) ---
+
+
+def test_settings_opens_the_panel_without_starting_the_agent():
+    """The panel is a mode of its own, not a side effect of a running agent.
+
+    On a GNOME/Wayland session pystray falls back to its X11 tray, which draws
+    the icon and never opens a menu: the tray entry that leads to the panel is
+    then unreachable, and this flag is what the desktop entry runs instead.
+    """
+    rc = main(["--settings"], create_app=_create)
+    assert rc == 0
+    app = _FakeApp.created[-1]
+    assert app.settings_opened is True
+    assert app.executed is False
+    assert app.simulated is False
+
+
+def test_settings_seeds_the_config_before_opening_it(_no_real_seed):
+    """An empty config dir must still open a panel over a real file (RF-24)."""
+    main(["--settings"], create_app=_create)
+    assert _no_real_seed == [None]
+
+
+def test_settings_honours_an_explicit_config_path(tmp_path):
+    path = tmp_path / "otro.toml"
+    path.write_text('[reference]\nname = "X"\nlat = 1.0\nlon = 2.0\n')
+    rc = main(["--settings", "--config", str(path)], create_app=_create)
+    assert rc == 0
+    assert _FakeApp.created[-1].config_path == str(path)

@@ -202,6 +202,7 @@ def is_duplicate(ev, recent, alerted_ids):
   backup).
 
 ### ADR-003 — Tkinter by default for the alert (not PyQt/PySide)
+- **Status**: **Superseded by ADR-030** (Flet). Kept for the reasoning it records.
 - **Context**: a cross-platform, *topmost*, focus-stealing alert, without heavy dependencies
   (RNF-06).
 - **Decision**: **Tkinter** (bundled with CPython, zero extra dependencies). It supports
@@ -231,6 +232,8 @@ def is_duplicate(ev, recent, alerted_ids):
   at runtime.
 
 ### ADR-006 — Asyncio↔Tkinter bridge (UI on the main thread)
+- **Status**: Amended by ADR-030: the shape stands, the toolkit is Flet; the bridge is
+  `AsyncioUiBridge` and `FletShell.after()` replaces `widget.after()`.
 - **Context**: Tkinter requires the main thread; ingestion lives in asyncio.
 - **Decision**: run Tkinter's event loop on the main thread and the asyncio loop on a worker
   thread; pass events through a thread-safe queue + `widget.after()` to poll the queue.
@@ -239,12 +242,17 @@ def is_duplicate(ev, recent, alerted_ids):
 - **Consequences**: a single, well-bounded integration point; coordinated shutdown of both loops.
 
 ### ADR-007 — Config in `config.toml` (pydantic) + `uv`/hatchling tooling
+- **Status**: **Amended by ADR-019** (2026-09-19, constitutional amendment E-02). The read path,
+  the TOML file as the source of truth and the absence of a database all still hold; the
+  read-only consequence below does not.
 - **Context**: structured config (nested severities) and modern tooling.
 - **Decision**: **`config.toml`** read with `tomllib` (stdlib 3.11+) and validated by
   **pydantic** (RF-24); the project is managed with **uv**; built with **hatchling** (RF-27).
 - **Alternatives considered and rejected**: `.env` (awkward for nested structures); setuptools
   (more verbose).
-- **Consequences**: `tomllib` is read-only (writing config isn't needed in v1).
+- **Consequences**: `tomllib` is read-only. *That was true when it was written and stopped
+  being true the moment the product offered a panel to edit the file from; the write path is
+  ADR-019. Amending it was the right call -- ignoring it would have been the cheap one.*
 
 ### ADR-008 — No central relay in v1 (one agent per machine)
 - **Context**: avoiding a single point of failure (RNF-02); simplicity for v1.
@@ -263,6 +271,11 @@ def is_duplicate(ev, recent, alerted_ids):
 - **Consequences**: minimal dependencies, idiomatic with asyncio.
 
 ### ADR-010 — Decoupled presentation frontend via D-Bus + optional GNOME Shell extension
+- **Status**: **Amended 2026-09-19** — accepted, not superseded. The content does not change; the
+  state does. It had been accepted and uncoded since v0.1.0, and v1.0 turns it into work with a
+  phase, tasks and acceptance criteria (F4, HU-106). One real change: declaring the *scope* of the
+  alert guarantee is now an independent capability that lands whether or not the Wayland spike
+  succeeds, so the product stops promising more than it delivers either way.
 - **Context**: the core "impossible to ignore" guarantee (OBJ-1, RF-15/16/19) depends on
   *topmost* + focus stealing + no window decoration. Under **Wayland** (GNOME's default today),
   an X11/XWayland app like **Tkinter** **cannot** reliably force `-topmost`, `focus_force`, or
@@ -454,7 +467,7 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   so the `Supervisor` (tasks `ws`/`rest`/`pipeline`) runs as a Textual **worker**
   (`run_worker(supervisor.run(), exclusive=True)`) on the **same event loop** as the app,
   started in `on_mount()`. The `Processor` therefore calls `AlertController.enqueue` **directly**
-  (no `AsyncioTkBridge`). This makes the TUI path simpler than the GUI path.
+  (no `AsyncioUiBridge`). This makes the TUI path simpler than the GUI path.
 - **Reuses the existing effect contract**: `Application._controller_for_tui` builds the same
   `AlertController` used by Tkinter, injecting `create_window = tui_app.push_alert` (matching the
   `(data, severity, on_acknowledge)` factory signature). `push_alert` returns a small
@@ -658,6 +671,78 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   pruned until the next `register()` — harmless (no unbounded growth risk in that scenario, since
   nothing is being added either) but worth noting for anyone tempted to rely on `state.json` being
   tightly pruned at all times rather than "pruned whenever it grows."
+
+### ADR-019 — `tomlkit` for the config write path, `tomllib` stays the reader
+- **Status**: Accepted 2026-09-19. Amends ADR-007. Enables REQ-CFG-009..012 (F5).
+- **Context**: the configuration panel (RF/REQ-GUI-001..005) saves changes into a file carrying
+  **46 lines of comments** that are the user's inline help, and that the user also edits by hand.
+- **Decision**: **`tomlkit`** on the write path only. `tomllib` remains the reader, so the agent's
+  startup path is untouched and `tomlkit` is imported only when something is being saved.
+- **Alternatives considered and rejected**: `tomli-w` (does not preserve comments -- the first
+  save would delete all 46); re-serializing from the pydantic models (same loss, plus section
+  order); a side-car file merged on read (two sources of truth, contradicts REQ-GUI-005);
+  switching format to one with a stdlib writer (loses readability and comments).
+- **Consequences**: one new dependency, the only one the configuration epic introduces. Writing is
+  validate-then-write, by temp file and rename, with a backup: Art. 3 does not allow a half-written
+  config to be the thing the agent reads next boot.
+
+### ADR-025 — SQLite for the history, JSON for the operational state
+- **Status**: Accepted 2026-09-19. Constitutional amendment E-05. Enables REQ-HIS-001..006 (F6).
+- **Context**: the history (B-41) has to answer queries by date range, magnitude, distance and
+  network. The constitution said *"no database"*, on the grounds that *"state is a few KB in
+  memory queried by membership"*.
+- **Decision**: **SQLite for the history**, in its own file beside the state. **The operational
+  state stays in JSON, with no exception.**
+- **Why the original argument does not cover this case**: it is literally true of the operational
+  state and literally false of the history -- tens of thousands of rows a year, queried by range
+  rather than by membership. A JSON file that must be loaded whole to filter by date is the reason
+  databases exist.
+- **Alternatives considered and rejected**: growing JSON/JSONL (whole-file load, no indexes); one
+  file per month (hand-rolled partitioning, still no index on magnitude or distance); a
+  client-server engine (a service to administer inside a single-process desktop product); storing
+  it in the state JSON (mixes the alert hot path with query data, which is exactly what E-05
+  avoids).
+- **Consequences**: **zero new dependencies** -- `sqlite3` ships with Python, which is what makes
+  the amendment defensible. Writing stays off the hot path (REQ-HIS-002: a history failure must
+  not stop an alert). One more file to back up, in the same per-platform directory as the state,
+  and migrations to maintain via `PRAGMA user_version`, applied in a transaction at open.
+
+### ADR-030 — Flet for every window of the GUI (alert, panel, history, About)
+- **Status**: Accepted 2026-10-17. Supersedes ADR-003; amends ADR-006 and ADR-027.
+- **Context**: two asks Tk could not meet at a sensible cost. The configuration panel has to be
+  **responsive** -- readable on a half-screen laptop and on a wide monitor -- and the alert has to
+  show **where** the earthquake was: a map with a pin on the epicentre, its zone, coordinates and
+  magnitude. Tk has no layout by breakpoints and no map widget; the history map was a hand-rolled
+  tile client, a disk cache and a Pillow-to-Tk bridge. GTK (PyGObject) was weighed and rejected:
+  first-class on Linux only, painful on Windows/macOS packaging.
+- **Decision**: **Flet** (`flet[desktop]`, Flutter under the hood) for the alert, the panel, the
+  history and About, with **flet-map** for both maps (OpenStreetMap tiles). The tray stays on
+  `pystray` (ADR-012); the TUI stays on Textual (ADR-013).
+  - **One window per process.** Flet drives a single native window, so `notify/flet_shell.py`
+    (`FletShell`) owns the page and re-applies a fixed precedence on every change: an **alert**
+    (always on top, title bar hidden, `prevent_close`, re-raised on `blur`, ENTER acknowledges)
+    over the **screen** the user opened, over **nothing** (hidden in the agent; the run ends in
+    `--simulate`/`--settings`). Acknowledging an alert gives back the open screen with its edits.
+  - **Threads (ADR-006 kept)**: Flet's UI loop on the main thread, the agent's asyncio loop on a
+    worker. `FletShell.after(ms, fn)` is the one thread-safe way in (`call_soon_threadsafe`), so
+    `AsyncioUiBridge` and the tray callbacks keep their contract.
+  - **Alert map**: `notify/map_view.py` -- epicentre pin with a caption (magnitude, place,
+    coordinates), a circle sized by magnitude, and the reference point; the camera frames both
+    when they are within 2 500 km, otherwise the epicentre alone. Without tiles the pin, caption
+    and the text's coordinates are still there.
+  - **Responsive layout**: `ResponsiveRow` spans declared in `notify/ui_scale.py` (panel fields
+    1/2/3 columns; alert text|map and history table|map side by side from `md`/`lg`).
+- **Alternatives considered and rejected**: GTK 4/PyGObject (Linux-first; Windows/macOS bundles
+  are heavy and fragile); staying on Tk with a hand-made grid and a static map image (no
+  responsiveness, a second image pipeline to maintain); PyQt/PySide + QtWebEngine for the map
+  (ADR-003's cost, larger).
+- **Consequences**: two dependencies (`flet[desktop]`, `flet-map`, both ceilinged `<2`); the
+  desktop client is a Flutter binary that needs GTK 3 at runtime on Linux (`libgtk-3-0`, see
+  `.devcontainer`). `tiles.py` (own tile client + disk cache) is removed: tiles are fetched by
+  the client, only while a map is on screen -- the alert's map now counts (E-06 bound enforced by
+  `tests/test_map_view.py`). The Wayland limit of ADR-010 is unchanged: `always_on_top` meets the
+  same compositor. Controls are plain dataclasses, so the suite builds every view headless; the
+  test conftest forbids starting the client.
 
 ## 12. Traceability
 

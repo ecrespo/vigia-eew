@@ -2,7 +2,7 @@
 
 `build_icon` assembles a `pystray.Icon` with a menu (status, pause/resume, edit
 configuration, quit); `TrayIcon` runs it on a separate worker thread, leaving
-Tkinter as the exclusive owner of the main thread (ADR-006). Any failure while
+Flet's UI loop as the exclusive owner of the main thread (ADR-006). Any failure while
 building or starting the icon (missing graphical backend, GNOME/Wayland without
 a tray extension, etc.) is isolated: a *warning* is logged and the agent keeps
 running without the icon, just like `notify/toast.py` and `geoloc.py`.
@@ -15,7 +15,7 @@ import os
 import subprocess
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -49,6 +49,27 @@ def _open_command(path: Path) -> list[str] | None:
     return ["xdg-open", str(path)]
 
 
+def menu_reachable(*, backend: str, env: Mapping[str, str], platform: str) -> bool:
+    """Whether an icon built on `backend` can actually open its menu.
+
+    pystray picks its backend at import time: AppIndicator (StatusNotifierItem
+    over D-Bus) when PyGObject is installed, and `_xorg` -- a legacy XEmbed
+    tray icon drawn with python-xlib -- when it is not. A frozen build carries
+    no PyGObject, so it always lands on `_xorg`.
+
+    Under X11 that is fine. Under Wayland it is the worst kind of broken: a
+    GNOME extension still shows the icon, so the agent looks configurable, and
+    the click that should open the menu reaches nothing. Naming it in the log
+    is the difference between "the tray is unavailable" -- which the user can
+    act on -- and an icon that silently does nothing.
+    """
+    if platform in ("darwin", "win32"):
+        return True
+    if backend != "pystray._xorg":
+        return True
+    return not (env.get("WAYLAND_DISPLAY") or env.get("XDG_SESSION_TYPE") == "wayland")
+
+
 def open_config(path: Path, *, logger: logging.Logger | None = None) -> None:
     """Opens `config.toml` with the OS's associated app; creates it if missing (RF-34)."""
     log = logger or logging.getLogger("vigia_eew.tray")
@@ -76,11 +97,26 @@ def build_icon(
     toggle_pause: Callable[[], None],
     edit_config: Callable[[], None],
     exit: Callable[[], None],
+    open_panel: Callable[[], None] | None = None,
+    open_history: Callable[[], None] | None = None,
+    open_about: Callable[[], None] | None = None,
     icon_path: Path | None = None,
     locale_code: str = DEFAULT_LOCALE,
+    logger: logging.Logger | None = None,
 ) -> Icon:
     """Assembles the `pystray.Icon` with its menu; does not start it (see `TrayIcon`)."""
     from pystray import Icon, Menu, MenuItem  # lazy: backend connects to X at import
+
+    log = logger or logging.getLogger("vigia_eew.tray")
+    if not menu_reachable(backend=Icon.__module__, env=os.environ, platform=sys.platform):
+        # Not fatal, and not silent either: the icon appears and its menu does
+        # not, so the way into the configuration is `vigia-eew --settings`
+        # (what the desktop entry's action runs).
+        log.warning(
+            "tray_menu_unreachable backend=%s detail=%s",
+            Icon.__module__,
+            "no AppIndicator backend on a Wayland session; use `vigia-eew --settings`",
+        )
 
     image = Image.open(icon_path or default_icon_path())
 
@@ -91,19 +127,48 @@ def build_icon(
     def _last_alert_text(_item: MenuItem) -> str:
         return state.last_alert or t("tray_no_alerts_yet", locale_code)
 
+    def _guarantee_text(_item: MenuItem) -> str:
+        # The product promises an alert that cannot be ignored. Where it
+        # cannot keep that promise, saying so is the least it owes the user
+        # (REQ-ALE-003, CA-106.2).
+        return t(f"tray_alert_{state.presentation.guarantee}", locale_code)
+
     def _pause_text(_item: MenuItem) -> str:
         key = "tray_resume_notifications" if paused() else "tray_pause_notifications"
         return t(key, locale_code)
 
-    menu = Menu(
+    # Both ways in, in this order: the panel first because it is the one the
+    # product's own user needs, the file second because it is the one that
+    # stays the source of truth (REQ-GUI-005, CA-108.10). `open_panel` is
+    # optional -- the headless frontend has no window to put a panel in,
+    # and losing the file entry there would leave no way in at all.
+    entries = [
         MenuItem(_status_text, action=None, enabled=False),
         MenuItem(_last_alert_text, action=None, enabled=False),
+        MenuItem(_guarantee_text, action=None, enabled=False),
         Menu.SEPARATOR,
         MenuItem(_pause_text, action=lambda icon, item: toggle_pause()),
-        MenuItem(t("tray_edit_config", locale_code), action=lambda icon, item: edit_config()),
+    ]
+    if open_panel is not None:
+        entries.append(
+            MenuItem(t("tray_open_panel", locale_code), action=lambda icon, item: open_panel())
+        )
+    if open_history is not None:
+        entries.append(
+            MenuItem(t("tray_open_history", locale_code), action=lambda icon, item: open_history())
+        )
+    entries.append(
+        MenuItem(t("tray_edit_config", locale_code), action=lambda icon, item: edit_config())
+    )
+    if open_about is not None:
+        entries.append(
+            MenuItem(t("tray_about", locale_code), action=lambda icon, item: open_about())
+        )
+    entries += [
         Menu.SEPARATOR,
         MenuItem(t("tray_quit", locale_code), action=lambda icon, item: exit()),
-    )
+    ]
+    menu = Menu(*entries)
     return Icon("vigia-eew", icon=image, title="Vigía-eew", menu=menu)
 
 

@@ -81,6 +81,18 @@ class StateStore:
         """Indicates whether an event id was already alerted (RF-10)."""
         return any(a.id == event_id for a in self._state.alerted_ids)
 
+    def trace_of(self, event_id: str) -> str | None:
+        """The correlation id of the journey that alerted `event_id`, if known.
+
+        None for state written before v1.0, which carries no trace ids. An
+        unlinked journey is worth less than a linked one and still better than
+        refusing to load somebody's state file.
+        """
+        for alert in self._state.alerted_ids:
+            if alert.id == event_id:
+                return alert.trace_id or None
+        return None
+
     def register_alerted(self, alert: AlertedId) -> None:
         """Adds an alerted id if it wasn't already present."""
         if not self.already_alerted(alert.id):
@@ -94,8 +106,23 @@ class StateStore:
                 a.acknowledged_utc = when
                 break
 
-    def add_signature(self, signature: EventSignature) -> None:
-        """Stores a recent signature for inter-source dedup (RF-09)."""
+    def add_signature(self, signature: EventSignature, *, replacing: str | None = None) -> None:
+        """Stores a recent signature for inter-source dedup (RF-09).
+
+        With `replacing`, the signature of that event id is swapped for this
+        one instead of a second being appended. That is what a higher-priority
+        arrival does (REQ-PIP-010): one earthquake keeps one signature, so the
+        next arrival is compared against the data that actually prevailed and
+        not against the one already overruled.
+
+        A `replacing` id that is not found falls back to appending -- state
+        written before v1.0 carries no event ids to match on.
+        """
+        if replacing is not None:
+            for index, existing in enumerate(self._state.recent_signatures):
+                if existing.event_id == replacing:
+                    self._state.recent_signatures[index] = signature
+                    return
         self._state.recent_signatures.append(signature)
 
     def update_usgs_cursor(self, cursor_ms: int) -> None:

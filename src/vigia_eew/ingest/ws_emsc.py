@@ -27,7 +27,7 @@ import websockets
 from vigia_eew.agent_state import AgentState
 from vigia_eew.backoff import exponential_backoff
 from vigia_eew.config import EMSCSource
-from vigia_eew.ingest import RawMessage
+from vigia_eew.ingest import RawMessage, mapping
 
 # Default connection factory: the real `websockets` client.
 _ConnectFactory = Callable[..., Any]
@@ -116,3 +116,26 @@ class WSIngestor:
         if self._rng is not None:
             kwargs["rng"] = self._rng
         return exponential_backoff(attempt, **kwargs)
+
+
+def to_fields(msg: RawMessage) -> dict[str, Any]:
+    """Translates an EMSC payload into the internal contract (API-SPEC §5.1).
+
+    EMSC uses lowercase `magtype`, ISO-8601 timestamps, the id in
+    `properties.unid`, and coordinates in `properties` rather than in the
+    GeoJSON geometry.
+    """
+    p = msg.feature["properties"]
+    return {
+        "id": str(p["unid"]),
+        "source": "EMSC",
+        "magnitude": float(p["mag"]),
+        "mag_type": str(p["magtype"]),
+        "place": p.get("flynn_region"),
+        "region": p.get("flynn_region"),
+        "lat": float(p["lat"]),
+        "lon": float(p["lon"]),
+        "depth_km": float(p["depth"]),
+        "time_utc": mapping.parse_iso(p["time"]),
+        "lastupdate_utc": mapping.parse_iso_optional(p.get("lastupdate")),
+    }
