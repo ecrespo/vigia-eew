@@ -50,6 +50,11 @@ The value of this shape is that there is exactly one integration point between t
 ([[src/vigia_eew/notify/queue.py#AsyncioUiBridge]]), so shutdown ordering and error handling only
 have to be correct in one place. See ADR-006.
 
+SIGTERM is routed through the same door as closing the window:
+[[src/vigia_eew/notify/flet_shell.py#FletShell#quit_on_terminate]] quits the shell, `ft.run`
+returns and the ordinary shutdown runs. Flet's loop installs no handler of its own, so without it
+`systemctl --user stop`, a logout or `kill` was ignored until something escalated to SIGKILL.
+
 ## The TUI is a separate run mode, not a second layer
 
 `--tui` ([[src/vigia_eew/tui.py#VigiaTuiApp]]) exists so the agent can run on a headless server

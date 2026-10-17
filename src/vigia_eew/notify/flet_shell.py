@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -157,6 +158,29 @@ class FletShell:
         self._closed = True
         self.page.window.prevent_close = False
         self._call_async(self._destroy)
+
+    def quit_on_terminate(self) -> bool:
+        """Makes SIGTERM end the run the way closing the window does.
+
+        Flet's loop owns the main thread and installs no handler, so SIGTERM --
+        what `systemctl --user stop`, a logout or a plain `kill` send -- was
+        ignored until something escalated to SIGKILL, and shutdown never ran.
+        Returns False where the loop cannot take signal handlers (Windows,
+        which ends a GUI process another way).
+        """
+        loop = self._loop
+        if loop is None:
+            return False
+
+        def terminate() -> None:
+            self._log.info("terminate_requested signal=SIGTERM")
+            self.quit()
+
+        try:
+            loop.add_signal_handler(signal.SIGTERM, terminate)
+        except (NotImplementedError, RuntimeError, ValueError):
+            return False
+        return True
 
     async def _destroy(self) -> None:
         # Destroying the window ends the session the call travels on, so the
