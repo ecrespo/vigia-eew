@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from vigia_eew.config import ReferencePoint
 from vigia_eew.models import AlertedId, EventSignature
 from vigia_eew.state import StateStore
@@ -113,3 +115,47 @@ def test_cache_and_retrieve_location(tmp_path):
     assert cached.name == "Maracaibo"
     assert cached.lat == 10.63
     assert cached.lon == -71.64
+
+
+def test_a_failed_write_leaves_no_temp_file_behind(tmp_path, monkeypatch):
+    """The atomic write cleans up after itself, and the old file survives."""
+    s = _store(tmp_path)
+    s.load()
+    s.save()
+    before = (tmp_path / "state.json").read_text(encoding="utf-8")
+
+    def refuse(*_args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("vigia_eew.state.os.replace", refuse)
+    s.register_alerted(AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC)))
+    with pytest.raises(OSError, match="disk full"):
+        s.save()
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["state.json"]
+    assert (tmp_path / "state.json").read_text(encoding="utf-8") == before
+
+
+def test_the_trace_of_an_unknown_event_is_none(tmp_path):
+    s = _store(tmp_path)
+    s.load()
+    s.register_alerted(
+        AlertedId(id="abc", source="EMSC", time_utc=datetime.now(UTC), trace_id="t-1")
+    )
+
+    assert s.trace_of("abc") == "t-1"
+    assert s.trace_of("zzz") is None
+
+
+def test_a_prevailing_arrival_replaces_its_signature(tmp_path):
+    """REQ-PIP-010: one earthquake keeps one signature, the prevailing one."""
+    s = _store(tmp_path)
+    s.load()
+    now = datetime.now(UTC)
+    s.add_signature(EventSignature(lat=10, lon=-66, time_utc=now, magnitude=4.0, event_id="a"))
+    s.add_signature(EventSignature(lat=11, lon=-67, time_utc=now, magnitude=5.0, event_id="b"))
+
+    better = EventSignature(lat=10.1, lon=-66.1, time_utc=now, magnitude=4.2, event_id="a2")
+    s.add_signature(better, replacing="a")
+
+    assert [sig.event_id for sig in s.state.recent_signatures] == ["a2", "b"]
