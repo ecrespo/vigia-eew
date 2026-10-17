@@ -31,9 +31,14 @@ PID=$!
 
 # Wait for the alert to reach the screen, or for the process to die trying --
 # a binary missing a resource dies here, which is the point.
+# 240 x 0.25 s: the first run of a Flet binary unpacks its desktop client
+# (ADR-030) before the window can exist, which on a cold runner takes seconds.
 PRESENTED=0
-for _ in $(seq 80); do
-    if grep -q "alert_presented" "$LOG"; then PRESENTED=1; break; fi
+for _ in $(seq 240); do
+    # `alert_window_shown`, not `alert_presented`: the latter is logged before
+    # the window is built, and v1.0.0's first tag passed it with a binary that
+    # crashed drawing the alert (Flet's icon catalogue missing from the bundle).
+    if grep -q "alert_window_shown" "$LOG"; then PRESENTED=1; break; fi
     kill -0 "$PID" 2>/dev/null || break
     sleep 0.25
 done
@@ -52,20 +57,23 @@ if [[ "$ACKNOWLEDGE" -ne 1 ]]; then
     exit 0
 fi
 
-# The window is overrideredirect, so it has no entry a window manager could
-# name -- it is found by having focus, not by title. ENTER acknowledges
-# (configure_undismissable), and acknowledging is the only way `--simulate`
-# exits, so a clean exit *is* the assertion.
+# The alert window hides its title bar but keeps its title, so it is found by
+# name and given focus first: under Xvfb there is no window manager to hand
+# focus to a new window. ENTER acknowledges (the shell routes it to the alert),
+# and acknowledging is the only way `--simulate` exits, so a clean exit *is*
+# the assertion.
 #
-# Sent repeatedly rather than once, because `alert_presented` is logged when
-# the controller creates the window and the window takes focus a moment
+# Sent repeatedly rather than once, because `alert_window_shown` is logged when
+# the controller has built the window and the window takes focus a moment
 # later -- under Xvfb, with no window manager arbitrating, sometimes several
 # moments later. A single keystroke into that gap goes nowhere and the smoke
 # fails on a binary that is fine. Observed: two runs of the same binary, one
 # pass and one failure. Extra keystrokes after the window is gone land on the
 # root window and do nothing, so retrying costs nothing and removes the race.
-for _ in $(seq 40); do
+for _ in $(seq 120); do
     kill -0 "$PID" 2>/dev/null || break
+    WIN="$(xdotool search --name 'Vigía-eew' 2>/dev/null | tail -1)"
+    if [[ -n "$WIN" ]]; then xdotool windowfocus "$WIN" 2>/dev/null; fi
     xdotool key --clearmodifiers Return 2>/dev/null
     sleep 0.25
 done
