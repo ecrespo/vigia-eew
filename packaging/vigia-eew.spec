@@ -79,6 +79,12 @@ a = Analysis(
         (os.path.join(_PKG_DIR, "config.toml.example"), "vigia_eew"),
         *collect_data_files("desktop_notifier"),
         (_FLET_CLIENT, "flet_desktop/app"),
+        # Flet resolves `ft.Icons.*` from a JSON catalogue it reads at runtime, by
+        # path, which static analysis cannot see. Without it the alert dies
+        # building its first icon -- after `alert_presented` is logged, which is
+        # why only the Linux smoke, the one that acknowledges, caught it.
+        *collect_data_files("flet"),
+        *collect_data_files("flet_map"),
     ],
     # `desktop-notifier` resuelve su backend (dbus-fast en Linux, UserNotifications en
     # macOS, WinRT en Windows) con imports condicionales que PyInstaller a veces no

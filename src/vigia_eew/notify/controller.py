@@ -112,6 +112,10 @@ class AlertController:
             ev.severity,
         )
         self._window = self._create_window(data, ev.severity, self._alert_queue.acknowledge)
+        # Logged once the window exists, not when it was asked for: the release
+        # smoke waits for this line, so a binary that dies drawing the alert
+        # fails the build instead of passing it (REQ-OPS-008).
+        self._log.info("alert_window_shown trace=%s id=%s", ev.trace_id, ev.id)
         if self._play_sound is not None:
             self._play_sound(ev.severity)
         if self._toast is not None:

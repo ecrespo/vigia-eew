@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 
 from vigia_eew.agent_state import AgentState
@@ -123,3 +124,26 @@ def test_show_updates_agent_state():
     assert state.last_alert is not None
     assert "M 6.1" in state.last_alert
     assert "La Guaira" in state.last_alert
+
+
+def test_the_window_is_logged_as_shown_only_once_it_exists(caplog):
+    """REQ-OPS-008: the release smoke waits for this line, so it must mean it."""
+    cap = _Cap()
+    with caplog.at_level("INFO", logger="vigia_eew.notify.controller"):
+        _controller(cap).enqueue(_ev())
+
+    assert any("alert_window_shown" in r.getMessage() for r in caplog.records)
+
+
+def test_a_window_that_fails_to_build_is_not_logged_as_shown(caplog):
+    def broken(data, severity, on_acknowledge):
+        raise FileNotFoundError("icons.json")
+
+    ctrl = AlertController(create_window=broken, reference_name="Caracas")
+    with caplog.at_level("INFO", logger="vigia_eew.notify.controller"):
+        with contextlib.suppress(FileNotFoundError):
+            ctrl.enqueue(_ev())
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("alert_presented" in m for m in messages)
+    assert not any("alert_window_shown" in m for m in messages)

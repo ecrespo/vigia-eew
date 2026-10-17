@@ -123,13 +123,16 @@ construir_deb_con_dpkg() {
     local tamano
     tamano="$(du -ks "$raiz/usr" | cut -f1)"
 
+    # The GUI is Flet (ADR-030): its Flutter client, bundled in the binary,
+    # links GTK 3 and EGL from the system. Undeclared, a minimal install gets a
+    # package that starts, logs and never opens the alert window.
     cat > "$raiz/DEBIAN/control" <<CONTROL
 Package: vigia-eew
 Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $arch
-Depends: libc6 (>= $glibc), zlib1g
+Depends: libc6 (>= $glibc), zlib1g, libgtk-3-0, libegl1, libgles2
 Installed-Size: $tamano
 Maintainer: Ernesto Crespo <ecrespo@gmail.com>
 Homepage: https://github.com/ecrespo/vigia-eew
@@ -157,6 +160,7 @@ elif command -v fpm >/dev/null; then
         --description "Agente de escritorio de alerta sísmica en tiempo real" \
         --url "https://github.com/ecrespo/vigia-eew" \
         --license "GPL-3.0-or-later" \
+        -d libgtk-3-0 -d libegl1 -d libgles2 \
         --package "$DIST/vigia-eew_${VERSION}_amd64.deb" \
         "$BIN=/usr/bin/vigia-eew" "${MAPEOS_FPM[@]}"
 else
@@ -168,6 +172,7 @@ if command -v fpm >/dev/null; then
         fpm -s dir -t rpm -n vigia-eew -v "$VERSION" \
             --description "Agente de escritorio de alerta sísmica en tiempo real" \
             --url "https://github.com/ecrespo/vigia-eew" \
+            -d gtk3 -d libglvnd-egl -d libglvnd-gles \
             --package "$DIST/vigia-eew-${VERSION}.x86_64.rpm" \
             "$BIN=/usr/bin/vigia-eew" "${MAPEOS_FPM[@]}"
     else
