@@ -2,7 +2,7 @@
 
 `build_icon` assembles a `pystray.Icon` with a menu (status, pause/resume, edit
 configuration, quit); `TrayIcon` runs it on a separate worker thread, leaving
-Tkinter as the exclusive owner of the main thread (ADR-006). Any failure while
+Flet's UI loop as the exclusive owner of the main thread (ADR-006). Any failure while
 building or starting the icon (missing graphical backend, GNOME/Wayland without
 a tray extension, etc.) is isolated: a *warning* is logged and the agent keeps
 running without the icon, just like `notify/toast.py` and `geoloc.py`.
@@ -140,7 +140,7 @@ def build_icon(
     # Both ways in, in this order: the panel first because it is the one the
     # product's own user needs, the file second because it is the one that
     # stays the source of truth (REQ-GUI-005, CA-108.10). `open_panel` is
-    # optional -- the headless frontend has no Tk window to put a panel in,
+    # optional -- the headless frontend has no window to put a panel in,
     # and losing the file entry there would leave no way in at all.
     entries = [
         MenuItem(_status_text, action=None, enabled=False),

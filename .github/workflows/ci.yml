@@ -17,8 +17,9 @@ on:
 permissions:
   contents: read
 
-# Use uv-managed CPython (python-build-standalone), which bundles tkinter — the
-# runner's system Python lacks it and the GUI modules import tkinter at load time.
+# Use uv-managed CPython (python-build-standalone), never the runner's interpreter.
+# The GUI is Flet (ADR-030); its controls build without a display, so the suite
+# never starts the desktop client.
 env:
   UV_PYTHON_PREFERENCE: only-managed
 
@@ -93,13 +94,10 @@ jobs:
       - uses: ./.github/actions/setup-python-env
         with:
           python-version: ${{ matrix.python-version }}
-      # The suite imports the GUI modules (tkinter + pystray's X backend), which need a
-      # display. Xvfb provides a headless one -- and since it is there, the
-      # real-window tests run here too (REQ-DEV-003): the alert, the
-      # configuration panel, the history table and the Pillow-to-Tk bridge the
-      # map depends on. Those are the checks that catch what only appears when
-      # a widget is actually created, and a check only the developer runs is a
-      # check that eventually stops being run.
+      # pystray's X backend needs a display at import. Xvfb provides a headless
+      # one -- and since it is there, the opt-in real-toolkit tests run here too
+      # (REQ-DEV-003): the tray and the Textual driver. A check only the
+      # developer runs is a check that eventually stops being run.
       - run: sudo apt-get update && sudo apt-get install -y xvfb
       - env:
           VIGIA_GUI_TESTS: "1"

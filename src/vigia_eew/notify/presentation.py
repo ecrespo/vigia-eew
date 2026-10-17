@@ -37,6 +37,25 @@ class AlertData:
     local_time: str
     source: str
     severity: SeverityLevel
+    #: Where the alert's map puts the epicentre, and the magnitude it sizes the
+    #: symbol by. Kept numeric next to the strings above: the map needs to
+    #: compute with them, the labels only to read them.
+    latitude: float = 0.0
+    longitude: float = 0.0
+    magnitude_value: float = 0.0
+    #: The same position, phrased for reading ("10.60° N, 66.93° W").
+    coordinates: str = ""
+    #: The user's reference point, drawn next to the epicentre so the distance
+    #: line in the text has something to point at. None when it is unknown.
+    reference: tuple[float, float] | None = None
+    reference_name: str = ""
+
+
+def format_coordinates(lat: float, lon: float) -> str:
+    """Latitude and longitude with hemispheres, as a person reads them."""
+    ns = "N" if lat >= 0 else "S"
+    ew = "E" if lon >= 0 else "W"
+    return f"{abs(lat):.2f}° {ns}, {abs(lon):.2f}° {ew}"
 
 
 def severity_color(severity: SeverityLevel) -> str:
@@ -74,6 +93,7 @@ def format_event(
     zone: str = VENEZUELA_ZONE,
     reference_name: str = "reference",
     locale_code: str = DEFAULT_LOCALE,
+    reference: tuple[float, float] | None = None,
 ) -> AlertData:
     """Builds the readable alert fields from the event (RF-18, RF-35)."""
     return AlertData(
@@ -84,6 +104,12 @@ def format_event(
         local_time=_local_time(ev, zone),
         source=ev.source,
         severity=ev.severity,
+        latitude=ev.lat,
+        longitude=ev.lon,
+        magnitude_value=ev.magnitude,
+        coordinates=format_coordinates(ev.lat, ev.lon),
+        reference=reference,
+        reference_name=reference_name,
     )
 
 

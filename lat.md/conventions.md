@@ -74,20 +74,20 @@ semgrep, trivy) runs on PRs to `main`. Commits are conventional, one per complet
 Anything mutable that more than one thread touches has a row below, naming the thread it belongs
 to and the primitive that makes the sharing safe.
 
-The agent runs on three threads by design (ADR-006): the **main** thread owns Tkinter, a
+The agent runs on three threads by design (ADR-006): the **main** thread owns Flet's UI loop, a
 **worker** thread owns the asyncio loop, and `pystray` runs the **tray** on its own.
 
 This table exists because of ADR-002. The shutdown race was never a hard concurrency problem —
-`Application._loop` and `._sup` were written on the worker thread and read from the Tk thread
+`Application._loop` and `._sup` were written on the worker thread and read from the UI thread
 with nothing in between, while [[src/vigia_eew/agent_state.py#AgentState]], two files away, was
 already protecting exactly that kind of state with exactly the primitive needed. The criterion
 existed. Nobody had written down that the question applied here too, so it never got asked.
 
 | State | Written by | Read by | Synchronised with |
 |---|---|---|---|
-| `AgentRuntime` — the worker's loop and supervisor | worker | main (Tk), at shutdown and when publishing a toast | `threading.Lock` for the pair, plus a `threading.Event` so a reader arriving early waits instead of seeing None |
+| `AgentRuntime` — the worker's loop and supervisor | worker | main (UI), at shutdown and when publishing a toast | `threading.Lock` for the pair, plus a `threading.Event` so a reader arriving early waits instead of seeing None |
 | `AgentState` — connection status and last alert | worker (ingestion), main (on showing an alert) | tray | `threading.Lock` on every accessor |
-| `AsyncioTkBridge` — events crossing into the UI | worker | main (Tk), polled with `widget.after()` | `queue.Queue`, which is thread-safe by construction |
+| `AsyncioUiBridge` — events crossing into the UI | worker | main (UI), polled with `FletShell.after()` | `queue.Queue`, which is thread-safe by construction |
 | `raw_queue` — arrivals awaiting the pipeline | worker only | worker only | none needed: `asyncio.Queue` is *not* thread-safe, and it never leaves the loop that owns it |
 | `Supervisor._stop` | worker only | worker only | `asyncio.Event`; a stop from another thread goes through `loop.call_soon_threadsafe` |
 | `AgentState.presentation` — whether the alert guarantee holds here | main, once at startup | tray | none needed: a frozen value decided before the tray thread exists, never mutated after |

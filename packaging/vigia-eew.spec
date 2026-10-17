@@ -14,7 +14,10 @@ hicolor, y lo instala `build_linux.sh`.
 
 import os
 import sys
+import urllib.request
 
+import flet_desktop
+from flet_desktop.version import version as _FLET_VERSION
 from PyInstaller.utils.hooks import collect_data_files
 
 import vigia_eew
@@ -38,6 +41,32 @@ _ICNS = os.path.join(SPECPATH, "icon.icns")
 # `ModuleNotFoundError: No module named 'desktop_notifier.resources'` (visto en el
 # `.deb` de la release v0.1.2). `collect_data_files` copia sus archivos de datos;
 # el hiddenimport asegura que el subpaquete en sí (su `__init__.py`) se incluya.
+# La GUI es Flet (ADR-030): un cliente Flutter aparte que `flet_desktop` busca primero
+# en `flet_desktop/app/<artefacto>` y, si no está, **descarga de GitHub en el primer
+# arranque**. Para un agente de alertas eso no vale: una primera alerta sin red sería
+# una alerta sin ventana. Así que el archivo del cliente viaja dentro del binario,
+# descargado aquí, al construir, de la misma release que pediría el runtime.
+# `VIGIA_FLET_CLIENT` permite pasar un archivo ya descargado (builds sin red).
+def _flet_client_archive():
+    artifact = flet_desktop.get_artifact_filename()
+    given = os.environ.get("VIGIA_FLET_CLIENT")
+    if given:
+        return given
+    dest_dir = os.path.join(SPECPATH, "..", "build", "flet-client", _FLET_VERSION)
+    dest = os.path.join(dest_dir, artifact)
+    if not os.path.exists(dest):
+        os.makedirs(dest_dir, exist_ok=True)
+        url = (
+            f"https://github.com/flet-dev/flet/releases/download/v{_FLET_VERSION}/{artifact}"
+        )
+        print(f"vigia-eew.spec: descargando el cliente Flet {url}")
+        urllib.request.urlretrieve(url, dest + ".part")  # noqa: S310 - URL fija de release
+        os.replace(dest + ".part", dest)
+    return dest
+
+
+_FLET_CLIENT = _flet_client_archive()
+
 a = Analysis(
     [os.path.join(SPECPATH, "entrypoint.py")],
     pathex=[],
@@ -49,13 +78,15 @@ a = Analysis(
         (_ASSETS_DIR, "vigia_eew/assets"),
         (os.path.join(_PKG_DIR, "config.toml.example"), "vigia_eew"),
         *collect_data_files("desktop_notifier"),
+        (_FLET_CLIENT, "flet_desktop/app"),
     ],
     # `desktop-notifier` resuelve su backend (dbus-fast en Linux, UserNotifications en
     # macOS, WinRT en Windows) con imports condicionales que PyInstaller a veces no
     # detecta solo con el análisis estático; si el binario falla en runtime con
     # `ModuleNotFoundError`, reconstruir con `pyinstaller --debug=imports` para ver
     # qué falta y sumarlo aquí.
-    hiddenimports=["desktop_notifier", "desktop_notifier.resources"],
+    # `flet` importa `flet_desktop` dentro de una función, al abrir la ventana.
+    hiddenimports=["desktop_notifier", "desktop_notifier.resources", "flet_desktop"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -80,7 +111,7 @@ exe = EXE(
     upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # ventana de alerta Tkinter; no necesita consola (F8-2)
+    console=False,  # GUI Flet (ADR-030); no necesita consola (F8-2)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

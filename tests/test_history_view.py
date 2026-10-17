@@ -11,7 +11,6 @@ the widget tree is a thin thing on top with its own opt-in smoke.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -262,7 +261,15 @@ def test_the_list_view_imports_nothing_that_needs_a_network(tmp_path: Path) -> N
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
 
-    for forbidden in ("httpx", "socket", "urllib", "requests", "vigia_eew.tiles"):
+    for forbidden in (
+        "httpx",
+        "socket",
+        "urllib",
+        "requests",
+        "flet_map",
+        "vigia_eew.notify.history_map",
+        "vigia_eew.notify.map_view",
+    ):
         assert not any(name.startswith(forbidden) for name in imported), (
             f"the list view imports {forbidden}"
         )
@@ -277,46 +284,55 @@ def test_it_is_in_spanish_when_the_agent_is(store: HistoryStore) -> None:
     assert far.reason == "Fuera del radio"
 
 
-# --- The widget tree (opt-in: VIGIA_GUI_TESTS=1) ----------------------------------
+# --- The controls (Flet dataclasses: no display needed) --------------------------
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_the_real_table_shows_a_row_per_arrival(store: HistoryStore) -> None:
-    import tkinter as tk
-
+def test_the_real_table_shows_a_row_per_arrival(store: HistoryStore) -> None:
     from vigia_eew.notify.history_view import HistoryView
 
-    root = tk.Tk()
-    view = HistoryView(root, HistoryList(store))
-    root.update_idletasks()
+    view = HistoryView(HistoryList(store))
 
-    assert len(view.table.get_children()) == 3
-    assert view.table["columns"] == tuple(column.key for column in COLUMNS)
-    root.destroy()
+    assert len(view.table.rows) == 3
+    assert len(view.table.columns) == len(COLUMNS)
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_filtering_in_the_real_table_reduces_it(store: HistoryStore) -> None:
-    import tkinter as tk
-
+def test_filtering_in_the_real_table_reduces_it(store: HistoryStore) -> None:
     from vigia_eew.notify.history_view import HistoryView
 
-    root = tk.Tk()
-    view = HistoryView(root, HistoryList(store))
-    root.update_idletasks()
-
+    view = HistoryView(HistoryList(store))
     view.listing.set_filter(min_magnitude=5.0)
     view.refresh()
-    root.update_idletasks()
 
-    assert len(view.table.get_children()) == 1
-    root.destroy()
+    assert len(view.table.rows) == 1
+
+
+def test_the_verdict_menu_filters_by_verdict(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(store))
+    view._verdict.value = "discarded"
+    view._apply_verdict()
+    discarded = len(view.table.rows)
+    view._clear()
+
+    assert 0 < discarded < 3
+    assert len(view.table.rows) == 3
+
+
+def test_a_long_history_draws_a_bounded_table_and_says_so(tmp_path: Path) -> None:
+    """A Flutter DataTable lays out every cell; 500 rows took seconds to appear."""
+    from vigia_eew.notify import history_view
+    from vigia_eew.notify.history_view import HistoryView
+
+    many = HistoryStore(tmp_path / "many.sqlite3")
+    many.open()
+    for n in range(history_view.TABLE_ROW_LIMIT + 5):
+        many.record(_record(source_event_id=f"e-{n}"))
+    view = HistoryView(HistoryList(many))
+
+    assert len(view.table.rows) == history_view.TABLE_ROW_LIMIT
+    assert str(history_view.TABLE_ROW_LIMIT) in view.status.value
+    many.close()
 
 
 # --- Reaching it from the tray (REQ-HIS-005) --------------------------------------
@@ -339,52 +355,39 @@ def test_the_tray_offers_the_history() -> None:
     assert any(t.lower().startswith("history") for t in texts)
 
 
-def test_opening_the_history_is_scheduled_on_the_tk_thread(monkeypatch, tmp_path: Path) -> None:
-    """Tkinter is not thread-safe and the tray is not on its thread (ADR-006)."""
+def test_opening_the_history_is_scheduled_on_the_ui_thread(
+    monkeypatch, tmp_path: Path, fake_shell
+) -> None:
+    """Flet's controls belong to the UI loop and the tray is not on it (ADR-006)."""
     import vigia_eew.wiring as wiring_module
     from vigia_eew.app import Application
     from vigia_eew.config import Settings
 
     opened: list[int] = []
-    monkeypatch.setattr(wiring_module.Wiring, "open_history", lambda self, root: opened.append(1))
-
-    class _FakeRoot:
-        def __init__(self) -> None:
-            self.after_calls: list[tuple[int, object]] = []
-
-        def after(self, ms, callback):
-            self.after_calls.append((ms, callback))
+    monkeypatch.setattr(wiring_module.Wiring, "open_history", lambda self, shell: opened.append(1))
 
     app = Application(Settings(), config_path=tmp_path / "config.toml")
-    app._root = _FakeRoot()
+    app._shell = fake_shell
 
     app._open_history()
 
-    assert len(app._root.after_calls) == 1
-    app._root.after_calls[0][1]()
+    assert len(fake_shell.after_calls) == 1
+    assert opened == []
+    fake_shell.run_pending()
     assert opened == [1]
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_the_tray_entry_opens_one_history_window(tmp_path: Path) -> None:
-    import tkinter as tk
-
+def test_the_tray_entry_opens_one_history_screen(tmp_path: Path, fake_shell) -> None:
     from vigia_eew.agent_state import AgentState
     from vigia_eew.config import Settings
     from vigia_eew.state import StateStore
     from vigia_eew.wiring import Wiring
 
-    root = tk.Tk()
-    root.withdraw()
     wiring = Wiring(Settings(), StateStore(tmp_path / "state.json"), AgentState())
 
-    first = wiring.open_history(root)
-    second = wiring.open_history(root)
-    root.update_idletasks()
+    first = wiring.open_history(fake_shell)
+    second = wiring.open_history(fake_shell)
 
     assert first is second
-    assert len([w for w in root.winfo_children() if isinstance(w, tk.Toplevel)]) == 1
-    root.destroy()
+    assert [key for key, _title, _view in fake_shell.screens] == ["history"]
+    wiring.close_history()

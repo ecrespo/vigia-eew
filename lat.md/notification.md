@@ -44,21 +44,21 @@ the situation where the alert matters most. See ADR-005.
 
 ## Tray icon is best effort and must never block startup
 
-[[src/vigia_eew/tray.py#TrayIcon]] runs `pystray` on its own worker thread, leaving Tkinter the
-sole owner of the main thread.
+[[src/vigia_eew/tray.py#TrayIcon]] runs `pystray` on its own worker thread, leaving Flet's UI
+loop the sole owner of the main thread.
 
 Both building and running it are wrapped so failures only log a warning, because two known
 platform limitations cannot be fixed from this codebase: GNOME/Wayland without the AppIndicator
 extension does not show legacy tray icons, and macOS's Cocoa requires `pystray.run()` on the main
-thread, which conflicts with Tkinter.
+thread, which conflicts with the UI loop.
 
 The agent starting without a visible tray icon is the intended degraded behavior. `pystray` and
 `Pillow` are a documented exception to the minimal-dependency rule. See ADR-012.
 
 ## Menu callbacks are scheduled by which thread they touch
 
-Callbacks that may touch Tk (`resume` can create a window) are marshalled back with
-`root.after(0, ...)`; callbacks that only shell out (`edit_config`) run on the icon's thread.
+Callbacks that may touch the UI (opening the panel, pausing) are marshalled back with
+`shell.after(0, ...)`; callbacks that only shell out (`edit_config`) run on the icon's thread.
 
 [[src/vigia_eew/agent_state.py#AgentState]] is the lock-protected snapshot those threads share.
 It is process-lifetime only and deliberately not persisted.

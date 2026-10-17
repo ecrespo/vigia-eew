@@ -61,7 +61,7 @@ uv venv && uv pip install -e ".[dev]"   # setup (recommended); or: pip install -
 pytest                                  # full suite
 PYTHONPATH=src pytest -q                # if the package isn't installed editable
 pytest tests/test_dedup.py::test_x -q   # a single test
-VIGIA_GUI_TESTS=1 pytest                # includes the real-Tkinter smokes (opt-in, needs a display)
+VIGIA_GUI_TESTS=1 pytest                # includes the real-toolkit smokes (opt-in, needs a display)
 
 ruff check .                            # lint (line-length 100, rules E,F,I,UP,B)
 mypy src                                # type check (strict = true)
@@ -124,15 +124,18 @@ down the process — it must never die from a transient network or parsing failu
 
 New/relevant events reach `notify/` (`AlertController` in `controller.py`), which
 orchestrates three effects as **injectable callbacks** (so they can be tested without
-real I/O): `create_window` (non-dismissable, topmost Tkinter, `alert_window.py`),
+real I/O): `create_window` (non-dismissable, topmost Flet view with an epicentre map —
+`alert_window.py` + `map_view.py`, flet-map/OSM tiles),
 `play_sound` (`sound.py`, by severity), and `send_toast` (`toast.py`,
 `desktop-notifier`). `queue.py` keeps **one alert at a time** and updates it in place on
 an `update`.
 
-**asyncio↔Tkinter bridge** (`app.py`, ADR-006 in `docs/TECHNICAL-DESIGN.md`): Tkinter
-must run on the main thread, ingestion lives in asyncio on a separate worker thread.
-`AsyncioTkBridge` (in `notify/queue.py`) crosses events between both via a thread-safe
-queue + `widget.after()`. `Application` (`app.py`) wires all of this together; it exposes
+**asyncio↔Flet bridge** (`app.py`, ADR-006/ADR-030 in `docs/TECHNICAL-DESIGN.md`): Flet's
+UI loop runs on the main thread, ingestion lives in asyncio on a separate worker thread.
+`AsyncioUiBridge` (in `notify/queue.py`) crosses events between both via a thread-safe
+queue + `FletShell.after()`. Flet drives **one window per process**, so `notify/flet_shell.py`
+(`FletShell`) decides what it shows: an alert > the open screen (responsive config panel,
+history, About) > hidden (agent) / quit (`--simulate`, `--settings`). `Application` (`app.py`) wires all of this together; it exposes
 `execute()` (the full agent) and `simulate()` (injects the event from `simulation.py`
 without network, for `--simulate`).
 
@@ -153,8 +156,9 @@ LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via
 
 Inject dependencies (`connect`/`sleep`/`client`/`runner`/`create_window`/etc.) and
 separate **pure logic** (command/unit/plist generation, formatting, calculations) from
-**system effects** (network, real Tkinter, systemctl/launchctl/schtasks, audio). Real GUI
-tests are marked `skipif` unless `VIGIA_GUI_TESTS=1`; the default suite runs headless.
+**system effects** (network, the Flet desktop client, systemctl/launchctl/schtasks, audio). Real GUI
+tests are marked `skipif` unless `VIGIA_GUI_TESTS=1`; the default suite runs headless (Flet
+controls are plain dataclasses; `conftest.py` forbids starting the client — inject `run_ui`).
 
 ## Spec-driven development (SDD)
 

@@ -6,7 +6,7 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
-## [1.0.0] - 2026-09-19
+## [1.0.0] - 2026-10-17
 
 The first stable release. What makes it 1.0.0 is not the feature list: it is that
 the product now **says where its central promise holds and where it does not**, and
@@ -14,8 +14,13 @@ that every claim in this file is checked by something that fails when it stops
 being true.
 
 ### Added
+- **A map in the alert** (ADR-030) — next to the text, a pin on the epicentre whose
+  caption carries the zone, the coordinates and the magnitude, a circle sized by the
+  magnitude, and your reference point, framed together when they are close. The text
+  gains a *Coordinates* line. Offline, the map is blank but the pin and the data stay.
 - **Configuration panel** (REQ-GUI-001..005) — every setting is reachable from the
-  tray without opening a text file: 43 fields in 11 collapsible sections, validated
+  tray without opening a text file: 43 fields in 11 collapsible sections, laid out
+  **responsively** (one column on a narrow window, two or three on a wide one), validated
   as you type against the same schema the agent starts with, with per-section and
   whole-file "restore defaults". The controls are **derived from the configuration
   models**, so a field added to the code appears in the panel by itself. The menu
@@ -45,11 +50,10 @@ being true.
   sortable table with the reason for each discard in words, and a map of
   OpenStreetMap tiles beside it. Symbols are sized by magnitude and alerts are told
   apart from discards by shape as well as colour. One filter governs both views.
-  Tiles are requested **only while the map is open**, cached so a zone already
-  visited is not requested again, and the client identifies itself as the usage
-  policy requires; `© OpenStreetMap contributors` is on screen wherever a tile is.
-  With no connection and nothing cached the map says it is unavailable and the table
-  carries on working.
+  Tiles are requested **only while a map is on screen**, and the client identifies
+  itself as the usage policy requires; `© OpenStreetMap contributors` is on screen
+  wherever a tile is. When tiles cannot be loaded the map says it is unavailable and
+  the table carries on working.
 - **Declared scope of the alert guarantee** (REQ-ALE-003) — the README, the tray menu
   and the first line of the log now state whether the "impossible to ignore" alert
   actually holds in this session. Measured, not assumed: GNOME under Wayland does not
@@ -83,15 +87,21 @@ being true.
   button in the configuration panel; the version is read from the installed package's
   metadata, not typed into a label.
 - **A configuration panel that can be read** (REQ-GUI-009) — it opens at a size chosen
-  for the screen instead of packing itself into a narrow strip, in type three points
-  larger than Tk's default, with the body scrolling under a footer that stays put (the
-  button that used to fall off the bottom was *Save*). The panel and the About window
+  for the screen instead of packing itself into a narrow strip, with the body scrolling
+  under a footer that stays put (the button that used to fall off the bottom was
+  *Save*, which is now disabled while a field is invalid). The panel and the About window
   ship in English, like the configuration schema their labels come from.
 - **`--settings`** (REQ-GUI-009) — opens the configuration panel on its own: no
   ingestion, no tray, no agent. It is what the launcher's *Settings* action and the
   Windows Start Menu shortcut run.
 
 ### Changed
+- **The GUI is Flet instead of Tkinter** (ADR-030, supersedes ADR-003) — the alert, the
+  configuration panel, the history and About are drawn by Flet in one window that the
+  alert takes over and gives back, with whatever you were editing intact. The tray stays
+  on pystray and `--tui` on Textual. On Linux the desktop client needs GTK 3
+  (`libgtk-3-0`), which every mainstream desktop already has; the native packages carry
+  the client inside, so the first alert does not depend on a download.
 - **BREAKING — minimum Python is now 3.13** (`requires-python = ">=3.13"`,
   REQ-DEP-004). 3.12 entered *security-only* maintenance: it still receives security
   patches but no longer bug fixes, which is not a runtime a project calling itself

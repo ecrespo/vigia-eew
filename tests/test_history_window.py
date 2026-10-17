@@ -11,7 +11,6 @@ list produced, and from nowhere else.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,7 +18,6 @@ import pytest
 
 from vigia_eew.history import EventRecord, HistoryStore
 from vigia_eew.notify.history_view import HistoryList
-from vigia_eew.tiles import TileRef
 
 _WHEN = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
 
@@ -42,11 +40,6 @@ def _record(*, magnitude: float, event_id: str, verdict: str = "alerted") -> Eve
     )
 
 
-class _Tiles:
-    def tile(self, ref: TileRef) -> bytes | None:
-        return b"PNG"
-
-
 @pytest.fixture
 def store(tmp_path: Path) -> HistoryStore:
     store = HistoryStore(tmp_path / "history.sqlite3")
@@ -65,9 +58,9 @@ def test_the_map_is_drawn_from_the_rows_the_list_produced(store: HistoryStore) -
     from vigia_eew.notify.history_map import plan
 
     listing = HistoryList(store)
-    drawing = plan(listing.records(), tiles=_Tiles(), zoom=7, width=512, height=512)
+    markers = plan(listing.records())
 
-    assert {marker.record.source_event_id for marker in drawing.markers} == {
+    assert {marker.record.source_event_id for marker in markers} == {
         row.record.source_event_id for row in listing.rows
     }
 
@@ -78,10 +71,10 @@ def test_filtering_reduces_rows_and_symbols_to_the_same_set(store: HistoryStore)
     listing = HistoryList(store)
     listing.set_filter(min_magnitude=4.0)
 
-    drawing = plan(listing.records(), tiles=_Tiles(), zoom=7, width=512, height=512)
+    markers = plan(listing.records())
 
     assert {row.record.source_event_id for row in listing.rows} == {"big", "middling"}
-    assert {marker.record.source_event_id for marker in drawing.markers} == {"big", "middling"}
+    assert {marker.record.source_event_id for marker in markers} == {"big", "middling"}
 
 
 def test_the_list_hands_over_records_not_the_strings_it_made(store: HistoryStore) -> None:
@@ -92,94 +85,72 @@ def test_the_list_hands_over_records_not_the_strings_it_made(store: HistoryStore
     assert len(listing.records()) == len(listing.rows)
 
 
-# --- The window that wires them together ------------------------------------------
+# --- The screen that wires them together (Flet dataclasses: no display) ---------
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_the_window_shows_both_views(store: HistoryStore) -> None:
-    import tkinter as tk
+def _table_rows(window) -> int:
+    return len(window.table.table.rows)
 
+
+def test_the_screen_shows_both_views(store: HistoryStore) -> None:
     from vigia_eew.notify.history_window import HistoryWindow
 
-    root = tk.Tk()
-    window = HistoryWindow(root, store, tiles=_Tiles())
-    root.update_idletasks()
+    window = HistoryWindow(store)
 
-    assert len(window.view.table.get_children()) == 3
-    assert len(window.map.drawing.markers) == 3
-    root.destroy()
+    assert _table_rows(window) == 3
+    assert len(window.map.markers) == 3
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_one_filter_moves_both_views(store: HistoryStore) -> None:
-    """CA-112.6 through the widgets: one action, two views, one set."""
-    import tkinter as tk
-
+def test_one_filter_moves_both_views(store: HistoryStore) -> None:
+    """CA-112.6 through the controls: one action, two views, one set."""
     from vigia_eew.notify.history_window import HistoryWindow
 
-    root = tk.Tk()
-    window = HistoryWindow(root, store, tiles=_Tiles())
-    root.update_idletasks()
-
+    window = HistoryWindow(store)
     window.listing.set_filter(min_magnitude=4.0)
     window.refresh()
-    root.update_idletasks()
 
-    assert len(window.view.table.get_children()) == 2
-    assert len(window.map.drawing.markers) == 2
+    assert _table_rows(window) == 2
+    assert len(window.map.markers) == 2
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_sorting_the_table_leaves_the_map_showing_the_same_set(
-    store: HistoryStore,
-) -> None:
-    """Order is a property of a table; a map has no rows to reorder.
-
-    What must not change is *which* earthquakes are on it.
-    """
-    import tkinter as tk
-
+def test_the_magnitude_field_filters_both_views(store: HistoryStore) -> None:
     from vigia_eew.notify.history_window import HistoryWindow
 
-    root = tk.Tk()
-    window = HistoryWindow(root, store, tiles=_Tiles())
-    root.update_idletasks()
-    before = {marker.record.source_event_id for marker in window.map.drawing.markers}
+    window = HistoryWindow(store)
+    window.table._magnitude.value = "4"
+    window.table._apply_magnitude()
 
-    window.view._sort("magnitude")
-    root.update_idletasks()
-
-    assert {m.record.source_event_id for m in window.map.drawing.markers} == before
-    root.destroy()
+    assert _table_rows(window) == 2
+    assert len(window.map.markers) == 2
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_the_window_works_with_no_map_at_all(store: HistoryStore) -> None:
-    """CA-112.2 on the real window: the table is unaffected by a dead provider."""
-    import tkinter as tk
-
+def test_sorting_the_table_leaves_the_map_showing_the_same_set(store: HistoryStore) -> None:
+    """Order is a property of a table; what must not change is *which* earthquakes."""
     from vigia_eew.notify.history_window import HistoryWindow
 
-    class _Nothing:
-        def tile(self, ref: TileRef) -> bytes | None:
-            return None
+    window = HistoryWindow(store)
+    before = {marker.record.source_event_id for marker in window.map.markers}
 
-    root = tk.Tk()
-    window = HistoryWindow(root, store, tiles=_Nothing())
-    root.update_idletasks()
+    window.table._sort("magnitude")
 
-    assert window.map.drawing.available is False
-    assert len(window.view.table.get_children()) == 3
-    root.destroy()
+    assert {m.record.source_event_id for m in window.map.markers} == before
+
+
+def test_the_screen_works_with_no_map_at_all(store: HistoryStore) -> None:
+    """CA-112.2: the table is unaffected by a dead provider -- or no map."""
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, with_map=False)
+
+    assert window.map is None
+    assert _table_rows(window) == 3
+
+
+def test_the_map_opens_on_the_reference_point(store: HistoryStore) -> None:
+    """A worldwide history's midpoint is the Atlantic; the user's point is not."""
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, reference=(10.28, -67.85))
+    centre = window.map.map.initial_center
+
+    assert (centre.latitude, centre.longitude) == (10.28, -67.85)

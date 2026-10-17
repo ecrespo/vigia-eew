@@ -6,7 +6,7 @@ wrong licence line is a legal problem rather than a cosmetic one -- so the
 version comes from the installed package's own metadata and the rest lives
 here, next to a test that reads it.
 
-The widget tree is `about_window.py`; this module has no Tk in it.
+The widget tree is `about_window.py`; this module has no UI toolkit in it.
 """
 
 from __future__ import annotations

@@ -50,16 +50,21 @@ dependencies = [
     "desktop-notifier>=6.0,<7",   # cross-platform toast (RF-14)
     "platformdirs>=4.3,<5",       # per-OS state/config paths (RF-06/RF-10)
     "tzdata>=2024.1",             # America/Caracas zone on Win/macOS (RF-18/RNF-12).
-                                  # No ceiling, by amendment E-04: IANA data, not an
-                                  # API -- its major is the publication year, so a
-                                  # ceiling would freeze the timezone rules themselves
+    # No ceiling, by amendment E-04: IANA data, not an
+    # API -- its major is the publication year, so a
+    # ceiling would freeze the timezone rules themselves
     "pystray>=0.19.5,<0.20",      # system tray icon (RF-34/ADR-012)
     "Pillow>=12.3.0,<13",         # tray icon image, pystray requirement (RF-34). Floor
-                                  # is the security floor: >=10.0 admitted 34 advisories
+    # is the security floor: >=10.0 admitted 34 advisories
     "textual>=8.2,<9",            # headless TUI dashboard (RF-36/ADR-013)
     "tomlkit>=0.13.3,<0.14",      # config writing that preserves the file's 46 comment
-                                  # lines (REQ-CFG-009/ADR-019). `tomllib` stays the
-                                  # reader -- this is imported only on the write path
+    # lines (REQ-CFG-009/ADR-019). `tomllib` stays the
+    # reader -- this is imported only on the write path
+    "flet[desktop]>=1.0.4,<2",    # desktop GUI: alert, panel, history (ADR-030). The
+                                  # `desktop` extra is the native client for Linux,
+                                  # Windows and macOS
+    "flet-map>=1.0.4,<2",         # OpenStreetMap maps in the alert and the history
+                                  # (ADR-030); fetches and caches its own tiles
 ]
 
 [project.urls]
@@ -108,7 +113,7 @@ asyncio_mode = "auto"
 addopts = "--strict-markers"
 markers = [
     "integration: crosses a real process, filesystem or tool boundary (git, lint-imports, a spawned interpreter)",
-    "gui: drives a real UI toolkit -- Tkinter against a display, or the Textual driver",
+    "gui: drives a real UI toolkit -- pystray against a display, or the Textual driver",
 ]
 
 [tool.ruff]
@@ -122,6 +127,10 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.13"
 strict = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "flet_map"
+ignore_missing_imports = true  # ships no py.typed marker (ADR-030)
 
 [[tool.mypy.overrides]]
 module = "pystray"
@@ -150,7 +159,7 @@ layers = [
     "vigia_eew.pipeline",
     "vigia_eew.ingest",
     "vigia_eew.simulation",
-    "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf | vigia_eew.config_writer | vigia_eew.history | vigia_eew.tiles",
+    "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf | vigia_eew.config_writer | vigia_eew.history",
     "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env",
 ]
 

@@ -202,6 +202,7 @@ def is_duplicate(ev, recent, alerted_ids):
   backup).
 
 ### ADR-003 — Tkinter by default for the alert (not PyQt/PySide)
+- **Status**: **Superseded by ADR-030** (Flet). Kept for the reasoning it records.
 - **Context**: a cross-platform, *topmost*, focus-stealing alert, without heavy dependencies
   (RNF-06).
 - **Decision**: **Tkinter** (bundled with CPython, zero extra dependencies). It supports
@@ -231,6 +232,8 @@ def is_duplicate(ev, recent, alerted_ids):
   at runtime.
 
 ### ADR-006 — Asyncio↔Tkinter bridge (UI on the main thread)
+- **Status**: Amended by ADR-030: the shape stands, the toolkit is Flet; the bridge is
+  `AsyncioUiBridge` and `FletShell.after()` replaces `widget.after()`.
 - **Context**: Tkinter requires the main thread; ingestion lives in asyncio.
 - **Decision**: run Tkinter's event loop on the main thread and the asyncio loop on a worker
   thread; pass events through a thread-safe queue + `widget.after()` to poll the queue.
@@ -464,7 +467,7 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   so the `Supervisor` (tasks `ws`/`rest`/`pipeline`) runs as a Textual **worker**
   (`run_worker(supervisor.run(), exclusive=True)`) on the **same event loop** as the app,
   started in `on_mount()`. The `Processor` therefore calls `AlertController.enqueue` **directly**
-  (no `AsyncioTkBridge`). This makes the TUI path simpler than the GUI path.
+  (no `AsyncioUiBridge`). This makes the TUI path simpler than the GUI path.
 - **Reuses the existing effect contract**: `Application._controller_for_tui` builds the same
   `AlertController` used by Tkinter, injecting `create_window = tui_app.push_alert` (matching the
   `(data, severity, on_acknowledge)` factory signature). `push_alert` returns a small
@@ -703,6 +706,43 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   the amendment defensible. Writing stays off the hot path (REQ-HIS-002: a history failure must
   not stop an alert). One more file to back up, in the same per-platform directory as the state,
   and migrations to maintain via `PRAGMA user_version`, applied in a transaction at open.
+
+### ADR-030 — Flet for every window of the GUI (alert, panel, history, About)
+- **Status**: Accepted 2026-10-17. Supersedes ADR-003; amends ADR-006 and ADR-027.
+- **Context**: two asks Tk could not meet at a sensible cost. The configuration panel has to be
+  **responsive** -- readable on a half-screen laptop and on a wide monitor -- and the alert has to
+  show **where** the earthquake was: a map with a pin on the epicentre, its zone, coordinates and
+  magnitude. Tk has no layout by breakpoints and no map widget; the history map was a hand-rolled
+  tile client, a disk cache and a Pillow-to-Tk bridge. GTK (PyGObject) was weighed and rejected:
+  first-class on Linux only, painful on Windows/macOS packaging.
+- **Decision**: **Flet** (`flet[desktop]`, Flutter under the hood) for the alert, the panel, the
+  history and About, with **flet-map** for both maps (OpenStreetMap tiles). The tray stays on
+  `pystray` (ADR-012); the TUI stays on Textual (ADR-013).
+  - **One window per process.** Flet drives a single native window, so `notify/flet_shell.py`
+    (`FletShell`) owns the page and re-applies a fixed precedence on every change: an **alert**
+    (always on top, title bar hidden, `prevent_close`, re-raised on `blur`, ENTER acknowledges)
+    over the **screen** the user opened, over **nothing** (hidden in the agent; the run ends in
+    `--simulate`/`--settings`). Acknowledging an alert gives back the open screen with its edits.
+  - **Threads (ADR-006 kept)**: Flet's UI loop on the main thread, the agent's asyncio loop on a
+    worker. `FletShell.after(ms, fn)` is the one thread-safe way in (`call_soon_threadsafe`), so
+    `AsyncioUiBridge` and the tray callbacks keep their contract.
+  - **Alert map**: `notify/map_view.py` -- epicentre pin with a caption (magnitude, place,
+    coordinates), a circle sized by magnitude, and the reference point; the camera frames both
+    when they are within 2 500 km, otherwise the epicentre alone. Without tiles the pin, caption
+    and the text's coordinates are still there.
+  - **Responsive layout**: `ResponsiveRow` spans declared in `notify/ui_scale.py` (panel fields
+    1/2/3 columns; alert text|map and history table|map side by side from `md`/`lg`).
+- **Alternatives considered and rejected**: GTK 4/PyGObject (Linux-first; Windows/macOS bundles
+  are heavy and fragile); staying on Tk with a hand-made grid and a static map image (no
+  responsiveness, a second image pipeline to maintain); PyQt/PySide + QtWebEngine for the map
+  (ADR-003's cost, larger).
+- **Consequences**: two dependencies (`flet[desktop]`, `flet-map`, both ceilinged `<2`); the
+  desktop client is a Flutter binary that needs GTK 3 at runtime on Linux (`libgtk-3-0`, see
+  `.devcontainer`). `tiles.py` (own tile client + disk cache) is removed: tiles are fetched by
+  the client, only while a map is on screen -- the alert's map now counts (E-06 bound enforced by
+  `tests/test_map_view.py`). The Wayland limit of ADR-010 is unchanged: `always_on_top` meets the
+  same compositor. Controls are plain dataclasses, so the suite builds every view headless; the
+  test conftest forbids starting the client.
 
 ## 12. Traceability
 

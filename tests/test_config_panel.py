@@ -306,49 +306,73 @@ def test_reloading_after_a_conflict_keeps_the_panel_usable(
     assert load_config(config_file).filter.radius_km == 150.0
 
 
-# --- The widget tree (opt-in: VIGIA_GUI_TESTS=1) ----------------------------------
+# --- The controls (Flet dataclasses: no display needed) --------------------------
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_the_real_panel_builds_a_control_for_every_field(tmp_path: Path) -> None:
-    import tkinter as tk
-
+def _real_panel(tmp_path: Path):
     from vigia_eew.notify.config_panel import ConfigPanel
 
     path = tmp_path / "config.toml"
     path.write_text(bundled_example(), encoding="utf-8")
-    root = tk.Tk()
-    panel = ConfigPanel(root, PanelModel(ConfigWriter(path)))
-    root.update_idletasks()
+    return ConfigPanel(PanelModel(ConfigWriter(path))), path
+
+
+def test_the_real_panel_builds_a_control_for_every_field(tmp_path: Path) -> None:
+    panel, _ = _real_panel(tmp_path)
 
     assert set(panel.controls) == _leaf_paths()
-    root.destroy()
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_a_bad_value_disables_the_real_save_button(tmp_path: Path) -> None:
-    import tkinter as tk
+def test_a_bad_value_disables_the_real_save_button(tmp_path: Path) -> None:
+    panel, _ = _real_panel(tmp_path)
+    control = panel.controls["filter.radius_km"]
 
-    from vigia_eew.notify.config_panel import ConfigPanel
+    control.widget.value = "-1"
+    control._changed()  # what the TextField's on_change does
 
-    path = tmp_path / "config.toml"
-    path.write_text(bundled_example(), encoding="utf-8")
-    root = tk.Tk()
-    panel = ConfigPanel(root, PanelModel(ConfigWriter(path)))
-    root.update_idletasks()
-
-    panel.controls["filter.radius_km"].set("-1")
-    root.update_idletasks()
-
-    assert str(panel.save_button["state"]) == "disabled"
+    assert panel.save_button.disabled is True
     assert panel.message_for("filter.radius_km") != ""
-    root.destroy()
+
+
+def test_a_switch_edit_reaches_the_file(tmp_path: Path) -> None:
+    panel, path = _real_panel(tmp_path)
+    control = panel.controls["notification.sound"]
+
+    control.widget.value = not control.get()
+    control._changed()
+    panel._save()
+
+    assert load_config(path).notification.sound is control.get()
+    assert "Saved" in panel.status.value
+
+
+def test_the_fields_of_a_section_flow_into_responsive_columns(tmp_path: Path) -> None:
+    """One column on a narrow window, more from `md` up (ADR-030)."""
+    from vigia_eew.notify import ui_scale
+
+    panel, _ = _real_panel(tmp_path)
+    tile = panel._sections_ui["filter"]
+    row = tile.controls[0]
+
+    assert type(row).__name__ == "ResponsiveRow"
+    assert all(cell.col == ui_scale.FIELD_COLUMNS for cell in row.controls)
+
+
+def test_sections_open_and_close(tmp_path: Path) -> None:
+    panel, _ = _real_panel(tmp_path)
+    panel.toggle("filter")
+    assert panel._sections_ui["filter"].expanded is True
+    panel.toggle("filter")
+    assert panel._sections_ui["filter"].expanded is False
+
+
+def test_a_long_closed_domain_is_a_filterable_menu(tmp_path: Path) -> None:
+    """~600 timezones: a menu you can type into, not a list to scroll."""
+    panel, _ = _real_panel(tmp_path)
+    timezone = panel.controls["notification.timezone"].widget
+
+    assert type(timezone).__name__ == "Dropdown"
+    assert timezone.enable_filter is True
 
 
 # --- T-141 · The networks as a reorderable list (REQ-GUI-008, CA-110.8) ----------
@@ -471,26 +495,11 @@ def test_a_disabled_network_stays_in_the_list(panel: PanelModel) -> None:
     assert len(networks.entries) == 4
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_reordering_in_the_real_panel_reaches_the_file(tmp_path: Path) -> None:
-    """CA-110.8 through the widgets: the list, the model and the file agree."""
-    import tkinter as tk
+def test_reordering_in_the_real_panel_reaches_the_file(tmp_path: Path) -> None:
+    """CA-110.8 through the controls: the list, the model and the file agree."""
+    panel, path = _real_panel(tmp_path)
 
-    from vigia_eew.notify.config_panel import ConfigPanel
-
-    path = tmp_path / "config.toml"
-    path.write_text(bundled_example(), encoding="utf-8")
-    root = tk.Tk()
-    panel = ConfigPanel(root, PanelModel(ConfigWriter(path)))
-    root.update_idletasks()
-
-    panel.networks.move_up("sources_geofon")
-    panel._order_network_rows()
-    panel._show_values()
-    root.update_idletasks()
+    panel._mover("sources_geofon", up=True)()
     shown = [n.label for n in panel.networks.entries]
     panel.model.save()
 
@@ -501,36 +510,64 @@ def test_smoke_reordering_in_the_real_panel_reaches_the_file(tmp_path: Path) -> 
     )
     assert stored == shown
     assert panel.controls["sources.geofon.priority"].get() == "3"
-    root.destroy()
+    rows = panel._network_list.controls
+    assert rows[2] is panel._network_rows["sources_geofon"]
 
 
-@pytest.mark.gui
-@pytest.mark.skipif(
-    not os.environ.get("VIGIA_GUI_TESTS"), reason="real GUI test; opt-in VIGIA_GUI_TESTS=1"
-)
-def test_smoke_the_tray_entry_opens_one_panel_window(tmp_path: Path) -> None:
-    """T-137: the menu entry ends in a real window, and only ever one.
+def test_the_tray_entry_opens_one_panel(tmp_path: Path, fake_shell) -> None:
+    """T-137: the menu entry ends in a real panel, and only ever one.
 
     Two panels over one file would be CA-108.7's external-edit conflict with
     itself: whichever saved second would be refused, by the other copy of the
     same panel.
     """
-    import tkinter as tk
-
     from vigia_eew.agent_state import AgentState
     from vigia_eew.state import StateStore
     from vigia_eew.wiring import Wiring
 
     path = tmp_path / "config.toml"
     path.write_text(bundled_example(), encoding="utf-8")
-    root = tk.Tk()
-    root.withdraw()
     wiring = Wiring(Settings(), StateStore(tmp_path / "state.json"), AgentState())
 
-    first = wiring.open_panel(root, path)
-    second = wiring.open_panel(root, path)
-    root.update_idletasks()
+    first = wiring.open_panel(fake_shell, path)
+    second = wiring.open_panel(fake_shell, path)
 
     assert first is second
-    assert len([w for w in root.winfo_children() if isinstance(w, tk.Toplevel)]) == 1
-    root.destroy()
+    assert {key for key, _title, _view in fake_shell.screens} == {"panel"}
+
+
+def test_about_from_the_panel_returns_to_the_panel(tmp_path: Path, fake_shell) -> None:
+    """On a desktop where the tray menu never opens, the panel is the way in."""
+    from vigia_eew.agent_state import AgentState
+    from vigia_eew.state import StateStore
+    from vigia_eew.wiring import Wiring
+
+    path = tmp_path / "config.toml"
+    path.write_text(bundled_example(), encoding="utf-8")
+    wiring = Wiring(Settings(), StateStore(tmp_path / "state.json"), AgentState())
+    panel = wiring.open_panel(fake_shell, path)
+
+    panel._on_about()
+    assert fake_shell.screen_key == "about"
+    about = fake_shell.screens[-1][2]
+    close = _find_button(about, "Close")
+    close.on_click(None)
+
+    assert fake_shell.screen_key == "panel"
+    assert fake_shell.screens[-1][2] is panel.view
+
+
+def _find_button(control, label: str):
+    stack = [control]
+    while stack:
+        node = stack.pop()
+        content = getattr(node, "content", None)
+        if getattr(content, "value", None) == label and getattr(node, "on_click", None):
+            return node
+        for attr in ("content", "controls"):
+            child = getattr(node, attr, None)
+            if isinstance(child, list):
+                stack.extend(child)
+            elif child is not None:
+                stack.append(child)
+    raise AssertionError(f"no {label!r} button")

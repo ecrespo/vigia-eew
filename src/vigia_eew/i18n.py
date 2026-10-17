@@ -23,6 +23,9 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "local_time_label": {"en": "Local time (Venezuela)", "es": "Hora local (Venezuela)"},
     "source_label": {"en": "Source", "es": "Fuente"},
     "unknown_location": {"en": "Unknown location", "es": "Ubicación desconocida"},
+    # The alert's map (ADR-030): the epicentre's caption and the user's own point.
+    "coordinates_label": {"en": "Coordinates", "es": "Coordenadas"},
+    "your_location": {"en": "Your location", "es": "Tu ubicación"},
     "toast_title": {"en": "Seismic alert {magnitude}", "es": "Alerta sísmica {magnitude}"},
     "tray_ws_connected": {"en": "WS: connected", "es": "WS: conectado"},
     "tray_ws_reconnecting": {"en": "WS: reconnecting…", "es": "WS: reconectando…"},
@@ -98,6 +101,10 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "history_filter_any": {"en": "Any", "es": "Cualquiera"},
     "history_filter_clear": {"en": "Clear filters", "es": "Limpiar filtros"},
     "history_count": {"en": "{shown} of {total}", "es": "{shown} de {total}"},
+    "history_table_limit": {
+        "en": "table shows the first {shown}; filter to narrow it",
+        "es": "la tabla muestra los primeros {shown}; filtra para acotar",
+    },
     "history_empty": {
         "en": "Nothing recorded yet.",
         "es": "Todavía no hay nada registrado.",

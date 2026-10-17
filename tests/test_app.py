@@ -25,7 +25,7 @@ class _FakeWindow:
         pass
 
 
-class _FakeRoot:
+class _FakeShell:
     def __init__(self):
         self.after_calls: list[tuple[int, object]] = []
 
@@ -179,9 +179,9 @@ def test_build_tray_enabled_returns_icon():
     assert isinstance(icon, TrayIcon)
 
 
-def test_toggle_pause_schedules_on_tk_thread():
+def test_toggle_pause_schedules_on_ui_thread():
     app = _app()
-    app._root = _FakeRoot()
+    app._shell = _FakeShell()
     ctrl = app.wiring.build_controller(
         lambda data, severity, on_acknowledge: _FakeWindow(),
         on_acknowledge=app._after_acknowledge,
@@ -190,19 +190,19 @@ def test_toggle_pause_schedules_on_tk_thread():
     assert ctrl.paused is False
 
     app._toggle_pause()
-    assert len(app._root.after_calls) == 1
-    ms, callback = app._root.after_calls[0]
+    assert len(app._shell.after_calls) == 1
+    ms, callback = app._shell.after_calls[0]
     assert ms == 0
-    callback()  # runs the scheduled callback, like Tk's real mainloop would
+    callback()  # runs the scheduled callback, like the UI loop would
     assert ctrl.paused is True
 
 
 def test_exit_from_tray_schedules_quit():
     app = _app()
-    app._root = _FakeRoot()
+    app._shell = _FakeShell()
     app._exit_from_tray()
-    assert len(app._root.after_calls) == 1
-    ms, callback = app._root.after_calls[0]
+    assert len(app._shell.after_calls) == 1
+    ms, callback = app._shell.after_calls[0]
     assert ms == 0
     assert callable(callback)
 
@@ -373,8 +373,8 @@ def test_build_geo_filter_wires_configured_timezone():
 # --- T-137 · Opening the configuration panel (REQ-GUI-005) ---
 
 
-def test_open_panel_schedules_on_the_tk_thread(monkeypatch, tmp_path):
-    """Tkinter is not thread-safe, and the tray runs on its own thread (ADR-006).
+def test_open_panel_schedules_on_the_ui_thread(monkeypatch, tmp_path):
+    """Flet's controls belong to the UI loop, and the tray runs on its own thread (ADR-006).
 
     Building a window straight from the tray's callback is the same mistake
     `_toggle_pause` already avoids -- it works until it does not.
@@ -383,22 +383,22 @@ def test_open_panel_schedules_on_the_tk_thread(monkeypatch, tmp_path):
     import vigia_eew.wiring as wiring_mod
 
     monkeypatch.setattr(
-        wiring_mod.Wiring, "open_panel", lambda self, root, path: opened.append(path)
+        wiring_mod.Wiring, "open_panel", lambda self, shell, path: opened.append(path)
     )
     app = Application(Settings(), config_path=tmp_path / "config.toml")
-    app._root = _FakeRoot()
+    app._shell = _FakeShell()
 
     app._open_panel()
 
-    assert len(app._root.after_calls) == 1
-    ms, callback = app._root.after_calls[0]
+    assert len(app._shell.after_calls) == 1
+    ms, callback = app._shell.after_calls[0]
     assert ms == 0
     callback()
     assert opened == [tmp_path / "config.toml"]
 
 
 def test_open_panel_does_nothing_without_a_window(tmp_path):
-    """No root means no GUI session; there is nowhere to put a panel."""
+    """No shell means no GUI session; there is nowhere to put a panel."""
     app = Application(Settings(), config_path=tmp_path / "config.toml")
 
     app._open_panel()  # must not raise
@@ -406,7 +406,7 @@ def test_open_panel_does_nothing_without_a_window(tmp_path):
 
 def test_the_tray_is_built_with_both_ways_into_the_configuration(tmp_path):
     app = Application(Settings(), config_path=tmp_path / "config.toml")
-    app._root = _FakeRoot()
+    app._shell = _FakeShell()
 
     icon = app._build_tray()
 
@@ -418,91 +418,131 @@ def test_the_tray_is_built_with_both_ways_into_the_configuration(tmp_path):
 # --- `--settings` · the panel with no agent behind it (REQ-GUI-009) ---
 
 
-class _FakePanelWindow:
+class _Page:
+    """Just enough of a Flet page for `FletShell` to wrap."""
+
     def __init__(self):
-        self.protocols: dict[str, object] = {}
+        from types import SimpleNamespace
 
-    def protocol(self, name, callback):
-        self.protocols[name] = callback
+        async def nothing():
+            return None
+
+        self.window = SimpleNamespace(
+            visible=False,
+            prevent_close=False,
+            on_event=None,
+            to_front=nothing,
+            center=nothing,
+            destroy=nothing,
+        )
+        self.controls = []
+        self.on_keyboard_event = None
+        self.title = ""
+        self.padding = None
+        self.bgcolor = None
+        self.tasks = []
+
+    def update(self):
+        pass
+
+    def run_task(self, method):
+        self.tasks.append(method)
 
 
-class _FakeSettingsRoot(_FakeRoot):
-    def __init__(self):
-        super().__init__()
-        self.looped = False
-        self.destroyed = False
+def _run_with(page):
+    """A `run_ui` that runs Flet's `main` against a fake page, on a real loop."""
+    import asyncio
 
-    def mainloop(self):
-        self.looped = True
+    ran = []
 
-    def destroy(self):
-        self.destroyed = True
+    def run_ui(main):
+        ran.append(main)
+        asyncio.run(main(page))
+
+    return run_ui, ran
 
 
-def _settings_app(monkeypatch, tmp_path, *, window):
+def test_open_settings_runs_the_panel_on_its_own_window(monkeypatch, tmp_path):
+    """No ingestion, no tray, no bridge: one window showing the panel."""
     import vigia_eew.wiring as wiring_mod
 
-    root = _FakeSettingsRoot()
-    monkeypatch.setattr(wiring_mod.Wiring, "open_panel", lambda self, r, path: window)
+    opened = []
+    monkeypatch.setattr(
+        wiring_mod.Wiring, "open_panel", lambda self, shell, path: opened.append(shell)
+    )
+    page = _Page()
+    run_ui, ran = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+
+    app.open_settings()
+
+    assert len(ran) == 1
+    assert opened == [app._shell]
+    assert app._shell.standalone is True  # closing the panel ends the run
+    assert app._tray_icon is None
+
+
+def test_closing_the_panel_ends_the_process(tmp_path):
+    """Closing the only screen has to end the run, or the process outlives its UI."""
+    page = _Page()
+    run_ui, _ = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+    app.open_settings()
+    assert app._shell.screen_key == "panel"
+
+    page.window.on_event(type("E", (), {"type": "close"})())
+
+    assert app._shell.screen_key is None
+    assert page.window.prevent_close is False  # the window is being destroyed
+
+
+def test_simulate_shows_the_alert_and_ends_once_acknowledged(tmp_path):
+    page = _Page()
+    run_ui, _ = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+
+    app.simulate()
+
+    assert app._shell.alert_view is not None
+    assert app._ctrl is not None and app._ctrl.alert_queue.current is not None
+    page.on_keyboard_event(type("K", (), {"key": "Enter"})())  # ENTER, as a user would
+    assert app._ctrl.alert_queue.current is None
+    assert app._shell.alert_view is None
+    assert page.window.prevent_close is False  # standalone: nothing left, so it ends
+
+
+def test_the_suite_cannot_start_the_real_client(tmp_path):
+    """The autouse guard: a mode run without `run_ui` fails loudly, not on screen."""
+    import pytest
+
     app = Application(Settings(), config_path=tmp_path / "config.toml")
-    monkeypatch.setattr(app, "_new_root", lambda: root)
-    return app, root
-
-
-def test_open_settings_runs_the_panel_on_its_own_loop(monkeypatch, tmp_path):
-    """No ingestion, no tray, no bridge: one window and the loop that draws it."""
-    window = _FakePanelWindow()
-    app, root = _settings_app(monkeypatch, tmp_path, window=window)
-
-    app.open_settings()
-
-    assert root.looped is True
-    assert "WM_DELETE_WINDOW" in window.protocols
-
-
-def test_closing_the_panel_ends_the_process(monkeypatch, tmp_path):
-    """Closing the only window has to end the loop, or the process outlives its UI."""
-    window = _FakePanelWindow()
-    app, root = _settings_app(monkeypatch, tmp_path, window=window)
-    app.open_settings()
-
-    window.protocols["WM_DELETE_WINDOW"]()
-
-    assert root.destroyed is True
-
-
-def test_open_settings_gives_up_when_there_is_no_panel(monkeypatch, tmp_path):
-    """A panel that could not be built leaves nothing to loop over."""
-    app, root = _settings_app(monkeypatch, tmp_path, window=None)
-
-    app.open_settings()
-
-    assert root.looped is False
+    with pytest.raises(RuntimeError, match="must not start the Flet client"):
+        app.open_settings()
 
 
 # --- T-151 · About, from the tray and from the panel (REQ-GUI-010) ---
 
 
-def test_open_about_schedules_on_the_tk_thread(monkeypatch, tmp_path):
+def test_open_about_schedules_on_the_ui_thread(monkeypatch, tmp_path):
     """Same thread rule as the panel: the tray callback runs on its own thread."""
     opened = []
     import vigia_eew.wiring as wiring_mod
 
-    monkeypatch.setattr(wiring_mod.Wiring, "open_about", lambda self, root: opened.append(root))
+    monkeypatch.setattr(wiring_mod.Wiring, "open_about", lambda self, shell: opened.append(shell))
     app = Application(Settings(), config_path=tmp_path / "config.toml")
-    app._root = _FakeRoot()
+    app._shell = _FakeShell()
 
     app._open_about()
 
-    ms, callback = app._root.after_calls[0]
+    ms, callback = app._shell.after_calls[0]
     assert ms == 0
     callback()
-    assert opened == [app._root]
+    assert opened == [app._shell]
 
 
 def test_the_tray_is_built_with_the_about_entry(tmp_path):
     app = Application(Settings(), config_path=tmp_path / "config.toml")
-    app._root = _FakeRoot()
+    app._shell = _FakeShell()
     captured = {}
 
     def fake_build_tray(**kwargs):

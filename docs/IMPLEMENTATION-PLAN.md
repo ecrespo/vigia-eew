@@ -57,8 +57,10 @@ vigia-eew/
 │   │   ├── __init__.py         # notification layer docstring
 │   │   ├── presentation.py     # human-readable formatting + severity color (pure)
 │   │   ├── toast.py            # desktop-notifier (urgency by severity)
-│   │   ├── alert_window.py     # undismissable Tkinter window + policy
-│   │   ├── queue.py            # AlertQueue + asyncio↔Tk bridge
+│   │   ├── alert_window.py     # undismissable Flet alert + policy (ADR-030)
+│   │   ├── map_view.py         # flet-map builders: epicentre pin/caption, camera (ADR-030)
+│   │   ├── flet_shell.py       # FletShell: the one window, alert > screen > hidden (ADR-030)
+│   │   ├── queue.py            # AlertQueue + asyncio↔UI bridge
 │   │   ├── controller.py       # AlertController (queue + window + sound + toast)
 │   │   └── sound.py            # audio layer by severity
 │   ├── autostart/              # autostart (inside the package: used by the CLI)
@@ -306,7 +308,7 @@ unaffected).
 | RF-12 | `pipeline/filter.py`, `config.py` | F3 |
 | RF-13 | `pipeline/normalize.py`, `notify/sound.py`, `notify/presentation.py` (color) | F3/F4 |
 | RF-14 | `notify/toast.py`, `notify/presentation.py` | F4 |
-| RF-15..RF-19 | `notify/alert_window.py` | F4 |
+| RF-15..RF-19 | `notify/alert_window.py`, `notify/flet_shell.py`, `notify/map_view.py` (ADR-030) | F4 |
 | RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
 | RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |
 | RF-21 | `simulation.py`, `cli.py` (`--simulate`), `app.py` | F5 |

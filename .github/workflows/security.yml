@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 
-# Match ci.yml: uv-managed CPython (bundles tkinter, which the app imports at load).
+# Match ci.yml: uv-managed CPython, never the runner's interpreter.
 env:
   UV_PYTHON_PREFERENCE: only-managed
 

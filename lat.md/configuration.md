@@ -139,20 +139,15 @@ feature of its own. This is the door, not the bridge.
 
 ## The panel's defaults are decisions, not leftovers
 
-[[src/vigia_eew/notify/ui_scale.py#panel_geometry]] and its neighbours exist because Tk's own
-defaults were being used by omission, and they were the wrong ones.
+[[src/vigia_eew/notify/ui_scale.py#spans]] and its neighbours exist because a toolkit's defaults
+used by omission were the wrong ones once already: the Tk panel opened as a tall narrow strip.
 
-A window with no geometry is packed to the natural width of its widest row; with every section
-collapsed that row is a button, so the panel opened as a tall narrow strip. It now opens at
-820x920, clamped to the screen it appears on and floored where the labels stop fitting beside
-their controls.
-
-The type is Tk's named fonts plus three points. Three, because the report was not that it was
-marginally small. Those fonts belong to the interpreter rather than to a window, which is why
-[[src/vigia_eew/wiring.py#Wiring]] bumps them **once**: the panel and the history window share
-them, and bumping per window would compound. The alert window is deliberately unaffected — it
-sizes its own type, and the one thing here that must never depend on a default is the window
-whose whole job is to be impossible to miss.
+The panel is responsive (ADR-030): every field sits in a `ResponsiveRow` cell whose span is
+`FIELD_COLUMNS` — one column on a narrow window, two from `md`, three from `xl` — so the same panel
+reads on a laptop half-screen and on a wide monitor. The window opens at `PREFERRED_SIZE` and is
+floored at `MINIMUM_SIZE`, where the labels stop fitting beside their controls. The alert window
+is deliberately unaffected — it sizes its own type, and the one thing here that must never depend
+on a default is the window whose whole job is to be impossible to miss.
 
 The body scrolls and the footer does not. What fell off the bottom of an overfull panel was the
 Save button, which is the difference between awkward and useless.

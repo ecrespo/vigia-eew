@@ -60,3 +60,5 @@ graphify-out/
 .codegraph/
 .fuse_hidden0000000c00000001
 .probe_sqlite.db-journal
+*.pptx
+*.pdf

@@ -79,7 +79,7 @@ def test_tui_with_simulate_invokes_run_tui_simulate():
     assert rc == 0
     app = _FakeApp.created[-1]
     assert app.tui_simulate is True
-    assert app.simulated is False  # goes to run_tui, not the Tk simulate()
+    assert app.simulated is False  # goes to run_tui, not the Flet simulate()
 
 
 def test_check_config_does_not_create_app(capsys):

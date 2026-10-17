@@ -33,38 +33,24 @@ def _isolate_user_config(monkeypatch, tmp_path):
         lambda: tmp_path / "vigia-eew" / "history.sqlite3",
     )
 
-    from vigia_eew import tiles as tiles_module
-
-    monkeypatch.setattr(
-        tiles_module,
-        "default_cache_dir",
-        lambda: tmp_path / "vigia-eew" / "tiles",
-    )
-
 
 @pytest.fixture(autouse=True)
-def _no_tile_provider(monkeypatch):
-    """The suite never reaches the tile provider.
+def _no_desktop_client(monkeypatch):
+    """The suite never starts the Flet desktop client.
 
-    Not a convenience: the map is the one part of the product that contacts a
-    third party, and a test run that quietly downloads from OpenStreetMap is a
-    test run sending traffic on somebody's behalf. Caught by finding real
-    tiles in `~/.cache/vigia-eew/` after a run.
-
-    Every test that needs tiles injects a source. Anything that reaches for
-    the real one gets this instead, and `TileClient.tile` turns it into the
-    "map unavailable" state the requirement already demands.
+    Not a convenience: the client is a native process that opens a window and,
+    through the maps, downloads OpenStreetMap tiles -- a test run doing that is
+    a test run sending traffic on somebody's behalf. Every test that runs a
+    mode injects `run_ui`; anything that reaches for the real one fails here.
     """
-    from vigia_eew import tiles as tiles_module
+    from vigia_eew import app as app_module
+    from vigia_eew import wiring as wiring_module
 
-    real_download = tiles_module.TileClient._download
+    def refuse(_main):
+        raise RuntimeError("the suite must not start the Flet client; inject run_ui")
 
-    def guarded(self, ref):
-        if self._fetch is None:
-            raise RuntimeError(f"the suite must not fetch {ref.name}; inject a tile source")
-        return real_download(self, ref)
-
-    monkeypatch.setattr(tiles_module.TileClient, "_download", guarded)
+    monkeypatch.setattr(app_module, "run_flet", refuse)
+    monkeypatch.setattr(wiring_module, "run_flet", refuse)
 
 
 # --- Test doubles for the WebSocket transport ---------------------------------
@@ -112,3 +98,57 @@ class FakeConnect:
     def __call__(self, url, **kw):
         self.calls.append((url, kw))
         return self._connections.pop(0)
+
+
+# --- Test double for the Flet window -----------------------------------------------
+
+
+class FakeShell:
+    """Stands in for `FletShell`: records what would be shown, runs `after` on demand.
+
+    `after` queues instead of running, like the real shell crossing threads;
+    `run_pending()` is the UI loop getting to them.
+    """
+
+    def __init__(self) -> None:
+        self.after_calls: list[tuple[int, object]] = []
+        self.screens: list[tuple[str, str, object]] = []
+        self.alerts: list[object] = []
+        self.screen_key: str | None = None
+        self.quit_calls = 0
+        self.updates = 0
+        self.page = type("Page", (), {"bgcolor": None})()
+
+    def after(self, ms, callback):
+        self.after_calls.append((ms, callback))
+
+    def run_pending(self) -> None:
+        calls, self.after_calls = self.after_calls, []
+        for _ms, callback in calls:
+            callback()
+
+    def show_screen(self, key, title, view):
+        self.screen_key = key
+        self.screens.append((key, title, view))
+
+    def close_screen(self):
+        self.screen_key = None
+
+    def show_alert(self, view, *, configure, on_enter, bgcolor):
+        self.alerts.append(view)
+        self.on_enter = on_enter
+
+    def clear_alert(self, view):
+        if view in self.alerts:
+            self.alerts.remove(view)
+
+    def update(self):
+        self.updates += 1
+
+    def quit(self):
+        self.quit_calls += 1
+
+
+@pytest.fixture
+def fake_shell() -> FakeShell:
+    return FakeShell()

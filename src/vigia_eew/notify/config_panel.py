@@ -23,7 +23,8 @@ The module is in two halves, and the seam is the point:
   - `describe` and `PanelModel` are pure. Which controls exist, what a value
     means, whether it validates, and what is ultimately written are decided
     without a display and tested without one.
-  - `ConfigPanel` is the widget tree, and does no deciding at all.
+  - `ConfigPanel` is the widget tree -- Flet controls laid out responsively
+    (ADR-030) -- and does no deciding at all.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, Union, get_args, get_origin
 
+import flet as ft
 from pydantic import BaseModel, ValidationError
 
 from vigia_eew.config import SECTION_PATHS, SOURCE_SECTIONS, Settings, by_priority
@@ -482,7 +484,7 @@ def _coerce(raw: Any, spec: FieldSpec) -> Any:
     return text
 
 
-# --- The widget tree -------------------------------------------------------------
+# --- The controls ----------------------------------------------------------------
 
 
 class Control(Protocol):
@@ -493,33 +495,65 @@ class Control(Protocol):
     def get(self) -> Any: ...
 
 
+def _bounds_hint(spec: FieldSpec) -> str | None:
+    """The range the schema enforces, phrased as a hint under the field."""
+    parts = []
+    if spec.minimum is not None:
+        parts.append(f"≥ {spec.minimum:g}")
+    if spec.exclusive_minimum is not None:
+        parts.append(f"> {spec.exclusive_minimum:g}")
+    if spec.maximum is not None:
+        parts.append(f"≤ {spec.maximum:g}")
+    hint = ", ".join(parts)
+    if spec.optional:
+        hint = f"{hint} (optional)" if hint else "optional"
+    return hint or None
+
+
 class _Control:
-    """One Tk control over one field, reporting every edit to the model."""
+    """One Flet control over one field, reporting every edit to the model.
 
-    def __init__(self, parent: Any, spec: FieldSpec, on_edit: Callable[[str, Any], None]) -> None:
-        import tkinter as tk
-        from tkinter import ttk
+    The type of the field chooses the control: a switch for a flag, a menu
+    for a closed domain (filterable -- the timezone list has ~600 entries),
+    a text field for everything else, with a numeric keyboard for numbers.
+    """
 
+    def __init__(self, spec: FieldSpec, on_edit: Callable[[str, Any], None]) -> None:
         self.spec = spec
         self._on_edit = on_edit
-        self._variable: Any = tk.BooleanVar() if spec.kind == "bool" else tk.StringVar()
         if spec.kind == "bool":
-            self.widget: Any = ttk.Checkbutton(parent, variable=self._variable)
+            self.widget: Any = ft.Switch(label=spec.label, on_change=self._changed)
         elif spec.kind == "choice":
-            values = list(spec.choices)
-            self.widget = ttk.Combobox(parent, textvariable=self._variable, values=values, width=28)
+            self.widget = ft.Dropdown(
+                label=spec.label,
+                options=[ft.DropdownOption(key=choice, text=choice) for choice in spec.choices],
+                enable_filter=len(spec.choices) > 12,
+                editable=len(spec.choices) > 12,
+                menu_height=360,
+                expand=True,
+                on_select=self._changed,
+            )
         else:
-            self.widget = ttk.Entry(parent, textvariable=self._variable, width=30)
-        self._variable.trace_add("write", self._changed)
+            numeric = spec.kind in ("int", "float")
+            self.widget = ft.TextField(
+                label=spec.label,
+                helper=_bounds_hint(spec),
+                keyboard_type=ft.KeyboardType.NUMBER if numeric else ft.KeyboardType.TEXT,
+                dense=True,
+                on_change=self._changed,
+            )
 
     def set(self, value: Any) -> None:
-        self._variable.set(value if self.spec.kind == "bool" else ("" if value is None else value))
+        if self.spec.kind == "bool":
+            self.widget.value = bool(value)
+        else:
+            self.widget.value = "" if value is None else str(value)
 
     def get(self) -> Any:
-        return self._variable.get()
+        return self.widget.value
 
-    def _changed(self, *_args: object) -> None:
-        self._on_edit(self.spec.path, self._variable.get())
+    def _changed(self, _event: Any = None) -> None:
+        self._on_edit(self.spec.path, self.widget.value)
 
 
 class _PositionControl:
@@ -530,90 +564,52 @@ class _PositionControl:
     of arrows next to it, not typing a number into it.
     """
 
-    def __init__(self, label: Any) -> None:
-        self._label = label
+    def __init__(self) -> None:
+        self.widget = ft.Text("-", weight=ft.FontWeight.BOLD, width=24)
 
     def set(self, value: Any) -> None:
-        self._label.configure(text="-" if value is None else str(value))
+        self.widget.value = "-" if value is None else str(value)
 
     def get(self) -> Any:
-        return str(self._label["text"])
+        return str(self.widget.value)
 
 
-class _ScrollShell:
-    """A body that scrolls, under a footer that does not (T-151).
-
-    With larger type and more than two sections open the content outgrows the
-    window, and what falls off the bottom is the Save button -- the one
-    widget whose absence makes the panel useless rather than awkward.
-    """
-
-    def __init__(self, master: Any) -> None:
-        import tkinter as tk
-        from tkinter import ttk
-
-        self.footer = ttk.Frame(master)
-        self.footer.pack(side="bottom", fill="x")
-        canvas = tk.Canvas(master, highlightthickness=0, borderwidth=0)
-        bar = ttk.Scrollbar(master, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=bar.set)
-        bar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        self.body = ttk.Frame(canvas, padding=8)
-        slot = canvas.create_window((0, 0), window=self.body, anchor="nw")
-        # The body decides the scrollable height; the canvas decides the width,
-        # or the rows would keep their natural width and never fill the window.
-        self.body.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(slot, width=event.width))
-        self._bind_wheel(canvas)
-
-    def _bind_wheel(self, canvas: Any) -> None:
-        """Wheel scrolling while the pointer is over the body.
-
-        `bind_all` is what reaches the event wherever the pointer sits -- over
-        a label, a checkbox, the canvas itself -- and Enter/Leave is what
-        keeps that global binding from following the pointer out of the panel.
-        """
-        sequences = ("<MouseWheel>", "<Button-4>", "<Button-5>")
-
-        def scroll(event: Any) -> None:
-            units = ui_scale.wheel_units(
-                num=getattr(event, "num", 0) or 0, delta=int(getattr(event, "delta", 0) or 0)
-            )
-            if units:
-                canvas.yview_scroll(units, "units")
-
-        canvas.bind("<Enter>", lambda _e: [canvas.bind_all(s, scroll) for s in sequences])
-        canvas.bind("<Leave>", lambda _e: [canvas.unbind_all(s) for s in sequences])
+# --- The panel ---------------------------------------------------------------------
 
 
 class ConfigPanel:
     """The panel itself: collapsible sections, live errors, save and restore.
 
     Holds no rules. Every decision it displays was made by `PanelModel`, which
-    is why the rules are testable without a screen and this is not.
+    is why the rules are testable without a screen.
+
+    **Responsive** (ADR-030): the fields of a section sit in a `ResponsiveRow`,
+    so they take one column on a narrow window, two from the `md` breakpoint
+    and three from `xl` (`ui_scale.FIELD_COLUMNS`). The body scrolls under a
+    footer that does not -- the Save button is the one control whose absence
+    makes the panel useless rather than awkward (T-151).
+
+    `view` is the root control; the caller puts it on a page. Building it
+    needs no page, which is what lets the tests drive the real controls.
     """
 
     def __init__(
         self,
-        master: Any,
         model: PanelModel,
         *,
         on_saved: Callable[[SaveOutcome], None] | None = None,
         on_about: Callable[[], None] | None = None,
         about_label: str = "About…",
+        on_close: Callable[[], None] | None = None,
     ) -> None:
-
         self.model = model
         self._on_saved = on_saved
         self._on_about = on_about
         self._about_label = about_label
-        self._shell = _ScrollShell(master)
-        self._frame = self._shell.body
+        self._on_close = on_close
         self.controls: dict[str, Control] = {}
         self._messages: dict[str, Any] = {}
-        self._open: dict[str, bool] = {}
-        self._sections_ui: dict[str, tuple[Any, Any]] = {}
+        self._sections_ui: dict[str, Any] = {}
         self._loading = False
         self.networks = NetworkList(model)
         # `enabled` and `priority` belong to the list: one setting, one
@@ -623,70 +619,145 @@ class ConfigPanel:
         self._owned_by_the_list = {
             f"{_toml(key)}.{name}" for key in SOURCE_SECTIONS for name in ("enabled", "priority")
         }
-        self._build_networks()
-        self._build_sections()
-        self._build_footer()
+        body = ft.ListView(
+            expand=True,
+            spacing=12,
+            padding=ft.Padding.symmetric(horizontal=16, vertical=12),
+            controls=[self._build_networks(), *self._build_sections()],
+        )
+        self.view = ft.SafeArea(
+            expand=True,
+            content=ft.Column(
+                expand=True,
+                spacing=0,
+                controls=[self._build_header(), body, ft.Divider(height=1), self._build_footer()],
+            ),
+        )
         self._show_values()
 
     # --- Construction ---
 
-    def _build_sections(self) -> None:
-        from tkinter import ttk
-
-        for section in self.model.sections:
-            header = ttk.Button(
-                self._frame,
-                text=f"▸ {section.title}",
-                command=lambda key=section.key: self._toggle(key),  # type: ignore[misc]
+    def _build_header(self) -> Any:
+        actions: list[Any] = []
+        on_about, on_close = self._on_about, self._on_close
+        if on_about is not None:
+            # The tray menu is not reachable on every desktop (REQ-GUI-009); the
+            # panel is, so what the product is and under what terms is reachable
+            # from here too.
+            actions.append(
+                ft.TextButton(
+                    content=ft.Text(self._about_label),
+                    icon=ft.Icons.INFO_OUTLINE,
+                    on_click=lambda _e: on_about(),
+                )
             )
-            header.pack(fill="x", pady=(6, 0))
-            body = ttk.Frame(self._frame, padding=(16, 4))
-            self._open[section.key] = False
-            self._sections_ui[section.key] = (header, body)
-            for row, field in enumerate(section.fields):
+        if on_close is not None:
+            actions.append(
+                ft.IconButton(
+                    icon=ft.Icons.CLOSE,
+                    tooltip="Close",
+                    on_click=lambda _e: on_close(),
+                )
+            )
+        return ft.Container(
+            padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+            bgcolor=ft.Colors.SURFACE_CONTAINER,
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.SETTINGS, color=ft.Colors.PRIMARY),
+                    ft.Text(
+                        "Vigía-eew · Settings",
+                        size=20,
+                        weight=ft.FontWeight.BOLD,
+                        expand=True,
+                    ),
+                    *actions,
+                ],
+            ),
+        )
+
+    def _build_sections(self) -> list[Any]:
+        cards = []
+        for section in self.model.sections:
+            cells: list[Any] = []
+            for field in section.fields:
                 if field.path in self._owned_by_the_list:
                     continue
-                ttk.Label(body, text=field.label).grid(row=row, column=0, sticky="w")
-                control = _Control(body, field, self._edited)
-                control.widget.grid(row=row, column=1, sticky="w", padx=6)
+                control = _Control(field, self._edited)
                 self.controls[field.path] = control
-                message = ttk.Label(body, text="", foreground="#B00020")
-                message.grid(row=row, column=2, sticky="w")
+                message = ft.Text("", color=ft.Colors.ERROR, size=12)
                 self._messages[field.path] = message
-            section_message = ttk.Label(body, text="", foreground="#B00020")
-            section_message.grid(row=len(section.fields), column=0, columnspan=3, sticky="w")
+                cells.append(
+                    ft.Column(
+                        col=ui_scale.FIELD_COLUMNS,
+                        spacing=2,
+                        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                        controls=[control.widget, message],
+                    )
+                )
+            section_message = ft.Text("", color=ft.Colors.ERROR)
             self._messages[section.key] = section_message
+            tile = ft.ExpansionTile(
+                title=ft.Text(section.title, weight=ft.FontWeight.W_600),
+                expanded=False,
+                maintain_state=True,
+                controls_padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+                controls=[
+                    ft.ResponsiveRow(controls=cells, spacing=16, run_spacing=8),
+                    section_message,
+                ],
+            )
+            self._sections_ui[section.key] = tile
+            cards.append(ft.Card(content=tile))
+        return cards
 
-    def _build_networks(self) -> None:
+    def _build_networks(self) -> Any:
         """The four networks as a list: enable each, and order them (REQ-GUI-008)."""
-        from tkinter import ttk
-
-        ttk.Label(self._frame, text="Networks, in order of preference").pack(anchor="w")
-        self._network_frame = ttk.Frame(self._frame, padding=(16, 4))
-        self._network_frame.pack(fill="x")
         specs = {field.path: field for section in self.model.sections for field in section.fields}
-        self._network_rows = {}
+        self._network_rows: dict[str, Any] = {}
         for entry in self.networks.entries:
-            row = ttk.Frame(self._network_frame)
             enabled_path = f"{_toml(entry.key)}.enabled"
-            control = _Control(row, specs[enabled_path], self._edited)
-            control.widget.pack(side="left")
+            control = _Control(specs[enabled_path], self._edited)
+            control.widget.label = None
             self.controls[enabled_path] = control
-            ttk.Label(row, text=entry.label, width=12).pack(side="left")
-            position = ttk.Label(row, text="", width=3)
-            position.pack(side="left")
-            self.controls[f"{_toml(entry.key)}.priority"] = _PositionControl(position)
-            ttk.Button(row, text="▲", width=3, command=self._mover(entry.key, up=True)).pack(
-                side="left"
+            position = _PositionControl()
+            self.controls[f"{_toml(entry.key)}.priority"] = position
+            self._network_rows[entry.key] = ft.Row(
+                controls=[
+                    position.widget,
+                    control.widget,
+                    ft.Text(entry.label, weight=ft.FontWeight.W_600, expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.ARROW_UPWARD,
+                        tooltip="Move up",
+                        on_click=self._mover(entry.key, up=True),
+                    ),
+                    ft.IconButton(
+                        icon=ft.Icons.ARROW_DOWNWARD,
+                        tooltip="Move down",
+                        on_click=self._mover(entry.key, up=False),
+                    ),
+                ],
             )
-            ttk.Button(row, text="▼", width=3, command=self._mover(entry.key, up=False)).pack(
-                side="left"
-            )
-            self._network_rows[entry.key] = row
+        self._network_list = ft.Column(spacing=0)
         self._order_network_rows()
+        return ft.Card(
+            content=ft.Container(
+                padding=16,
+                content=ft.Column(
+                    controls=[
+                        ft.Text(
+                            "Networks, in order of preference",
+                            weight=ft.FontWeight.W_600,
+                        ),
+                        self._network_list,
+                    ]
+                ),
+            )
+        )
 
-    def _mover(self, key: str, *, up: bool) -> Callable[[], None]:
-        def move() -> None:
+    def _mover(self, key: str, *, up: bool) -> Callable[[Any], None]:
+        def move(_event: Any = None) -> None:
             if up:
                 self.networks.move_up(key)
             else:
@@ -697,41 +768,43 @@ class ConfigPanel:
         return move
 
     def _order_network_rows(self) -> None:
-        for entry in self.networks.entries:
-            self._network_rows[entry.key].pack_forget()
-        for entry in self.networks.entries:
-            self._network_rows[entry.key].pack(fill="x")
+        self._network_list.controls = [
+            self._network_rows[entry.key] for entry in self.networks.entries
+        ]
 
-    def _build_footer(self) -> None:
-        from tkinter import ttk
-
-        footer = ttk.Frame(self._shell.footer, padding=(8, 10))
-        footer.pack(fill="x")
-        self.save_button = ttk.Button(footer, text="Save", command=self._save)
-        self.save_button.pack(side="right")
-        restore = ttk.Button(footer, text="Restore defaults", command=self._restore)
-        restore.pack(side="right", padx=6)
-        self.status = ttk.Label(footer, text="")
-        self.status.pack(side="left")
-        # The tray menu is not reachable on every desktop (REQ-GUI-009); the
-        # panel is, so what the product is and under what terms is reachable
-        # from here too.
-        if self._on_about is not None:
-            ttk.Button(footer, text=self._about_label, command=self._on_about).pack(
-                side="left", padx=12
-            )
+    def _build_footer(self) -> Any:
+        self.save_button = ft.FilledButton(
+            content=ft.Text("Save"), icon=ft.Icons.SAVE, on_click=lambda _e: self._save()
+        )
+        restore = ft.OutlinedButton(
+            content=ft.Text("Restore defaults"),
+            icon=ft.Icons.RESTORE,
+            on_click=lambda _e: self._restore(),
+        )
+        self.status = ft.Text("", expand=True)
+        return ft.Container(
+            padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+            content=ft.ResponsiveRow(
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                run_spacing=8,
+                controls=[
+                    ft.Container(col={"xs": 12, "md": 6}, content=self.status),
+                    ft.Row(
+                        col={"xs": 12, "md": 6},
+                        alignment=ft.MainAxisAlignment.END,
+                        wrap=True,
+                        controls=[restore, self.save_button],
+                    ),
+                ],
+            ),
+        )
 
     # --- Behaviour ---
 
-    def _toggle(self, key: str) -> None:
-        header, body = self._sections_ui[key]
-        self._open[key] = not self._open[key]
-        title = next(s.title for s in self.model.sections if s.key == key)
-        header.configure(text=f"{'▾' if self._open[key] else '▸'} {title}")
-        if self._open[key]:
-            body.pack(fill="x", after=header)
-        else:
-            body.pack_forget()
+    def toggle(self, key: str) -> None:
+        """Opens or closes a section."""
+        tile = self._sections_ui[key]
+        tile.expanded = not tile.expanded
 
     def _edited(self, path: str, raw: Any) -> None:
         if self._loading:
@@ -751,12 +824,13 @@ class ConfigPanel:
     def _show_errors(self) -> None:
         errors = self.model.errors
         for where, label in self._messages.items():
-            label.configure(text=errors.get(where, ""))
-        self.save_button.configure(state="normal" if self.model.can_save else "disabled")
+            label.value = errors.get(where, "")
+            label.visible = bool(label.value)
+        self.save_button.disabled = not self.model.can_save
 
     def message_for(self, where: str) -> str:
         """The message currently shown next to a field, or its section."""
-        return str(self._messages[where]["text"])
+        return str(self._messages[where].value or "")
 
     def _restore(self) -> None:
         self.model.restore_defaults()
@@ -766,8 +840,10 @@ class ConfigPanel:
         try:
             outcome = self.model.save()
         except Exception as exc:  # noqa: BLE001 - every failure belongs on screen
-            self.status.configure(text=str(exc))
+            self.status.value = str(exc)
+            self.status.color = ft.Colors.ERROR
             return
-        self.status.configure(text="Saved. The changes apply when the agent restarts.")
+        self.status.value = "Saved. The changes apply when the agent restarts."
+        self.status.color = None
         if self._on_saved is not None:
             self._on_saved(outcome)

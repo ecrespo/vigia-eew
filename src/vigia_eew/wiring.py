@@ -48,9 +48,25 @@ from vigia_eew.pipeline.processor import Processor
 from vigia_eew.state import StateStore
 from vigia_eew.supervisor import Supervisor
 
+#: Runs a Flet app to completion: `main` receives the page. Injected so the
+#: run modes can be tested without starting the desktop client.
+UiRunner = Callable[[Callable[[Any], Any]], None]
+
 WindowFactory = Callable[[AlertData, SeverityLevel, Callable[[], None]], Any]
 #: Reads the worker's loop, or None if it has not published one yet.
 LoopSource = Callable[[], asyncio.AbstractEventLoop | None]
+
+
+def run_flet(main: Callable[[Any], Any]) -> None:
+    """Starts the Flet desktop client with the window hidden until it has content.
+
+    Hidden on purpose: the agent lives in the tray and only shows the window
+    for an alert or a screen the user opened, and the standalone modes size
+    the window before showing it instead of flashing a default one.
+    """
+    import flet as ft
+
+    ft.run(main, view=ft.AppView.FLET_APP_HIDDEN)
 
 
 class Wiring:
@@ -71,10 +87,9 @@ class Wiring:
         self.locale = resolve_locale(cfg.notification.language)
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
-        self._panel_window: Any = None
-        self._about_window: Any = None
-        self._fonts_scaled = False
+        self._panel: Any = None
         self._history_window: Any = None
+        self._history_store: HistoryStore | None = None
         self._history: HistoryWriter | None = None
 
     # --- Startup ---
@@ -203,6 +218,7 @@ class Wiring:
         if self._history is not None:
             self._history.close()
             self._history = None
+        self._close_history_reader()
 
     def build_supervisor(
         self, raw_queue: asyncio.Queue[RawMessage], processor: Processor
@@ -237,6 +253,14 @@ class Wiring:
 
     # --- Notification ---
 
+    def build_shell(self, page: Any, *, standalone: bool) -> Any:
+        """The one window every view is drawn in (ADR-030). Inside Flet's main only."""
+        from vigia_eew.notify.flet_shell import FletShell
+
+        return FletShell(
+            page, standalone=standalone, loop=asyncio.get_running_loop(), logger=self._log
+        )
+
     def build_controller(
         self,
         create_window: WindowFactory,
@@ -252,6 +276,7 @@ class Wiring:
             send_toast=publish_toast,
             on_acknowledge=on_acknowledge,
             reference_name=self.cfg.reference.name,
+            reference_point=(self.cfg.reference.lat, self.cfg.reference.lon),
             state=self.agent_state,
             locale_code=self.locale,
         )
@@ -269,14 +294,12 @@ class Wiring:
 
     def build_gui_controller(
         self,
-        root: Any,
+        shell: Any,
         *,
         on_acknowledge: Callable[[SeismicEvent], None],
         worker_loop: LoopSource,
     ) -> AlertController:
-        """The Tk path: a real window, sound, and a desktop toast."""
-        import tkinter as tk
-
+        """The desktop path: a Flet alert with its map, sound, and a desktop toast."""
         from vigia_eew.notify.alert_window import AlertWindow
 
         toaster = Toaster(reference_name=self.cfg.reference.name, locale_code=self.locale)
@@ -287,7 +310,7 @@ class Wiring:
             return AlertWindow(
                 data,
                 on_acknowledge=acknowledge,
-                root=tk.Toplevel(root),
+                host=shell,
                 fullscreen=self.cfg.notification.fullscreen,
                 locale=self.locale,
             )
@@ -365,11 +388,11 @@ class Wiring:
         """Opens `config.toml` with the OS's associated application (RF-34)."""
         tray.open_config(path)
 
-    def open_history(self, root: Any) -> Any:
-        """Opens the history window (REQ-HIS-005). Tk thread only, like the panel.
+    def open_history(self, shell: Any) -> Any:
+        """Opens the history screen (REQ-HIS-005). UI thread only, like the panel.
 
         Reads the history through its **own** store rather than the writer's
-        connection: the view runs on the Tk thread and the writer on a worker
+        connection: the view runs on the UI thread and the writer on a worker
         one, and a reader that blocks behind a write would put the interface at
         the mercy of a disk. Two connections to one SQLite file is what the
         engine is for.
@@ -378,94 +401,83 @@ class Wiring:
         nothing and says so, which is the same best-effort rule the writer
         follows -- nothing about the history may cost an alert.
         """
-        import tkinter as tk
-
         from vigia_eew.notify.history_window import HistoryWindow
 
-        if self._history_window is not None and self._history_window.winfo_exists():
-            self._history_window.lift()
+        if self._history_window is not None and shell.screen_key == "history":
             return self._history_window
+        self._close_history_reader()
         try:
             store = HistoryStore(prune_on_open=False).open()
         except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
             self._log.warning("history_view_unavailable type=%s detail=%s", type(exc).__name__, exc)
             return None
-        window = tk.Toplevel(root)
-        window.title(t("history_title", self.locale))
-        self.scale_fonts(window)
-        HistoryWindow(
-            window,
+        self._history_store = store
+        window = HistoryWindow(
             store,
             locale_code=self.locale,
             zone=self.cfg.notification.timezone,
             reference=(self.cfg.reference.lat, self.cfg.reference.lon),
+            on_close=lambda: self._close_history(shell),
         )
-        window.protocol("WM_DELETE_WINDOW", lambda: self._close_history(store, window))
+        shell.show_screen("history", t("history_title", self.locale), window.view)
         self._history_window = window
         return window
 
-    def _close_history(self, store: HistoryStore, window: Any) -> None:
-        store.close()
+    def _close_history(self, shell: Any) -> None:
+        self._close_history_reader()
+        shell.close_screen()
+
+    def _close_history_reader(self) -> None:
+        if self._history_store is not None:
+            self._history_store.close()
+            self._history_store = None
         self._history_window = None
-        window.destroy()
 
-    def open_panel(self, root: Any, path: Path) -> Any:
-        """Opens the configuration panel in its own window (REQ-GUI-005).
+    def open_panel(self, shell: Any, path: Path) -> Any:
+        """Opens the configuration panel (REQ-GUI-005).
 
-        Must be called on the Tk thread -- `Application` schedules it, because
+        Must be called on the UI thread -- `Application` schedules it, because
         the tray that asks for it runs on its own (ADR-006).
 
-        A second call raises the window that is already open instead of
-        building another. Two panels over one file would be the external-edit
-        conflict of CA-108.7 with itself.
+        A second call while it is open brings back the panel that is already
+        there instead of building another. Two panels over one file would be
+        the external-edit conflict of CA-108.7 with itself.
         """
-        import tkinter as tk
-
         from vigia_eew.config_writer import ConfigWriter
         from vigia_eew.notify.config_panel import ConfigPanel, PanelModel
 
-        if self._panel_window is not None and self._panel_window.winfo_exists():
-            self._panel_window.lift()
-            return self._panel_window
-        window = tk.Toplevel(root)
-        window.title("Vigía-eew")
-        self.scale_fonts(window)
-        window.geometry(
-            ui_scale.panel_geometry(window.winfo_screenwidth(), window.winfo_screenheight())
-        )
-        window.minsize(*ui_scale.MINIMUM_SIZE)
-        ConfigPanel(
-            window,
+        if self._panel is not None and shell.screen_key in ("panel", "about"):
+            self._show_panel(shell, self._panel)
+            return self._panel
+        self._close_history_reader()
+        panel = ConfigPanel(
             PanelModel(ConfigWriter(path)),
-            on_about=lambda: self.open_about(root),
+            on_about=lambda: self.open_about(shell, back=lambda: self._show_panel(shell, panel)),
             about_label=t("about_button", ui_scale.PANEL_LOCALE),
+            on_close=lambda: self._close_panel(shell),
         )
-        self._panel_window = window
-        return window
+        self._panel = panel
+        self._show_panel(shell, panel)
+        return panel
 
-    def scale_fonts(self, window: Any) -> None:
-        """Enlarges Tk's named fonts once per interpreter (T-151).
+    @staticmethod
+    def _show_panel(shell: Any, panel: Any) -> None:
+        shell.show_screen("panel", "Vigía-eew · Settings", panel.view)
 
-        Once, because the fonts are shared: the panel and the history window
-        live in the same interpreter, and bumping twice would double it. The
-        alert window is unaffected either way -- it sizes its own type, which
-        is the one thing here that must not depend on a default.
+    def _close_panel(self, shell: Any) -> None:
+        self._panel = None
+        shell.close_screen()
+
+    def open_about(self, shell: Any, *, back: Callable[[], None] | None = None) -> Any:
+        """Opens the About screen (REQ-GUI-010). UI thread only, like the panel.
+
+        `back` is where its Close button returns to: the panel when it was
+        opened from there, nothing (the window hides) when from the tray.
         """
-        if self._fonts_scaled:
-            return
-        from tkinter import font as tkfont
+        from vigia_eew.notify.about_window import about_view
 
-        self._fonts_scaled = True
-        changed = ui_scale.enlarge_fonts(lambda name: tkfont.nametofont(name, root=window))
-        self._log.info("ui_fonts_scaled bump=%d fonts=%s", ui_scale.FONT_BUMP, ",".join(changed))
-
-    def open_about(self, root: Any) -> Any:
-        """Opens the About window (REQ-GUI-010). Tk thread only, like the panel."""
-        from vigia_eew.notify.about_window import open_about as build_about
-
-        if self._about_window is not None and self._about_window.winfo_exists():
-            self._about_window.lift()
-            return self._about_window
-        self.scale_fonts(root)
-        self._about_window = build_about(root, locale_code=ui_scale.PANEL_LOCALE)
-        return self._about_window
+        if back is None:
+            self._close_history_reader()
+        view = about_view(locale_code=ui_scale.PANEL_LOCALE, on_close=back or shell.close_screen)
+        shell.show_screen("about", t("about_title", ui_scale.PANEL_LOCALE), view)
+        return view

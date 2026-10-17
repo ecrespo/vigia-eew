@@ -37,14 +37,17 @@ crashed agent is indistinguishable, to the user, from an earthquake that never h
 is a shared pure helper ([[src/vigia_eew/backoff.py#exponential_backoff]]) so the WebSocket
 reconnect loop and the supervisor use identical semantics. See ADR-009 and RNF-03.
 
-## Asyncio and Tkinter split across two threads
+## Asyncio and Flet split across two threads
 
-Tk's event loop runs on the main thread and asyncio on a worker thread, crossing through one
-thread-safe queue polled with `widget.after()`.
+Flet's UI loop runs on the main thread and the agent's asyncio loop on a worker thread, crossing
+through one thread-safe queue polled with [[src/vigia_eew/notify/flet_shell.py#FletShell#after]].
 
-The inverse arrangement was rejected because Tk is not thread-safe. The value of this shape is
-that there is exactly one integration point between the two worlds
-([[src/vigia_eew/notify/queue.py#AsyncioTkBridge]]), so shutdown ordering and error handling only
+The inverse arrangement was rejected because UI controls belong to the loop that renders them.
+Flet also drives a single window per process, so [[src/vigia_eew/notify/flet_shell.py#FletShell]]
+decides what it shows: an alert over the open screen over nothing. See ADR-030.
+
+The value of this shape is that there is exactly one integration point between the two worlds
+([[src/vigia_eew/notify/queue.py#AsyncioUiBridge]]), so shutdown ordering and error handling only
 have to be correct in one place. See ADR-006.
 
 ## The TUI is a separate run mode, not a second layer
@@ -58,8 +61,8 @@ controller directly. ADR-006 is untouched. See ADR-013.
 
 ## Wayland is the known limit of the "impossible to ignore" guarantee
 
-Tkinter was chosen over PyQt/PySide because it ships with CPython and supports `-topmost`,
-`overrideredirect` and `focus_force` at zero dependency cost.
+Flet replaced Tkinter (ADR-030) for a responsive layout and an embeddable map; its window
+keeps the same levers: `always_on_top`, a hidden title bar, `prevent_close` and `to_front`.
 
 The documented re-evaluation trigger is a compositor that refuses those requests: under
 GNOME/Wayland an X11/XWayland client cannot reliably force stacking or focus. ADR-010 designs a

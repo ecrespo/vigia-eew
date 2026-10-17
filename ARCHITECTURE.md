@@ -33,8 +33,8 @@ alert** (overlay window + toast + sound). Critical state is **persisted** to sur
 | **GeoFilter** | Discards events outside radius, below minimum magnitude, or from a previous local day (RF-40, default-on) | RF-12, RF-40 |
 | **Deduplicator** | Inter-source heuristic; persisted ids; handles `update` | RF-09..RF-11 |
 | **Notifier (toast)** | Native informational toast (`desktop-notifier`) | RF-14 |
-| **AlertWindow (overlay)** | Topmost Tkinter window, with focus, undismissable | RF-15..RF-19 |
-| **AlertQueue + bridge** | Event queue; asyncio↔Tk bridge | RF-20 |
+| **AlertWindow (overlay)** | Topmost Flet view with an epicentre map, undismissable (ADR-030) | RF-15..RF-19 |
+| **AlertQueue + bridge** | Event queue; asyncio↔UI bridge (`FletShell.after`) | RF-20 |
 | **Sound** | Audio by severity | RF-17 |
 | **StateStore** | Atomic JSON persistence (ids, cursor) | RF-06, RF-10 |
 | **Settings** | Loads/validates `config.toml` (pydantic) | RF-24 |
@@ -73,7 +73,7 @@ flowchart LR
     end
 
     subgraph Notif["Notification"]
-        AQ(["AlertQueue<br/>+ Tk bridge"])
+        AQ(["AlertQueue<br/>+ UI bridge"])
         TOAST["Notifier (toast)"]
         WIN["AlertWindow<br/>topmost · sound · ACKNOWLEDGED"]
     end

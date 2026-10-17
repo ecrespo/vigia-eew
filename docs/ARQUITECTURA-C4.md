@@ -93,7 +93,7 @@ flowchart TB
     redes["Redes sísmicas<br/><i>EMSC · USGS · GEOFON · FUNVISIS</i>"]
 
     subgraph maquina["Máquina del usuario"]
-        proc["<b>Proceso del agente</b><br/>[Python 3.11+ · asyncio + Tkinter/Textual]<br/>Ingiere, filtra, deduplica y presenta.<br/><i>Único proceso; 3 hilos</i>"]
+        proc["<b>Proceso del agente</b><br/>[Python 3.11+ · asyncio + Flet/Textual]<br/>Ingiere, filtra, deduplica y presenta.<br/><i>Único proceso; 3 hilos</i>"]
         estado[("<b>Estado</b><br/>[JSON atómico]<br/>Ids alertados, firmas, cursores<br/>y ubicación cacheada")]
         config[("<b>Configuración</b><br/>[TOML, solo lectura]<br/>Radio, magnitud, zona horaria,<br/>fuentes y severidades")]
         unidad["<b>Unidad de autoarranque</b><br/>[systemd · launchd · schtasks]<br/>Lanza el proceso al iniciar sesión"]
@@ -124,11 +124,11 @@ flowchart TB
 
 | Contenedor | Tecnología | Responsabilidad | Estado |
 |---|---|---|---|
-| Proceso del agente | Python ≥3.11, asyncio + Tkinter/Textual | Todo el comportamiento del sistema | ✅ en producción |
+| Proceso del agente | Python ≥3.11, asyncio + Flet/Textual | Todo el comportamiento del sistema | ✅ en producción |
 | Estado | JSON atómico vía `platformdirs` | Evitar re-alertas tras reinicio; cursores de fuente | ✅ `src/vigia_eew/state.py:33` |
 | Configuración | TOML validado por pydantic, **solo lectura** | Parámetros del usuario | ✅ `src/vigia_eew/config.py:142` |
 | Unidad de autoarranque | Nativa por plataforma | Arrancar al iniciar sesión | ✅ `src/vigia_eew/autostart/` |
-| **Servicio de presentación D-Bus** | D-Bus + extensión de GNOME Shell | Presentar la alerta donde Tkinter no puede | ❌ **diseñado, sin código** |
+| **Servicio de presentación D-Bus** | D-Bus + extensión de GNOME Shell | Presentar la alerta donde la ventana Flet no puede (Wayland) | ❌ **diseñado, sin código** |
 
 El quinto contenedor es la observación que este nivel aporta y que la vista narrativa no hacía
 evidente: **la solución a Wayland introduce el primer segundo proceso del sistema.** Deja de ser un
@@ -188,7 +188,7 @@ flowchart TB
     subgraph notif["Notificación — 5 componentes"]
         ctrl["<b>AlertController</b><br/>Orquesta 3 efectos inyectables"]
         cola2["<b>AlertQueue</b><br/>Una alerta a la vez;<br/>actualiza en sitio"]
-        win["<b>AlertWindow</b><br/>[Tkinter]<br/>Topmost, sin decoración,<br/>solo cierra por acuse"]
+        win["<b>AlertWindow</b><br/>[Flet + flet-map]<br/>Topmost, sin decoración,<br/>solo cierra por acuse"]
         snd["<b>SoundPlayer</b><br/>Insistencia por severidad"]
         toast["<b>Toaster</b><br/>[desktop-notifier]"]
     end
@@ -269,7 +269,7 @@ del pipeline, así que va como vista suplementaria.
 
 ```mermaid
 flowchart LR
-    subgraph tk["Hilo principal — Tkinter"]
+    subgraph tk["Hilo principal — Flet"]
         mainloop["mainloop()"]
         aq["AlertQueue<br/>AlertWindow"]
     end
@@ -281,7 +281,7 @@ flowchart LR
         icon["Icon.run()"]
     end
 
-    ing2 -- "publish()" --> bridge{{"AsyncioTkBridge<br/>[queue.Queue]"}}
+    ing2 -- "publish()" --> bridge{{"AsyncioUiBridge<br/>[queue.Queue]"}}
     bridge -- "drain() en el tick<br/>de widget.after()" --> aq
     icon -- "root.after(0, …)" --> aq
     icon -- "lee bajo Lock" --> ast["AgentState"]
@@ -289,12 +289,12 @@ flowchart LR
     aq -.escribe.-> ast
 ```
 
-**Único punto de cruce asyncio↔Tk**: `AsyncioTkBridge` (`notify/queue.py:102`). En el modo `--tui`
+**Único punto de cruce asyncio↔UI**: `AsyncioUiBridge` (`notify/queue.py:102`). En el modo `--tui`
 este puente **no existe**: Textual es asyncio-nativo y el supervisor corre como *worker* en el mismo
 bucle (ADR-013).
 
 ⚠️ **Defecto conocido en esta vista**: `Application._loop` y `._sup` se escriben en el hilo de
-asyncio y se leen en el de Tk **sin sincronizar**, a diferencia de `AgentState`, que sí usa `Lock`.
+asyncio y se leen en el de la UI **sin sincronizar**, a diferencia de `AgentState`, que sí usa `Lock`.
 Es el hallazgo P2-1 de la evaluación arquitectónica, con corrección propuesta en
 [ADR-002](arch-eval/adr/ADR-002-sincronizar-estado-compartido-de-application.md).
 
@@ -333,7 +333,7 @@ Las vistas de arriba describen la v0.6.0. Los cambios especificados en
 |---|---|---|
 | 1 · Contexto | Sin cambios: los mismos actores y las mismas cinco integraciones | — |
 | 2 · Contenedores | **Aparece un segundo proceso**: el servicio de presentación D-Bus | REQ-ALE-004 |
-| 3 · Componentes | `Application` se parte en `Application` + `wiring`; el registro declarativo de fuentes sustituye a las cuatro fábricas enumeradas; un selector de frontend decide entre D-Bus, Tk y TUI | TD-01, TD-02, TD-03 |
+| 3 · Componentes | `Application` se parte en `Application` + `wiring`; el registro declarativo de fuentes sustituye a las cuatro fábricas enumeradas; un selector de frontend decide entre D-Bus, Flet y TUI | TD-01, TD-02, TD-03 |
 | 3 · Tiempo de ejecución | El estado compartido entre hilos se sincroniza y se documenta | REQ-OPS-002, REQ-OPS-003 |
 | 4 · Código | Las fronteras entre paquetes pasan a ser contratos que el CI verifica | REQ-OBS-005 |
 

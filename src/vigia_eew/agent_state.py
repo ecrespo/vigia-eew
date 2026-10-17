@@ -2,11 +2,11 @@
 
 `AgentState` is a small, lock-protected snapshot: `WSIngestor` updates it on
 connect/reconnect (asyncio thread) and `AlertController` on showing an alert
-(Tk thread); `tray.py` reads it from its own thread (pystray) for the menu text.
+(UI thread); `tray.py` reads it from its own thread (pystray) for the menu text.
 Not persisted — it only lives while the process is running.
 
 `AgentRuntime` protects the other thing that crosses those threads: the event
-loop and supervisor the worker publishes and the Tk thread reads at shutdown.
+loop and supervisor the worker publishes and the UI thread reads at shutdown.
 Same lock pattern, for the same reason (ADR-002).
 
 `PresentationEnvironment` is not thread-shared -- it is decided once at
@@ -47,16 +47,17 @@ class PresentationEnvironment:
     reason: str
 
 
-#: Measured on this project's own hardware, GNOME/Wayland via XWayland:
-#: `wm_attributes("-topmost", True)` is accepted without error and reading it
-#: back gives 0. The same call under a plain X server on the same machine
-#: gives 1. Nothing in the code can tell the difference at the call site,
-#: which is why the session has to be reasoned about instead.
+#: Measured on this project's own hardware, GNOME/Wayland via XWayland, back
+#: when the GUI was Tk: the topmost request was accepted without error and
+#: reading it back gave 0; under a plain X server on the same machine it gave
+#: 1. Flet's `always_on_top` (ADR-030) goes through the same compositor and is
+#: no different. Nothing in the code can tell at the call site, which is why
+#: the session has to be reasoned about instead.
 _WAYLAND_REASON = (
-    "Wayland compositors own window stacking: Tk accepts -topmost and silently "
-    "drops it, so the alert can be covered by another window"
+    "Wayland compositors own window stacking: an application's topmost request "
+    "is accepted and silently dropped, so the alert can be covered by another window"
 )
-_X11_REASON = "X11 honours -topmost and focus requests from the alert window"
+_X11_REASON = "X11 honours topmost and focus requests from the alert window"
 _NATIVE_REASON = "the platform honours always-on-top for an application window"
 _UNKNOWN_REASON = (
     "the desktop session could not be identified; the alert is shown, but being "
@@ -105,7 +106,7 @@ class Stoppable(Protocol):
 
 
 class AgentRuntime:
-    """The loop and supervisor the worker thread publishes, read by the Tk thread.
+    """The loop and supervisor the worker thread publishes, read by the UI thread.
 
     The two used to be plain attributes on `Application`, assigned several
     statements apart: the loop as soon as it existed, the supervisor once the

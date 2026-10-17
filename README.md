@@ -41,16 +41,17 @@ honest thing is to say where.**
 |---|---|---|
 | **Windows** | ✅ Guaranteed | The platform honours always-on-top for an application window |
 | **macOS** | ✅ Guaranteed | Same |
-| **Linux · X11** | ✅ Guaranteed | X11 honours `-topmost` and focus requests from the alert window |
-| **Linux · Wayland** | ⚠️ **Not guaranteed** | The compositor owns window stacking. Tk **accepts** `-topmost` and then silently drops it, so another window can cover the alert |
+| **Linux · X11** | ✅ Guaranteed | X11 honours always-on-top and focus requests from the alert window |
+| **Linux · Wayland** | ⚠️ **Not guaranteed** | The compositor owns window stacking. The toolkit's always-on-top request is **accepted** and then silently dropped, so another window can cover the alert |
 | Anything else | ❓ Not confirmed | The session could not be identified. The alert is shown; being above everything is not verified there |
 
 The alert is always **shown**, with its sound and its desktop notification, in every one of these.
 What varies is whether it can place itself above whatever you are looking at.
 
 **How the Wayland row was established**, since it is a claim about somebody else's software: on a
-GNOME/Wayland session, `wm_attributes("-topmost", True)` returns successfully and reading the
-attribute back gives `0`. The same call, on the same machine, under a plain X server gives `1`.
+GNOME/Wayland session, the topmost request (measured with Tk's `wm_attributes("-topmost", True)`,
+before the GUI moved to Flet) returns successfully and reading the attribute back gives `0`. The
+same call, on the same machine, under a plain X server gives `1`.
 Nothing at the call site can tell the difference — which is why the agent reasons about the session
 rather than trusting the return value.
 

@@ -57,7 +57,7 @@ def test_the_application_module_is_readable_in_one_sitting() -> None:
 def test_the_application_no_longer_builds_the_pipeline_itself() -> None:
     """The two run modes used to assemble an identical Processor each.
 
-    Duplicated assembly is how the TUI and Tk paths drift apart: a filter
+    Duplicated assembly is how the TUI and Flet paths drift apart: a filter
     added to one and forgotten in the other is invisible until somebody is
     not warned.
     """

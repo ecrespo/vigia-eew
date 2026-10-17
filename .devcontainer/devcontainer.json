@@ -5,11 +5,10 @@
 // product is still a desktop agent that ships as a binary, not an image.
 //
 // The obstacle this removes is specific to this project and not obvious. The
-// agent imports tkinter at load time; no Python base image ships it. uv's
-// managed CPython (python-build-standalone) does carry the `_tkinter` module
-// -- which is how CI solves it -- but it resolves libtcl8.6 and libtk8.6
-// against the *system*. Without them the import fails after a perfectly green
-// `uv sync`, which makes a packaging problem look like a code problem.
+// GUI is Flet (ADR-030): its Linux desktop client is a Flutter/GTK3 binary
+// that `flet` downloads on first run and links against the *system* GTK 3.
+// A base image without it fails when the window opens, after a perfectly
+// green `uv sync`, which makes a packaging problem look like a code problem.
 {
   "name": "vigia-eew",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
@@ -30,10 +29,9 @@
     "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
   },
 
-  // Once per container. libtk8.6/libtcl8.6 are what uv's interpreter links
-  // against; libxss1 is a transitive need of Tk that images routinely lack;
-  // xvfb is the virtual display for CA-109.4.
-  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends libtk8.6 libtcl8.6 libxss1 xvfb && sudo rm -rf /var/lib/apt/lists/* && curl -LsSf https://astral.sh/uv/install.sh | sh",
+  // Once per container. libgtk-3-0 is what the Flet desktop client links
+  // against; xvfb is the virtual display for CA-109.4 (pystray's X backend).
+  "onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-0 xvfb && sudo rm -rf /var/lib/apt/lists/* && curl -LsSf https://astral.sh/uv/install.sh | sh",
 
   // `--frozen` so the container reproduces the verified resolution instead of
   // re-resolving it (REQ-DEP-001). The hooks are installed *for* the

@@ -1,10 +1,10 @@
 """Tests for the contribution environment (REQ-DEV-001..003, HU-109).
 
 The obstacle this environment removes is specific to this project and not
-at all obvious: the agent needs tkinter, which no Python base image ships,
-and uv's managed CPython provides the `_tkinter` module while still linking
-`libtcl8.6` and `libtk8.6` **from the system**. A contributor hits that with
-no hint of where to go.
+at all obvious: the GUI is Flet (ADR-030), whose Linux desktop client is a
+Flutter binary that links GTK 3 **from the system**. A base image without it
+fails only when a window opens. A contributor hits that with no hint of where
+to go.
 
 Docker cannot run inside the suite, so what is asserted here is that the
 declaration contains what the acceptance criteria require. The behaviour
@@ -35,16 +35,14 @@ def _commands() -> str:
     return " ".join(str(config.get(key, "")) for key in keys)
 
 
-def test_the_system_tk_libraries_are_installed() -> None:
-    """CA-109.2: importing tkinter succeeds.
+def test_the_system_gui_libraries_are_installed() -> None:
+    """CA-109.2: the Flet desktop client can open a window.
 
-    uv's managed interpreter carries `_tkinter` but resolves libtcl/libtk
-    against the system, so an image without them fails at import -- after a
-    green `uv sync`, which makes it look like a code problem.
+    The client links GTK 3 from the system, so an image without it fails when
+    the window opens -- after a green `uv sync`, which makes it look like a
+    code problem.
     """
-    commands = _commands()
-    for package in ("libtk8.6", "libtcl8.6"):
-        assert package in commands
+    assert "libgtk-3-0" in _commands()
 
 
 def test_dependencies_are_synced_without_manual_steps() -> None:

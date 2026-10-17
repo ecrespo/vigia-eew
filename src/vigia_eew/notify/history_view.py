@@ -13,7 +13,7 @@ test that fails if this module so much as mentions one
 
 Split the same way as the configuration panel, for the same reason:
 `HistoryList` decides -- what is shown, in what order, phrased how -- and
-needs no display; `HistoryView` only draws it.
+needs no display; `HistoryView` only draws it, in Flet controls (ADR-030).
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
+
+import flet as ft
 
 from vigia_eew.history import ORDERABLE, EventRecord, HistoryQuery, HistoryStore
 from vigia_eew.i18n import DEFAULT_LOCALE, t
@@ -192,7 +194,13 @@ def _replace(query: HistoryQuery, **changes: Any) -> HistoryQuery:
     return replace(query, **changes)
 
 
-# --- The widget tree -------------------------------------------------------------
+# --- The controls ----------------------------------------------------------------
+
+
+#: Rows the table draws. A Flutter `DataTable` lays out every cell up front,
+#: and 500 rows of seven cells took the screen several seconds to appear. The
+#: filters narrow the set; the map still shows every record the list holds.
+TABLE_ROW_LIMIT = 150
 
 
 class HistoryView:
@@ -200,91 +208,111 @@ class HistoryView:
 
     Decides nothing. Every question it displays an answer to was answered by
     `HistoryList`, which is why those answers are testable without a screen.
+    The filters sit in a `ResponsiveRow` (one per line on a narrow window) and
+    the table scrolls sideways rather than squeezing its columns (ADR-030).
     """
 
     def __init__(
         self,
-        master: Any,
         listing: HistoryList,
         *,
         locale_code: str = DEFAULT_LOCALE,
         on_changed: Any = None,
     ) -> None:
-        from tkinter import ttk
-
         self.listing = listing
         self._locale = locale_code
         self._on_changed = on_changed
-        self.frame = ttk.Frame(master, padding=8)
-        self.frame.pack(fill="both", expand=True)
-        self._build_filters()
+        filters = self._build_filters()
         self.table = self._build_table()
-        self.status = ttk.Label(self.frame, text="")
-        self.status.pack(anchor="w", pady=(6, 0))
-        self.refresh()
-
-    def _build_filters(self) -> None:
-        import tkinter as tk
-        from tkinter import ttk
-
-        bar = ttk.Frame(self.frame)
-        bar.pack(fill="x", pady=(0, 6))
-        ttk.Label(bar, text=t("history_filter_magnitude", self._locale)).pack(side="left")
-        self._magnitude = tk.StringVar()
-        entry = ttk.Entry(bar, textvariable=self._magnitude, width=6)
-        entry.pack(side="left", padx=(4, 12))
-        self._magnitude.trace_add("write", lambda *_: self._apply_magnitude())
-
-        ttk.Label(bar, text=t("history_filter_verdict", self._locale)).pack(side="left")
-        self._verdict = tk.StringVar(value=t("history_filter_any", self._locale))
-        verdicts = ttk.Combobox(
-            bar,
-            textvariable=self._verdict,
-            width=12,
-            state="readonly",
-            values=[
-                t("history_filter_any", self._locale),
-                t("history_verdict_alerted", self._locale),
-                t("history_verdict_discarded", self._locale),
+        self.status = ft.Text("", italic=True)
+        self.view = ft.Column(
+            expand=True,
+            spacing=8,
+            controls=[
+                filters,
+                ft.Container(
+                    expand=True,
+                    content=ft.Column(
+                        expand=True,
+                        scroll=ft.ScrollMode.AUTO,
+                        controls=[ft.Row(scroll=ft.ScrollMode.AUTO, controls=[self.table])],
+                    ),
+                ),
+                self.status,
             ],
         )
-        verdicts.pack(side="left", padx=(4, 12))
-        verdicts.bind("<<ComboboxSelected>>", lambda _e: self._apply_verdict())
+        self.refresh()
 
-        ttk.Button(bar, text=t("history_filter_clear", self._locale), command=self._clear).pack(
-            side="left"
+    def _build_filters(self) -> Any:
+        loc = self._locale
+        self._magnitude = ft.TextField(
+            label=t("history_filter_magnitude", loc),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            dense=True,
+            on_change=lambda _e: self._apply_magnitude(),
+        )
+        self._any = t("history_filter_any", loc)
+        self._verdict = ft.Dropdown(
+            label=t("history_filter_verdict", loc),
+            value=self._any,
+            dense=True,
+            expand=True,
+            options=[
+                ft.DropdownOption(key=self._any, text=self._any),
+                ft.DropdownOption(key="alerted", text=t("history_verdict_alerted", loc)),
+                ft.DropdownOption(key="discarded", text=t("history_verdict_discarded", loc)),
+            ],
+            on_select=lambda _e: self._apply_verdict(),
+        )
+        return ft.ResponsiveRow(
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            run_spacing=8,
+            controls=[
+                ft.Container(col={"xs": 12, "sm": 4}, content=self._magnitude),
+                ft.Container(col={"xs": 12, "sm": 5}, content=self._verdict),
+                ft.Container(
+                    col={"xs": 12, "sm": 3},
+                    content=ft.OutlinedButton(
+                        content=ft.Text(t("history_filter_clear", loc)),
+                        icon=ft.Icons.FILTER_ALT_OFF,
+                        on_click=lambda _e: self._clear(),
+                    ),
+                ),
+            ],
         )
 
     def _build_table(self) -> Any:
-        from tkinter import ttk
-
-        table = ttk.Treeview(
-            self.frame,
-            columns=tuple(column.key for column in COLUMNS),
-            show="headings",
-            height=18,
+        return ft.DataTable(
+            columns=[
+                ft.DataColumn(
+                    label=ft.Text(self.listing.label(column), weight=ft.FontWeight.BOLD),
+                    numeric=column.key in ("magnitude", "distance"),
+                    on_sort=(
+                        (lambda _e, key=column.key: self._sort(key))
+                        if column.sort_key is not None
+                        else None
+                    ),
+                )
+                for column in COLUMNS
+            ],
+            rows=[],
+            column_spacing=20,
+            heading_row_color=ft.Colors.SURFACE_CONTAINER,
         )
-        for column in COLUMNS:
-            table.heading(
-                column.key,
-                text=self.listing.label(column),
-                command=lambda key=column.key: self._sort(key),  # type: ignore[misc]
-            )
-            table.column(column.key, width=column.width, anchor="w")
-        table.pack(fill="both", expand=True)
-        return table
 
     # --- Behaviour ---
 
     def refresh(self) -> None:
         """Redraws the table from whatever the listing currently holds."""
-        self.table.delete(*self.table.get_children())
-        for row in self.listing.rows:
-            self.table.insert(
-                "", "end", values=tuple(getattr(row, column.key) for column in COLUMNS)
-            )
-        empty = t("history_empty", self._locale)
-        self.status.configure(text=self.listing.count_text if self.listing.total else empty)
+        rows = self.listing.rows
+        self.table.rows = [
+            ft.DataRow(cells=[ft.DataCell(ft.Text(str(getattr(row, c.key)))) for c in COLUMNS])
+            for row in rows[:TABLE_ROW_LIMIT]
+        ]
+        text = self.listing.count_text if self.listing.total else t("history_empty", self._locale)
+        if len(rows) > TABLE_ROW_LIMIT:
+            text += " · " + t("history_table_limit", self._locale, shown=TABLE_ROW_LIMIT)
+        self.status.value = text
         if self._on_changed is not None:
             self._on_changed()
 
@@ -293,7 +321,7 @@ class HistoryView:
         self.refresh()
 
     def _apply_magnitude(self) -> None:
-        raw = self._magnitude.get().strip()
+        raw = (self._magnitude.value or "").strip()
         try:
             value = float(raw) if raw else None
         except ValueError:
@@ -302,17 +330,13 @@ class HistoryView:
         self.refresh()
 
     def _apply_verdict(self) -> None:
-        chosen = self._verdict.get()
-        verdicts = {
-            t("history_verdict_alerted", self._locale): "alerted",
-            t("history_verdict_discarded", self._locale): "discarded",
-        }
-        self.listing.set_filter(verdict=verdicts.get(chosen))
+        chosen = self._verdict.value
+        self.listing.set_filter(verdict=chosen if chosen in ("alerted", "discarded") else None)
         self.refresh()
 
     def _clear(self) -> None:
-        self._magnitude.set("")
-        self._verdict.set(t("history_filter_any", self._locale))
+        self._magnitude.value = ""
+        self._verdict.value = self._any
         self.listing.clear_filters()
         self.refresh()
 

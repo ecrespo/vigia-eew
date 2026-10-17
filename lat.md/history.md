@@ -95,7 +95,6 @@ keep it a membership test: `MSC` does not match `|EMSC|`.
 
 One query object drives the list and the map, so that filtering cannot come to mean two different
 things in two views of one history.
-\n
 
 ## The map is a view on the list, never the other way round
 
@@ -107,7 +106,7 @@ warned?" whether or not there is connectivity, and the geographic reading is an 
 The plan says the same thing in scope terms — if something had to be cut, the map goes and the
 list stays.
 
-A test walks the module's imports and fails if a network library or the tile client appears among
+A test walks the module's imports and fails if a network library or a map module appears among
 them. Prose about the map is fine; an import of it is not.
 
 Both views read **one** query object. The list owns it and the map reads it, so a filter cannot
@@ -115,49 +114,41 @@ come to mean two different things in two views of one history.
 
 ## Tiles are fetched only because somebody is looking at a map
 
-[[src/vigia_eew/tiles.py#TileClient]] is the only place in the agent that contacts the tile
-provider, and nothing constructs one except the map window.
+[[src/vigia_eew/notify/map_view.py#tile_layer]] is the only place in the agent that names the tile
+provider, and only the views that put a map on screen — the alert and the history — build one.
 
 Amendment E-06 is what makes that worth enforcing rather than intending. Until v1.0 the agent
 talked to seismic sources and, once, to a geolocation service; a map adds a **new kind of
-destination**, and the amendment bounds it to the time the map is on screen.
+destination**, and the amendment bounds it to the time a map is on screen. Since ADR-030 the
+tiles are fetched by the Flet client itself (flet-map), so the alert's epicentre map counts too:
+an alert on screen is a map on screen.
 
 So the bound is structural, not behavioural: a test walks every import in the package and fails if
-any module other than the map imports the tile client. "No requests while closed" is a property of
-who can call this at all — and a second caller added in a year is exactly what would break it
-quietly.
+any module other than the map views reaches `flet_map` or `map_view`, and another fails if the tile
+URL is spelled anywhere else. "No requests while closed" is a property of who can build a tile
+layer at all — and a second caller added in a year is exactly what would break it quietly.
 
 ### The cost that cannot be engineered away is declared instead
 
-While the map is open, the provider can infer roughly which area the user is looking at.
+While a map is open, the provider can infer roughly which area the user is looking at.
 
-The cache reduces it and fetching on demand bounds it. Neither removes it, and pretending
-otherwise would be worse than saying so — see ADR-027 and E-06.
+Fetching only what is on screen bounds it. It does not remove it, and pretending otherwise would be
+worse than saying so — see ADR-027 and E-06.
 
 ### What the provider is owed
 
-Every request identifies the application, its version and a contact, because the tile usage policy
-asks for it and an anonymous client is blocked. `© OpenStreetMap contributors` is on screen
-wherever a tile is.
+Every request identifies the application by its package name, because the tile usage policy asks
+for it and an anonymous client is blocked. `© OpenStreetMap contributors` is on screen wherever a
+tile is.
 
-A viewport asks for the tiles it shows and no others: no speculative ring, no neighbouring zoom
-levels, no prefetching. Tiles off the edge of the grid are left out rather than requested — there
-is no tile x=-1, and asking for one is a 404 the provider counts against this client.
-
-### The cache is a cache, and the difference matters
-
-It lives in the platform's **cache** directory, not the data one, because losing it costs a
-download while losing [[lat.md/state#Persisted state]] costs a repeated alert. The user, or the
-operating system, can clear it without consequence.
-
-It is bounded and least-recently-used, so it cannot grow into somebody's disk. A failure is never
-cached as an answer: caching "no" would leave a zone blank long after the network came back, which
-looks exactly like a map that is simply broken.
+The client asks for the tiles of the viewport it shows. There is no cache of our own any more: the
+Tk-era disk cache went with ADR-030, and what flet-map keeps is in memory, for the life of the
+window. Losing it costs a download, never an alert.
 
 ## What the map says, and how it says it
 
-[[src/vigia_eew/notify/history_map.py#plan]] works out the whole drawing before a widget is
-touched: which tile goes where, how big each symbol is, which symbols are alerts.
+[[src/vigia_eew/notify/history_map.py#plan]] works out the whole drawing before a control is
+built: where each symbol goes, how big it is, which symbols are alerts.
 
 That separation is what makes the product's claims checkable. "A magnitude 6 is visibly bigger
 than a 3" is a number in a test, not an impression; "alerted and discarded are told apart" is an
@@ -174,14 +165,11 @@ under-reporting the history is worse than drawing it modestly.
 
 ### No tiles means no map, and it says so
 
-With nothing to draw under them, the symbols are not drawn either.
+When a tile fails to load, the map says it is unavailable rather than pretending to be one.
 
 A dot at a pixel with no geography beneath it is a picture of nowhere, and it would look like a
-map. Saying the map is unavailable is the honest answer, and the list is already on screen
-answering the real question (REQ-MAP-002, Art. 3).
-
-One tile in hand is still a map, though: a partly cached zone draws what it has rather than
-throwing away a usable cache.
+map. [[src/vigia_eew/notify/history_map.py#HistoryMap]] shows a notice over it on the first tile
+error, and the list is already on screen answering the real question (REQ-MAP-002, Art. 3).
 
 ### The legend and the attribution are never conditional
 

@@ -1,11 +1,11 @@
 """Tests for the declared scope of the alert guarantee (REQ-ALE-003, HU-106).
 
 The product promises an alert that cannot be ignored. On Wayland it cannot
-keep that promise through Tkinter, and the way it fails is the problem:
-`wm_attributes("-topmost", True)` is **accepted without error** and then
-silently dropped. Measured on GNOME/Wayland via XWayland, reading the
-attribute back gives 0; under a plain X server, the same call on the same
-machine gives 1.
+keep that promise through any toolkit, and the way it fails is the problem:
+the topmost request is **accepted without error** and then silently dropped.
+Measured on GNOME/Wayland via XWayland (with Tk, before ADR-030), reading the
+attribute back gave 0; under a plain X server, the same call on the same
+machine gave 1. Flet's `always_on_top` meets the same compositor.
 
 Nothing in the code can detect that from the call, so the agent has to
 reason about the session instead -- and say so, rather than promise

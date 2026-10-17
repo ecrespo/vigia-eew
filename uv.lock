@@ -368,6 +368,51 @@ wheels = [
 ]
 
 [[package]]
+name = "flet"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx", marker = "sys_platform != 'emscripten'" },
+    { name = "msgpack" },
+    { name = "oauthlib", marker = "sys_platform != 'emscripten'" },
+    { name = "repath" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/cd/a637c81554ee9c18372312cf4d65808d1dfe0820b519f3d864b0f3e44c4a/flet-1.0.4.tar.gz", hash = "sha256:cab546db476e6c34abe3f97e2ebc88b8e6692656a94e7821af2d354012fcff2c", size = 574268, upload-time = "2026-10-08T22:25:02.511Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/44/bfb1cbfd2b4ef3e12e2ae4f0bc76ff0eb56175fb6c90c35d1d8b40bf507e/flet-1.0.4-py3-none-any.whl", hash = "sha256:5e6ea0a75e10ff7143ca32dc2b84117fe7c964b4ec2270cb9910598acd9ffe67", size = 635815, upload-time = "2026-10-08T22:25:01.048Z" },
+]
+
+[package.optional-dependencies]
+desktop = [
+    { name = "flet-desktop" },
+]
+
+[[package]]
+name = "flet-desktop"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/6b/aa08bbcbaeff7ffb7d941c73236a008a8ef415a51459a5d1b549a2d0daa3/flet_desktop-1.0.4.tar.gz", hash = "sha256:deae439c3fae7d166326e8d65172ddd068bb9850f59c06559b0e95eb2bf67bcf", size = 13197, upload-time = "2026-10-08T22:25:08.003Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/01/28595d3e508586d99c113df8b27e19d8a859be16f4de37f1fcbb73235716/flet_desktop-1.0.4-py3-none-any.whl", hash = "sha256:7fabd914b605f577b057366adf84e95087581fe85118ebcc62fb1e2e8f3f5aee", size = 13519, upload-time = "2026-10-08T22:25:07.137Z" },
+]
+
+[[package]]
+name = "flet-map"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/45/84/453012433c6d336e1a92f4839ecc98d4b031af00f3d8f38922b706d59bfa/flet_map-1.0.4.tar.gz", hash = "sha256:c62c699cafda207ca318388697edf71fc7ecf40ced5066f818c87d6d9916aab7", size = 36393, upload-time = "2026-10-08T22:25:45.929Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/af/7371cdcf5f2e988f8174aa373be2cf7e17b6e723c1b72334a07a4bd68cb2/flet_map-1.0.4-py3-none-any.whl", hash = "sha256:8516e113b0a98e542368c8c63353109efe3597eac5c11e49b16123c3a1ed97ac", size = 46747, upload-time = "2026-10-08T22:25:45.027Z" },
+]
+
+[[package]]
 name = "grimp"
 version = "3.17"
 source = { registry = "https://pypi.org/simple" }
@@ -728,6 +773,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9e5958945e01910052158313224ada5ce1fb2e1113b8/nodeenv-1.10.0.tar.gz", hash = "sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb", size = 55611, upload-time = "2025-12-20T14:08:54.006Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438, upload-time = "2025-12-20T14:08:52.782Z" },
+]
+
+[[package]]
+name = "oauthlib"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/d8/a1bcc8ba112a627f8ffbdc212a78ce18d3ac07e91a5ca65d27918eee25a1/oauthlib-4.0.0.tar.gz", hash = "sha256:efb274799819440f95b4ab3b818869f1ce9ae26c5beacba0201d1a1b76b54f86", size = 187232, upload-time = "2026-09-28T06:01:18.77Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/f4/78229a1066068ca14fc60fb26cf7381cabe4382261392b90e5f9552722d4/oauthlib-4.0.0-py3-none-any.whl", hash = "sha256:624c28c13a0a59cabf9747dfa52af63be3e512a7f2714df16e91b5b3a145e6cd", size = 159715, upload-time = "2026-09-28T06:01:17.008Z" },
 ]
 
 [[package]]
@@ -1234,6 +1288,18 @@ wheels = [
 ]
 
 [[package]]
+name = "repath"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/65/e1/824989291d0f01886074fdf9504ba54598f5665bc4dd373b589b87e76608/repath-0.9.0.tar.gz", hash = "sha256:8292139bac6a0e43fd9d70605d4e8daeb25d46672e484ed31a24c7ce0aef0fb7", size = 5492, upload-time = "2019-10-08T00:25:22.3Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/ed/92e9b8a3ffc562f21df14ef2538f54e911df29730e1f0d79130a4edc86e7/repath-0.9.0-py3-none-any.whl", hash = "sha256:ee079d6c91faeb843274d22d8f786094ee01316ecfe293a1eb6546312bb6a318", size = 4738, upload-time = "2019-10-08T00:25:20.842Z" },
+]
+
+[[package]]
 name = "requests"
 version = "2.34.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1456,6 +1522,8 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "desktop-notifier" },
+    { name = "flet", extra = ["desktop"] },
+    { name = "flet-map" },
     { name = "httpx" },
     { name = "pillow" },
     { name = "platformdirs" },
@@ -1489,6 +1557,8 @@ security = [
 requires-dist = [
     { name = "bandit", marker = "extra == 'security'", specifier = ">=1.8" },
     { name = "desktop-notifier", specifier = ">=6.0,<7" },
+    { name = "flet", extras = ["desktop"], specifier = ">=1.0.4,<2" },
+    { name = "flet-map", specifier = ">=1.0.4,<2" },
     { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },

@@ -216,21 +216,23 @@ CEILING_EXEMPT = {"tzdata"}
 
 
 def test_every_range_has_a_ceiling_except_the_declared_exemption() -> None:
-    """CA-101.7: nine of the ten ranges are bounded above.
+    """CA-101.7: every range but tzdata is bounded above.
 
     Without one, `uv lock` adopts a new major the moment it is published
     and nobody decides anything. The project already lived that: the
     declared floors and the resolved versions had drifted by four majors
     for websockets and by eight for textual.
 
-    The tenth is `tomlkit`, added by ADR-019 as the write path's parser. The
-    count is spelled out so that a dependency arriving without a decision
-    fails here instead of passing quietly.
+    The tenth is `tomlkit`, added by ADR-019 as the write path's parser; the
+    eleventh and twelfth are `flet` and `flet-map`, the desktop GUI of
+    ADR-030 (which also retired the Tk tile client). The count is spelled
+    out so that a dependency arriving without a decision fails here instead
+    of passing quietly.
     """
     ranges = _declared_ranges()
     unbounded = {name for name, spec in ranges.items() if "<" not in spec}
     assert unbounded == CEILING_EXEMPT
-    assert len(ranges) - len(CEILING_EXEMPT) == 9
+    assert len(ranges) - len(CEILING_EXEMPT) == 11
 
 
 def test_each_ceiling_is_the_next_breaking_version() -> None:

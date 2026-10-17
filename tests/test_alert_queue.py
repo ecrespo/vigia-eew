@@ -1,11 +1,11 @@
-"""Tests for the alert queue and the asyncio<->Tk bridge (RF-20, RF-11, ADR-006)."""
+"""Tests for the alert queue and the asyncio<->UI bridge (RF-20, RF-11, ADR-006)."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
 from vigia_eew.models import SeismicEvent
-from vigia_eew.notify.queue import AlertQueue, AsyncioTkBridge
+from vigia_eew.notify.queue import AlertQueue, AsyncioUiBridge
 
 
 def _ev(id="e1", action="create", mag=6.0) -> SeismicEvent:
@@ -145,12 +145,12 @@ def test_update_of_another_id_gets_queued():
     assert s.updated == []
 
 
-# --- asyncio<->Tk bridge (ADR-006) ---
+# --- asyncio<->UI bridge (ADR-006) ---
 
 
 def test_bridge_drains_in_order():
     received: list[SeismicEvent] = []
-    bridge = AsyncioTkBridge(sink=received.append)
+    bridge = AsyncioUiBridge(sink=received.append)
     for x in ("a", "b", "c"):
         bridge.publish(_ev(x))
     bridge.drain()
@@ -159,7 +159,7 @@ def test_bridge_drains_in_order():
 
 def test_bridge_drain_empty_does_nothing():
     received: list[SeismicEvent] = []
-    AsyncioTkBridge(sink=received.append).drain()
+    AsyncioUiBridge(sink=received.append).drain()
     assert received == []
 
 
@@ -172,7 +172,7 @@ class _FakeWidget:
 
 
 def test_bridge_start_polling_schedules_after():
-    bridge = AsyncioTkBridge(sink=lambda e: None)
+    bridge = AsyncioUiBridge(sink=lambda e: None)
     widget = _FakeWidget()
     bridge.start_polling(widget, interval_ms=200)
     assert widget.after_calls[0][0] == 200

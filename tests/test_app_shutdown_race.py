@@ -2,7 +2,7 @@
 
 `_run_loop` used to publish the event loop as soon as it existed and the
 supervisor several statements later, once the pipeline had been assembled;
-`_stop` read both from the Tk thread behind a single `is not None` guard. A quit
+`_stop` read both from the UI thread behind a single `is not None` guard. A quit
 landing inside that window found the guard false, never called `request_stop`,
 and let `join(timeout=5.0)` expire: the process still exited because the thread
 is a daemon, but no ingest task was ever cancelled and the loop never closed

@@ -6,13 +6,11 @@ every feature had to pass through (architecture evaluation P1-1).
 
 What is left here is the part that is genuinely about running:
 
-  - the ADR-006 concurrency model: **Tkinter on the main thread**, the
-    **asyncio loop on a worker thread**, events crossing via `AsyncioTkBridge`;
+  - the ADR-006 concurrency model: **Flet's UI loop on the main thread** (ADR-030),
+    the **asyncio loop on a worker thread**, events crossing via `AsyncioUiBridge`;
   - `execute()`, the full agent; `run_tui()`, the headless dashboard (RF-36);
-    `simulate()`, one event and no network (RF-21); `open_settings()`, the
-    configuration panel alone;
-  - the callbacks that need a *running* application -- pause, exit,
-    what happens once an alert is acknowledged;
+    `simulate()`, one event, no network (RF-21); `open_settings()`, the panel alone;
+  - the callbacks that need a *running* application -- pause, exit, after-acknowledge;
   - shutdown, which has to work whichever order the threads got started in
     (ADR-002).
 """
@@ -30,10 +28,10 @@ from vigia_eew.agent_state import AgentRuntime, AgentState, Stoppable
 from vigia_eew.config import ReferencePoint, Settings, default_config_path
 from vigia_eew.models import SeismicEvent
 from vigia_eew.notify.controller import AlertController
-from vigia_eew.notify.queue import AsyncioTkBridge
+from vigia_eew.notify.queue import AsyncioUiBridge
 from vigia_eew.simulation import simulated_event
 from vigia_eew.state import StateStore
-from vigia_eew.wiring import Wiring
+from vigia_eew.wiring import UiRunner, Wiring, run_flet
 
 #: How long shutdown waits for the worker to publish its runtime. The worker
 #: normally gets there in milliseconds; this is the budget for the case where
@@ -54,6 +52,7 @@ class Application:
         manual_reference: bool = True,
         detect_location: Callable[[], ReferencePoint | None] | None = None,
         config_path: Path | str | None = None,
+        run_ui: UiRunner | None = None,
     ) -> None:
         self.cfg = cfg
         self.state = state or StateStore()
@@ -67,7 +66,9 @@ class Application:
             detect_location=detect_location,
         )
         self._runtime = AgentRuntime()
-        self._root: Any = None
+        self._shell: Any = None
+        self._run_ui = run_ui or run_flet
+        self._worker: threading.Thread | None = None
         self._ctrl: AlertController | None = None
         self._exit_on_drain = False
         self._manual_reference = manual_reference
@@ -77,50 +78,41 @@ class Application:
 
     # --- Callbacks that need a running application ---
 
-    def _on_tk_thread(self, action: Callable[[], Any]) -> None:
-        """Runs `action` on the Tk thread, or not at all if there is no window.
+    def _on_ui_thread(self, action: Callable[[], Any]) -> None:
+        """Runs `action` on the UI thread, or not at all if there is no window.
 
         Every tray callback goes through here. The tray runs on its own thread
-        and Tkinter is not thread-safe (ADR-006), so touching a widget from the
-        callback directly works right up until it does not.
+        and Flet's controls belong to the UI loop (ADR-006), so touching a
+        control from the callback directly works right up until it does not.
         """
-        if self._root is not None:
-            self._root.after(0, action)
+        if self._shell is not None:
+            self._shell.after(0, action)
 
     def _toggle_pause(self) -> None:
         """Tray callback: pause/resume (RF-34)."""
-
-        def do_toggle() -> None:
-            if self._ctrl is None:
-                return
-            if self._ctrl.paused:
-                self._ctrl.resume()
-            else:
-                self._ctrl.pause()
-
-        self._on_tk_thread(do_toggle)
+        self._on_ui_thread(lambda: self._ctrl.toggle_pause() if self._ctrl is not None else None)
 
     def _exit_from_tray(self) -> None:
         """Tray callback: exits the agent (RF-34)."""
-        self._on_tk_thread(lambda: self._root.quit())
+        self._on_ui_thread(lambda: self._shell.quit())
 
     def _edit_config(self) -> None:
         """Tray callback: opens `config.toml` in the OS's associated app (RF-34)."""
-        self.wiring.open_config(self._effective_config_path)
+        self.wiring.open_config(self._config_file)
 
-    # Tray callbacks that open a window: panel, About, history -- Tk thread only.
+    # Tray callbacks that open a screen: panel, About, history -- UI thread only.
 
     def _open_panel(self) -> None:
-        self._on_tk_thread(lambda: self.wiring.open_panel(self._root, self._effective_config_path))
+        self._on_ui_thread(lambda: self.wiring.open_panel(self._shell, self._config_file))
 
     def _open_about(self) -> None:
-        self._on_tk_thread(lambda: self.wiring.open_about(self._root))
+        self._on_ui_thread(lambda: self.wiring.open_about(self._shell))
 
     def _open_history(self) -> None:
-        self._on_tk_thread(lambda: self.wiring.open_history(self._root))
+        self._on_ui_thread(lambda: self.wiring.open_history(self._shell))
 
     @property
-    def _effective_config_path(self) -> Path:
+    def _config_file(self) -> Path:
         """The file both ways into the configuration act on."""
         return Path(self._config_path) if self._config_path is not None else default_config_path()
 
@@ -131,26 +123,18 @@ class Application:
             and self._ctrl is not None
             and self._ctrl.alert_queue.current is None
             and self._ctrl.alert_queue.pending == 0
-            and self._root is not None
+            and self._shell is not None
         ):
-            self._root.after(150, self._root.quit)
+            self._shell.after(150, self._shell.quit)
 
     # --- Startup glue ---
 
     def _prepare(self, *, resolve_location: bool = False) -> None:
         self.wiring.configure(resolve_location=resolve_location and not self._manual_reference)
 
-    def _new_root(self) -> Any:
-        import tkinter as tk
-
-        root = tk.Tk()
-        root.withdraw()  # hidden root; each alert is a Toplevel
-        self._root = root
-        return root
-
-    def _gui_controller(self, root: Any, *, loop_mode: bool) -> AlertController:
+    def _gui_controller(self, shell: Any, *, loop_mode: bool) -> AlertController:
         ctrl = self.wiring.build_gui_controller(
-            root,
+            shell,
             on_acknowledge=self._after_acknowledge,
             worker_loop=(lambda: self._runtime.loop) if loop_mode else (lambda: None),
         )
@@ -171,7 +155,7 @@ class Application:
     def _wire_tui(self, tui_app: Any) -> AlertController:
         """Wires controller, pipeline and supervisor for the TUI (RF-36).
 
-        No asyncio<->Tk bridge here: Textual runs on the same loop as the
+        No asyncio<->UI bridge here: Textual runs on the same loop as the
         supervisor, so the processor calls `ctrl.enqueue` directly.
         """
         ctrl = self.wiring.build_tui_controller(tui_app, on_acknowledge=self._after_acknowledge)
@@ -189,20 +173,30 @@ class Application:
         """Injects the simulated event and shows the alert until acknowledged (RF-21)."""
         self._prepare()
         self._exit_on_drain = True
-        root = self._new_root()
-        ctrl = self._gui_controller(root, loop_mode=False)
-        ctrl.enqueue(simulated_event(self.cfg.reference, self.cfg.severity))
-        self._log.info("simulation_started")
-        root.mainloop()
+
+        def show(shell: Any) -> None:
+            ctrl = self._gui_controller(shell, loop_mode=False)
+            ctrl.enqueue(simulated_event(self.cfg.reference, self.cfg.severity))
+            self._log.info("simulation_started")
+
+        self._in_window(standalone=True, then=show)
 
     def open_settings(self) -> None:
         """Opens the configuration panel alone, with no agent behind it (REQ-GUI-009)."""
         # @lat: [[configuration#A door into the panel that is not the tray]]
-        root = self._new_root()
-        window = self.wiring.open_panel(root, self._effective_config_path)
-        if window is not None:
-            window.protocol("WM_DELETE_WINDOW", root.destroy)  # closing the only window ends it
-            root.mainloop()
+        # Standalone: closing the panel -- the only screen -- ends the run.
+        self._in_window(
+            standalone=True, then=lambda shell: self.wiring.open_panel(shell, self._config_file)
+        )
+
+    def _in_window(self, *, standalone: bool, then: Callable[[Any], Any]) -> None:
+        """Runs Flet until its window is gone; `then(shell)` fills it, on the UI loop."""
+
+        async def main(page: Any) -> None:  # on Flet's loop: the shell must be built here
+            self._shell = self.wiring.build_shell(page, standalone=standalone)
+            then(self._shell)
+
+        self._run_ui(main)
 
     def run_tui(self, *, simulate: bool = False) -> None:
         """Starts the agent with the headless TUI dashboard (RF-36, ADR-013).
@@ -236,24 +230,27 @@ class Application:
     def execute(self) -> None:
         """Starts the full agent: ingestion + pipeline + notification (CU-1, CU-2)."""
         self._prepare(resolve_location=True)
-        root = self._new_root()
-        ctrl = self._gui_controller(root, loop_mode=True)
-        self._tray_icon = self._build_tray()
-        if self._tray_icon is not None:
-            self._tray_icon.start()
-        bridge = AsyncioTkBridge(sink=ctrl.enqueue)
-        bridge.start_polling(root, interval_ms=100)
-        thread = threading.Thread(target=self._run_loop, args=(bridge,), daemon=True)
-        thread.start()
-        self._log.info("agent_started")
         try:
-            root.mainloop()
+            self._in_window(standalone=False, then=self._start_agent)
         except KeyboardInterrupt:
             self._log.info("keyboard_interrupt")
         finally:
-            self._stop(thread)
+            self._stop(self._worker)
 
-    def _run_loop(self, bridge: AsyncioTkBridge) -> None:
+    def _start_agent(self, shell: Any) -> None:
+        """Controller, tray, bridge and worker thread, once the window exists."""
+        ctrl = self._gui_controller(shell, loop_mode=True)
+        self._tray_icon = self._build_tray()
+        if self._tray_icon is not None:
+            self._tray_icon.start()
+        bridge = AsyncioUiBridge(sink=ctrl.enqueue)
+        bridge.start_polling(shell, interval_ms=100)
+        thread = threading.Thread(target=self._run_loop, args=(bridge,), daemon=True)
+        thread.start()
+        self._worker = thread
+        self._log.info("agent_started")
+
+    def _run_loop(self, bridge: AsyncioUiBridge) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         raw_queue: asyncio.Queue[Any] = asyncio.Queue()
@@ -277,11 +274,15 @@ class Application:
         """Hands the worker's loop and supervisor to the threads that read them."""
         self._runtime.publish(loop, sup)
 
-    def _stop(self, thread: threading.Thread, *, runtime_timeout: float = _RUNTIME_READY_S) -> None:
+    def _stop(
+        self, thread: threading.Thread | None, *, runtime_timeout: float = _RUNTIME_READY_S
+    ) -> None:
         """Coordinated shutdown: the tray icon, the supervisor, and the worker thread."""
         if self._tray_icon is not None:
             self._tray_icon.stop()
         self.wiring.close_history()
+        if thread is None:  # the window never came up, so no worker was started
+            return
         runtime = self._runtime.await_ready(runtime_timeout)
         if runtime is None:
             # The worker never published: it died before assembling the
@@ -292,8 +293,5 @@ class Application:
             loop, sup = runtime
             loop.call_soon_threadsafe(sup.request_stop)
         thread.join(timeout=5.0)
-        if self._root is not None:
-            try:
-                self._root.destroy()
-            except Exception:  # noqa: BLE001 - root may already be destroyed
-                pass
+        if self._shell is not None:
+            self._shell.quit()  # idempotent, and safe on a window already gone

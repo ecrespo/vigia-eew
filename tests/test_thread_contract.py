@@ -22,7 +22,7 @@ CONVENTIONS = REPO_ROOT / "lat.md" / "conventions.md"
 SHARED_STATE = (
     "AgentRuntime",
     "AgentState",
-    "AsyncioTkBridge",
+    "AsyncioUiBridge",
     "raw_queue",
 )
 

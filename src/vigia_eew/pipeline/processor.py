@@ -13,7 +13,7 @@ one, applies the normalize -> filter -> deduplicate sequence (TECHNICAL-DESIGN Â
   - `duplicate` -> discarded.
 
 `on_alert`/`on_update` are callbacks (in the agent, they publish onto the
-asyncio<->Tk bridge). This keeps the processor decoupled from the GUI and testable
+asyncio<->UI bridge). This keeps the processor decoupled from the GUI and testable
 without a screen.
 """
 
