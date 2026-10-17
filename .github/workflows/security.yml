@@ -14,9 +14,14 @@ on:
 permissions:
   contents: read
 
-# Match ci.yml: uv-managed CPython, never the runner's interpreter.
+# Match ci.yml: uv-managed CPython, never the runner's interpreter -- and a pinned
+# one. Left to `requires-python`, uv takes the newest managed release, and the day
+# CPython 3.15.0 shipped the scanners broke on it, not on our code: pip-audit's
+# vendored pyparsing imports the removed `sre_constants`, and semgrep-core
+# segfaulted. The scanners run on the floor the project declares (amendment E-01).
 env:
   UV_PYTHON_PREFERENCE: only-managed
+  UV_PYTHON: "3.13"
 
 jobs:
   # ── SAST: Python ──────────────────────────────────────────
@@ -28,6 +33,7 @@ jobs:
       - uses: ./.github/actions/setup-python-env
         with:
           extras: security
+          python-version: "3.13"
       - run: uv run bandit -r src --severity-level=medium
 
   # ── SAST: multi-rule (OWASP / secrets) over the app source ──
@@ -77,6 +83,7 @@ jobs:
       - uses: ./.github/actions/setup-python-env
         with:
           extras: security
+          python-version: "3.13"
       - run: uv run pip-audit --skip-editable
       - name: pip-audit JSON report
         if: always()
