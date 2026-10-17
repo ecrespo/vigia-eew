@@ -257,9 +257,11 @@ class Wiring:
         """The one window every view is drawn in (ADR-030). Inside Flet's main only."""
         from vigia_eew.notify.flet_shell import FletShell
 
-        return FletShell(
+        shell = FletShell(
             page, standalone=standalone, loop=asyncio.get_running_loop(), logger=self._log
         )
+        shell.quit_on_terminate()
+        return shell
 
     def build_controller(
         self,
