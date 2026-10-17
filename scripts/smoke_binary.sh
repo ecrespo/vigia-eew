@@ -52,8 +52,20 @@ fi
 echo "  alert presented"
 
 if [[ "$ACKNOWLEDGE" -ne 1 ]]; then
-    kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null
-    echo "  ok (presentation only; acknowledgement not automated on this platform)"
+    # SIGTERM must end the agent (`systemctl stop`, a logout): give it ten
+    # seconds, then fail -- never `wait` unbounded. v1.0.0's macOS smoke hung
+    # there for forty minutes on a binary that ignored the signal.
+    kill "$PID" 2>/dev/null
+    for _ in $(seq 40); do
+        kill -0 "$PID" 2>/dev/null || break
+        sleep 0.25
+    done
+    if kill -0 "$PID" 2>/dev/null; then
+        echo "FAIL: the alert was presented but SIGTERM did not end the agent" >&2
+        kill -9 "$PID" 2>/dev/null
+        exit 1
+    fi
+    echo "  ok (presentation and SIGTERM; acknowledgement not automated on this platform)"
     exit 0
 fi
 
