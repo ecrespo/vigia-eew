@@ -1,0 +1,61 @@
+=== SRP: tamaño de archivos y clases en src/ ===
+450 src/vigia_eew/app.py
+287 src/vigia_eew/config.py
+223 src/vigia_eew/pipeline/normalize.py
+212 src/vigia_eew/ingest/rest_geofon.py
+174 src/vigia_eew/tui.py
+174 src/vigia_eew/ingest/rest_usgs.py
+172 src/vigia_eew/notify/alert_window.py
+141 src/vigia_eew/models.py
+139 src/vigia_eew/tray.py
+136 src/vigia_eew/state.py
+134 src/vigia_eew/supervisor.py
+133 src/vigia_eew/ingest/rest_funvisis.py
+
+=== clases con >10 métodos ===
+  src/vigia_eew/app.py:54 Application  métodos=22 públicos=3
+  src/vigia_eew/supervisor.py:27 Supervisor  métodos=9 públicos=4
+  src/vigia_eew/state.py:33 StateStore  métodos=13 públicos=12
+  src/vigia_eew/tui.py:101 VigiaTuiApp  métodos=9 públicos=7
+  src/vigia_eew/notify/controller.py:32 AlertController  métodos=10 públicos=5
+  src/vigia_eew/notify/queue.py:25 AlertQueue  métodos=9 públicos=7
+
+=== OCP: escaleras isinstance / match por tipo ===
+src/vigia_eew/pipeline/normalize.py:168:    if not isinstance(value, str):
+src/vigia_eew/pipeline/normalize.py:185:    if not isinstance(value, int | float):
+src/vigia_eew/pipeline/normalize.py:203:    if not isinstance(date, str) or not isinstance(time, str):
+src/vigia_eew/pipeline/normalize.py:211:    if not isinstance(value, str):
+src/vigia_eew/pipeline/normalize.py:221:    if not isinstance(value, str):
+src/vigia_eew/config.py:220:    if isinstance(sources, dict):
+src/vigia_eew/ingest/ws_emsc.py:69:        if not isinstance(feature, dict):
+src/vigia_eew/ingest/rest_geofon.py:135:        if not isinstance(text, str):
+src/vigia_eew/ingest/rest_funvisis.py:87:        if not isinstance(features, list):
+src/vigia_eew/ingest/rest_funvisis.py:93:            if not isinstance(feature, dict):
+  total isinstance: 15
+
+=== LSP: NotImplementedError / not supported ===
+grep: src/vigia_eew/__pycache__/supervisor.cpython-314.pyc: binary file matches
+grep: src/vigia_eew/autostart/__pycache__/__init__.cpython-314.pyc: binary file matches
+src/vigia_eew/supervisor.py:119:            except (NotImplementedError, RuntimeError, ValueError):
+src/vigia_eew/supervisor.py:120:                # add_signal_handler is not supported on some OSes (e.g. Windows).
+src/vigia_eew/supervisor.py:133:            except (NotImplementedError, RuntimeError, ValueError):
+src/vigia_eew/autostart/__init__.py:69:        NotImplementedError: if the platform has no supported autostart mechanism.
+src/vigia_eew/autostart/__init__.py:82:    raise NotImplementedError(f"Autostart not supported on platform: {platform}")
+
+=== ISP: tamaño de Protocol/ABC ===
+  src/vigia_eew/autostart/__init__.py:28 Installer(Protocol) métodos=3 -> ['install', 'uninstall', 'is_installed']
+  src/vigia_eew/notify/toast.py:30 _Notifier(Protocol) métodos=1 -> ['send']
+
+=== DIP: imports concretos de infraestructura dentro de dominio (models/pipeline) ===
+src/vigia_eew/models.py:12:from __future__ import annotations
+src/vigia_eew/models.py:17:from pydantic import BaseModel, Field, field_validator
+src/vigia_eew/pipeline/__init__.py:8:from __future__ import annotations
+src/vigia_eew/pipeline/dedup.py:18:from __future__ import annotations
+src/vigia_eew/pipeline/filter.py:23:from __future__ import annotations
+src/vigia_eew/pipeline/normalize.py:23:from __future__ import annotations
+src/vigia_eew/pipeline/normalize.py:30:from pydantic import ValidationError
+src/vigia_eew/pipeline/processor.py:17:from __future__ import annotations
+src/vigia_eew/pipeline/processor.py:19:import asyncio
+src/vigia_eew/geo.py:8:from __future__ import annotations
+src/vigia_eew/timeutil.py:9:from __future__ import annotations
+  (vacío = el dominio no importa infraestructura concreta)

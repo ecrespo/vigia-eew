@@ -4,10 +4,10 @@
 presentation effects: when showing an event it creates the window, plays the sound,
 and fires the toast; when receiving an `update` it refreshes the current window
 (RF-11). It keeps the effects as **injectable callbacks** (`create_window`,
-`play_sound`, `send_toast`) so orchestration can be tested without real Tkinter or
+`play_sound`, `send_toast`) so orchestration can be tested without a real window or
 audio.
 
-`enqueue(ev)` is the entry point the asyncio<->Tk bridge invokes on the GUI thread.
+`enqueue(ev)` is the entry point the asyncio<->UI bridge invokes on the GUI thread.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ class AlertController:
         on_acknowledge: _AcknowledgeFn | None = None,
         zone: str = VENEZUELA_ZONE,
         reference_name: str = "reference",
+        reference_point: tuple[float, float] | None = None,
         state: AgentState | None = None,
         locale_code: str = DEFAULT_LOCALE,
         logger: logging.Logger | None = None,
@@ -51,6 +52,7 @@ class AlertController:
         self._extra_on_acknowledge = on_acknowledge
         self._zone = zone
         self._reference_name = reference_name
+        self._reference_point = reference_point
         self._state = state
         self._locale = locale_code
         self._log = logger or logging.getLogger("vigia_eew.notify.controller")
@@ -78,26 +80,44 @@ class AlertController:
         """Resumes alert presentation (RF-34)."""
         self._alert_queue.resume()
 
+    def toggle_pause(self) -> None:
+        """Pauses if presenting, resumes if paused (the tray's single entry, RF-34)."""
+        if self.paused:
+            self.resume()
+        else:
+            self.pause()
+
     def enqueue(self, ev: SeismicEvent) -> None:
-        """Enqueues an event to show it (entry point from the asyncio<->Tk bridge)."""
+        """Enqueues an event to show it (entry point from the asyncio<->UI bridge)."""
         self._alert_queue.enqueue(ev)
 
     def _data(self, ev: SeismicEvent) -> AlertData:
         return format_event(
-            ev, zone=self._zone, reference_name=self._reference_name, locale_code=self._locale
+            ev,
+            zone=self._zone,
+            reference_name=self._reference_name,
+            locale_code=self._locale,
+            reference=self._reference_point,
         )
 
     def _show(self, ev: SeismicEvent) -> None:
         data = self._data(ev)
+        # The journey's last entry (REQ-OBS-002). Between this line and
+        # `event_received` with the same trace, the five stages are one search.
+        self._log.info(
+            "alert_presented trace=%s id=%s source=%s severity=%s",
+            ev.trace_id,
+            ev.id,
+            ev.source,
+            ev.severity,
+        )
         self._window = self._create_window(data, ev.severity, self._alert_queue.acknowledge)
         if self._play_sound is not None:
             self._play_sound(ev.severity)
         if self._toast is not None:
             self._toast(ev)
         if self._state is not None:
-            self._state.mark_last_alert(
-                f"{data.magnitude} · {data.place} · {data.local_time}"
-            )
+            self._state.mark_last_alert(f"{data.magnitude} · {data.place} · {data.local_time}")
 
     def _update(self, ev: SeismicEvent) -> None:
         if self._window is not None:

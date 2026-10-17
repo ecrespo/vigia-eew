@@ -1,0 +1,1285 @@
+{
+  "statistics": {
+    "detectionDate": "2026-09-06T22:31:05.978Z",
+    "formats": {
+      "markdown": {
+        "sources": {
+          "packaging/apt-r2/README.md": {
+            "lines": 55,
+            "tokens": 427,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "packaging/RELEASING.md": {
+            "lines": 40,
+            "tokens": 630,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 95,
+          "tokens": 1057,
+          "sources": 2,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "bash": {
+        "sources": {
+          "packaging/apt-r2/README.md": {
+            "lines": 18,
+            "tokens": 75,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "packaging/build_macos.sh": {
+            "lines": 34,
+            "tokens": 167,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "packaging/build_linux.sh": {
+            "lines": 88,
+            "tokens": 503,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "packaging/RELEASING.md": {
+            "lines": 3,
+            "tokens": 24,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 143,
+          "tokens": 769,
+          "sources": 4,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "python": {
+        "sources": {
+          "packaging/entrypoint.py": {
+            "lines": 16,
+            "tokens": 45,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "packaging/build_countries_geojson.py": {
+            "lines": 69,
+            "tokens": 479,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_ws_emsc.py": {
+            "lines": 219,
+            "tokens": 1756,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 22,
+            "duplicatedTokens": 159,
+            "percentage": 10.05,
+            "percentageTokens": 9.05,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_tui.py": {
+            "lines": 187,
+            "tokens": 1731,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_tray.py": {
+            "lines": 149,
+            "tokens": 1249,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_toast.py": {
+            "lines": 65,
+            "tokens": 557,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_supervisor.py": {
+            "lines": 103,
+            "tokens": 807,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_subprocess_env.py": {
+            "lines": 92,
+            "tokens": 699,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_state.py": {
+            "lines": 121,
+            "tokens": 1037,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_sound.py": {
+            "lines": 98,
+            "tokens": 746,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_simulation.py": {
+            "lines": 41,
+            "tokens": 352,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_rest_usgs.py": {
+            "lines": 258,
+            "tokens": 2379,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 28,
+            "duplicatedTokens": 264,
+            "percentage": 10.85,
+            "percentageTokens": 11.1,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_rest_geofon.py": {
+            "lines": 288,
+            "tokens": 2621,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 28,
+            "duplicatedTokens": 264,
+            "percentage": 9.72,
+            "percentageTokens": 10.07,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_rest_funvisis.py": {
+            "lines": 180,
+            "tokens": 1576,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_resilience.py": {
+            "lines": 224,
+            "tokens": 1846,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 22,
+            "duplicatedTokens": 159,
+            "percentage": 9.82,
+            "percentageTokens": 8.61,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_processor.py": {
+            "lines": 110,
+            "tokens": 1022,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_presentation.py": {
+            "lines": 82,
+            "tokens": 585,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_normalize.py": {
+            "lines": 249,
+            "tokens": 1996,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_models.py": {
+            "lines": 90,
+            "tokens": 711,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_i18n.py": {
+            "lines": 59,
+            "tokens": 407,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_geoloc.py": {
+            "lines": 83,
+            "tokens": 687,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_geocode.py": {
+            "lines": 78,
+            "tokens": 575,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_geo.py": {
+            "lines": 27,
+            "tokens": 211,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_filter.py": {
+            "lines": 173,
+            "tokens": 1700,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_dedup.py": {
+            "lines": 174,
+            "tokens": 1560,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_controller.py": {
+            "lines": 127,
+            "tokens": 1095,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_config.py": {
+            "lines": 194,
+            "tokens": 1315,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_cli.py": {
+            "lines": 167,
+            "tokens": 1350,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_backoff.py": {
+            "lines": 39,
+            "tokens": 388,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_autostart_windows.py": {
+            "lines": 77,
+            "tokens": 567,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_autostart_macos.py": {
+            "lines": 70,
+            "tokens": 522,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_autostart_linux.py": {
+            "lines": 73,
+            "tokens": 534,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_autostart.py": {
+            "lines": 50,
+            "tokens": 335,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_app.py": {
+            "lines": 357,
+            "tokens": 3010,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_alert_window.py": {
+            "lines": 185,
+            "tokens": 1500,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_alert_queue.py": {
+            "lines": 179,
+            "tokens": 1592,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/test_agent_state.py": {
+            "lines": 25,
+            "tokens": 151,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "tests/conftest.py": {
+            "lines": 21,
+            "tokens": 82,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/pipeline/processor.py": {
+            "lines": 80,
+            "tokens": 545,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/pipeline/normalize.py": {
+            "lines": 223,
+            "tokens": 1901,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/pipeline/filter.py": {
+            "lines": 83,
+            "tokens": 512,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/pipeline/dedup.py": {
+            "lines": 79,
+            "tokens": 542,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/pipeline/__init__.py": {
+            "lines": 8,
+            "tokens": 9,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/toast.py": {
+            "lines": 80,
+            "tokens": 591,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/sound.py": {
+            "lines": 129,
+            "tokens": 939,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/queue.py": {
+            "lines": 130,
+            "tokens": 989,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/presentation.py": {
+            "lines": 86,
+            "tokens": 555,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/controller.py": {
+            "lines": 109,
+            "tokens": 893,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/alert_window.py": {
+            "lines": 172,
+            "tokens": 1231,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/notify/__init__.py": {
+            "lines": 11,
+            "tokens": 9,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/ingest/ws_emsc.py": {
+            "lines": 118,
+            "tokens": 929,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/ingest/rest_usgs.py": {
+            "lines": 174,
+            "tokens": 1376,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 37,
+            "duplicatedTokens": 358,
+            "percentage": 21.26,
+            "percentageTokens": 26.02,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/ingest/rest_geofon.py": {
+            "lines": 212,
+            "tokens": 1658,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 37,
+            "duplicatedTokens": 358,
+            "percentage": 17.45,
+            "percentageTokens": 21.59,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/ingest/rest_funvisis.py": {
+            "lines": 133,
+            "tokens": 959,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/ingest/__init__.py": {
+            "lines": 34,
+            "tokens": 94,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/autostart/windows_task.py": {
+            "lines": 82,
+            "tokens": 544,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/autostart/macos_launchagent.py": {
+            "lines": 84,
+            "tokens": 652,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/autostart/linux_systemd.py": {
+            "lines": 98,
+            "tokens": 708,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/autostart/__init__.py": {
+            "lines": 82,
+            "tokens": 478,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/tui.py": {
+            "lines": 174,
+            "tokens": 1270,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/tray.py": {
+            "lines": 139,
+            "tokens": 1154,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/timeutil.py": {
+            "lines": 64,
+            "tokens": 389,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/supervisor.py": {
+            "lines": 134,
+            "tokens": 1081,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/subprocess_env.py": {
+            "lines": 40,
+            "tokens": 163,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/state.py": {
+            "lines": 136,
+            "tokens": 1206,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/simulation.py": {
+            "lines": 48,
+            "tokens": 277,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/models.py": {
+            "lines": 141,
+            "tokens": 987,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/logging_conf.py": {
+            "lines": 69,
+            "tokens": 409,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/i18n.py": {
+            "lines": 70,
+            "tokens": 651,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/geoloc.py": {
+            "lines": 68,
+            "tokens": 474,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/geocode.py": {
+            "lines": 103,
+            "tokens": 994,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/geo.py": {
+            "lines": 35,
+            "tokens": 216,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/config.py": {
+            "lines": 287,
+            "tokens": 1772,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/cli.py": {
+            "lines": 115,
+            "tokens": 691,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/backoff.py": {
+            "lines": 49,
+            "tokens": 215,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/app.py": {
+            "lines": 450,
+            "tokens": 3882,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/agent_state.py": {
+            "lines": 42,
+            "tokens": 251,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "src/vigia_eew/__init__.py": {
+            "lines": 16,
+            "tokens": 57,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 9186,
+          "tokens": 72028,
+          "sources": 78,
+          "clones": 5,
+          "duplicatedLines": 87,
+          "duplicatedTokens": 781,
+          "percentage": 0.95,
+          "percentageTokens": 1.08,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      },
+      "powershell": {
+        "sources": {
+          "packaging/build_windows.ps1": {
+            "lines": 28,
+            "tokens": 135,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 28,
+          "tokens": 135,
+          "sources": 1,
+          "clones": 0,
+          "duplicatedLines": 0,
+          "duplicatedTokens": 0,
+          "percentage": 0,
+          "percentageTokens": 0,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      }
+    },
+    "total": {
+      "lines": 9452,
+      "tokens": 73989,
+      "sources": 85,
+      "clones": 5,
+      "duplicatedLines": 87,
+      "duplicatedTokens": 781,
+      "percentage": 0.92,
+      "percentageTokens": 1.06,
+      "newDuplicatedLines": 0,
+      "newClones": 0
+    }
+  },
+  "duplicates": [
+    {
+      "format": "python",
+      "lines": 14,
+      "fragment": "class _FakeClient:\n    def __init__(self, resp=None, *, exc=None):\n        self._resp = resp\n        self._exc = exc\n        self.calls: list[dict] = []\n\n    async def get(self, url, *, params=None, timeout=None):\n        self.calls.append({\"url\": url, \"params\": params, \"timeout\": timeout})\n        if self._exc is not None:\n            raise self._exc\n        return self._resp\n\n\ndef _poller",
+      "tokens": 148,
+      "firstFile": {
+        "name": "tests/test_rest_geofon.py",
+        "start": 54,
+        "end": 67,
+        "startLoc": {
+          "line": 54,
+          "column": 1,
+          "position": 306
+        },
+        "endLoc": {
+          "line": 67,
+          "column": 12,
+          "position": 454
+        }
+      },
+      "secondFile": {
+        "name": "tests/test_rest_usgs.py",
+        "start": 58,
+        "end": 71,
+        "startLoc": {
+          "line": 58,
+          "column": 1,
+          "position": 425
+        },
+        "endLoc": {
+          "line": 71,
+          "column": 16,
+          "position": 573
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 16,
+      "fragment": "# --- Loop ---\n\n\nclass _ControlledSleep:\n    def __init__(self, break_at):\n        self.waits: list[float] = []\n        self._break_at = break_at\n\n    async def __call__(self, seconds):\n        self.waits.append(seconds)\n        if len(self.waits) >= self._break_at:\n            raise asyncio.CancelledError\n\n\nasync def test_run_polls_and_waits_interval(tmp_path):\n    client = _FakeClient(_FakeResp(text",
+      "tokens": 116,
+      "firstFile": {
+        "name": "tests/test_rest_geofon.py",
+        "start": 265,
+        "end": 280,
+        "startLoc": {
+          "line": 265,
+          "column": 1,
+          "position": 2401
+        },
+        "endLoc": {
+          "line": 280,
+          "column": 40,
+          "position": 2517
+        }
+      },
+      "secondFile": {
+        "name": "tests/test_rest_usgs.py",
+        "start": 235,
+        "end": 250,
+        "startLoc": {
+          "line": 235,
+          "column": 1,
+          "position": 2159
+        },
+        "endLoc": {
+          "line": 250,
+          "column": 43,
+          "position": 2275
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 23,
+      "fragment": "def __init__(self, messages, *, error=None):\n        self._messages = list(messages)\n        self._error = error\n\n    async def __aenter__(self):\n        return self\n\n    async def __aexit__(self, *exc):\n        return False\n\n    def __aiter__(self):\n        return self\n\n    async def __anext__(self):\n        if self._messages:\n            return self._messages.pop(0)\n        if self._error is not None:\n            raise self._error\n        raise StopAsyncIteration\n\n\nclass _FakeConnect:\n    def",
+      "tokens": 159,
+      "firstFile": {
+        "name": "tests/test_resilience.py",
+        "start": 157,
+        "end": 179,
+        "startLoc": {
+          "line": 157,
+          "column": 5,
+          "position": 1274
+        },
+        "endLoc": {
+          "line": 179,
+          "column": 8,
+          "position": 1433
+        }
+      },
+      "secondFile": {
+        "name": "tests/test_ws_emsc.py",
+        "start": 43,
+        "end": 65,
+        "startLoc": {
+          "line": 43,
+          "column": 5,
+          "position": 227
+        },
+        "endLoc": {
+          "line": 65,
+          "column": 77,
+          "position": 386
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 22,
+      "fragment": ",\n        reference: ReferencePoint,\n        filter_cfg: Filter,\n        state: StateStore,\n        output: asyncio.Queue[RawMessage],\n        *,\n        client: httpx.AsyncClient | None = None,\n        sleep: _SleepFn = asyncio.sleep,\n        timezone: str = \"UTC\",\n        now: Clock = default_clock,\n        logger: logging.Logger | None = None,\n    ) -> None:\n        self._cfg = cfg\n        self._reference = reference\n        self._filter = filter_cfg\n        self._state = state\n        self._output = output\n        self._client = client\n        self._sleep = sleep\n        self._timezone = timezone\n        self._now = now\n        self._log = logger or logging.getLogger(\"vigia_eew.ingest.geofon\"",
+      "tokens": 213,
+      "firstFile": {
+        "name": "src/vigia_eew/ingest/rest_geofon.py",
+        "start": 57,
+        "end": 78,
+        "startLoc": {
+          "line": 57,
+          "column": 26,
+          "position": 161
+        },
+        "endLoc": {
+          "line": 78,
+          "column": 74,
+          "position": 374
+        }
+      },
+      "secondFile": {
+        "name": "src/vigia_eew/ingest/rest_usgs.py",
+        "start": 47,
+        "end": 68,
+        "startLoc": {
+          "line": 47,
+          "column": 24,
+          "position": 148
+        },
+        "endLoc": {
+          "line": 68,
+          "column": 72,
+          "position": 361
+        }
+      }
+    },
+    {
+      "format": "python",
+      "lines": 17,
+      "fragment": ", action=\"create\", feature=feature)\n            )\n            moment = _time_ms(feature)\n            if moment is not None and (max_time is None or moment > max_time):\n                max_time = moment\n        return max_time\n\n    async def run(self) -> None:\n        \"\"\"Perpetual polling loop. Only exits when cancelled.\"\"\"\n        if self._client is None:\n            self._client = httpx.AsyncClient()\n        while True:\n            wait = await self.poll_once()\n            await self._sleep(wait)\n\n\ndef _is_earthquake",
+      "tokens": 145,
+      "firstFile": {
+        "name": "src/vigia_eew/ingest/rest_geofon.py",
+        "start": 163,
+        "end": 179,
+        "startLoc": {
+          "line": 163,
+          "column": 43,
+          "position": 1239
+        },
+        "endLoc": {
+          "line": 179,
+          "column": 19,
+          "position": 1384
+        }
+      },
+      "secondFile": {
+        "name": "src/vigia_eew/ingest/rest_usgs.py",
+        "start": 142,
+        "end": 157,
+        "startLoc": {
+          "line": 142,
+          "column": 60,
+          "position": 1055
+        },
+        "endLoc": {
+          "line": 157,
+          "column": 25,
+          "position": 1198
+        }
+      }
+    }
+  ]
+}

@@ -14,6 +14,8 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
+from tests.conftest import FakeConnect as _FakeConnect
+from tests.conftest import FakeWS as _FakeWS
 from vigia_eew.config import Dedup, EMSCSource, Filter, ReferencePoint, Severity
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.ws_emsc import WSIngestor
@@ -151,36 +153,6 @@ async def test_agent_restart_does_not_realert_a_previously_seen_event(tmp_path):
 
 
 # --- CA-02 at integration level: real WSIngestor running inside a real Supervisor ---
-
-
-class _FakeWS:
-    def __init__(self, messages, *, error=None):
-        self._messages = list(messages)
-        self._error = error
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if self._messages:
-            return self._messages.pop(0)
-        if self._error is not None:
-            raise self._error
-        raise StopAsyncIteration
-
-
-class _FakeConnect:
-    def __init__(self, connections):
-        self._connections = list(connections)
-
-    def __call__(self, url, **kw):
-        return self._connections.pop(0)
 
 
 async def test_supervisor_keeps_the_ws_ingestor_alive_after_a_drop():

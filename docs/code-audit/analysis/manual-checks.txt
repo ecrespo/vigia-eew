@@ -1,0 +1,34 @@
+Verificaciones manuales de superficie de ataque (grep sobre src/)
+=================================================================
+$ grep -rn 'verify\s*=\s*False|ssl._create_unverified|check_hostname' src/
+  -> ninguno
+
+$ grep -rn 'shell=True' src/
+  -> ninguno
+
+$ grep -rn '\beval\(|\bexec\(|pickle|marshal|os.system' src/
+  -> ninguno
+
+$ grep -rn 'http://' src/ --include=*.py --include=*.example
+  src/vigia_eew/config.py:79        url: str = "http://www.funvisis.gob.ve/maravilla.json"
+  src/vigia_eew/config.toml.example:59  # ...no encrypted channel available...
+  src/vigia_eew/config.toml.example:60  url = "http://www.funvisis.gob.ve/maravilla.json"
+  -> unico HTTP plano; documentado en ADR-015 (riesgo aceptado)
+
+$ grep -rn 'timeout' src/vigia_eew/ingest/*.py src/vigia_eew/geoloc.py
+  rest_funvisis.py:67  timeout=self._cfg.timeout_s
+  rest_geofon.py:107   timeout=self._cfg.timeout_s
+  rest_usgs.py:103     timeout=self._cfg.timeout_s
+  ws_emsc.py:83        ping_timeout=self._cfg.ping_timeout_s
+  geoloc.py:47         timeout=TIMEOUT_S
+  -> todas las llamadas de red llevan timeout explicito
+
+SOLID - senales
+$ grep -rn 'isinstance(' src/ | wc -l   -> 15 (guardas de validacion sobre JSON
+                                            externo, no escaleras de tipos)
+$ grep -rn 'NotImplementedError' src/   -> solo autostart/__init__.py:82 (fabrica
+                                            rechaza plataforma no soportada)
+$ grep -rn 'Protocol)' src/             -> 2 protocolos, ambos pequenos
+                                            (toast.py:30, autostart/__init__.py:28)
+DIP: models.py / pipeline/*.py no importan httpx, websockets, tkinter, pystray,
+     subprocess ni textual -> dominio limpio

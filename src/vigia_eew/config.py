@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.resources
 import logging
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -47,26 +48,43 @@ class Filter(BaseModel):
     today_only: bool = True
 
 
-class EMSCSource(BaseModel):
-    """EMSC WebSocket parameters (RF-01, RF-02, RF-03)."""
+class SourceSettings(BaseModel):
+    """What every seismic source declares, whatever protocol it speaks (REQ-ING-011).
+
+    `enabled` decides whether the source runs at all; `priority` decides
+    **whose data prevails** when the same earthquake arrives through more
+    than one of them. The two are deliberately separate questions: a network
+    of the lowest priority still alerts on an earthquake only it catalogued,
+    which is the reason the local network exists (ADR-026).
+
+    `priority` is optional because a `config.toml` written before v1.0
+    declares none. Undeclared means unranked, not excluded -- those sources
+    sort after the ranked ones, in the order the registry declares them.
+    Smaller is better, and the numbers need not be consecutive.
+    """
 
     enabled: bool = True
+    priority: int | None = Field(default=None, ge=1)
+
+
+class EMSCSource(SourceSettings):
+    """EMSC WebSocket parameters (RF-01, RF-02, RF-03)."""
+
     url: str = "wss://www.seismicportal.eu/standing_order/websocket"
     ping_interval_s: int = Field(default=15, gt=0)
     ping_timeout_s: int = Field(default=20, gt=0)
     backoff_max_s: int = Field(default=60, gt=0)
 
 
-class USGSSource(BaseModel):
+class USGSSource(SourceSettings):
     """USGS FDSN backup parameters (RF-05, RF-06)."""
 
-    enabled: bool = True
     url: str = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
 
 
-class FUNVISISSource(BaseModel):
+class FUNVISISSource(SourceSettings):
     """FUNVISIS polling parameters — **Venezuela-only** local coverage (RF-38).
 
     FUNVISIS (the Venezuelan national seismic network) publishes the ~20 most recent
@@ -75,13 +93,12 @@ class FUNVISISSource(BaseModel):
     The endpoint is **plain HTTP** (FUNVISIS offers no valid HTTPS); the data is public.
     """
 
-    enabled: bool = True
     url: str = "http://www.funvisis.gob.ve/maravilla.json"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
 
 
-class GEOFONSource(BaseModel):
+class GEOFONSource(SourceSettings):
     """GEOFON FDSN polling parameters — independent global-network source (RF-39).
 
     GEOFON (operated by the GFZ German Research Centre for Geosciences, Potsdam) exposes a
@@ -91,7 +108,6 @@ class GEOFONSource(BaseModel):
     as **pipe-delimited text** (`format=text`), not GeoJSON (API-SPEC §4).
     """
 
-    enabled: bool = True
     url: str = "https://geofon.gfz.de/fdsnws/event/1/query"
     poll_interval_s: int = Field(default=60, gt=0)
     timeout_s: int = Field(default=15, gt=0)
@@ -139,6 +155,24 @@ class LoggingCfg(BaseModel):
     backups: int = Field(default=3, ge=0)
 
 
+class History(BaseModel):
+    """Event history parameters (REQ-HIS-004, ADR-025).
+
+    `retention_days` is the parameter that absorbs an uncertain estimate.
+    The volume -- tens of thousands of rows a year -- depends on global
+    seismicity and on what each network publishes, and discards outnumber
+    alerts by a lot. It is configurable from the start for that reason:
+    measure on first real use and adjust the default with the number.
+
+    `0` keeps nothing older than the moment of the prune; the history can be
+    turned off entirely with `enabled = false`, and the agent alerts exactly
+    the same either way.
+    """
+
+    enabled: bool = True
+    retention_days: int = Field(default=90, ge=0)
+
+
 class Settings(BaseModel):
     """Full agent configuration (RF-24)."""
 
@@ -152,6 +186,37 @@ class Settings(BaseModel):
     severity: Severity = Field(default_factory=Severity)
     notification: Notification = Field(default_factory=Notification)
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
+    history: History = Field(default_factory=History)
+
+
+#: The four seismic sources, in the order they are declared. Declaration
+#: order is the tie-break when priorities are absent or equal, so it has to
+#: be written down somewhere rather than inferred from a dictionary.
+SOURCE_SECTIONS: tuple[str, ...] = (
+    "sources_emsc",
+    "sources_usgs",
+    "sources_funvisis",
+    "sources_geofon",
+)
+
+
+def by_priority[T](items: Sequence[tuple[T, int | None]]) -> list[T]:
+    """Orders `(item, priority)` pairs: ranked first, ascending; unranked last.
+
+    The rule of REQ-ING-011 in one place, because two callers need it and they
+    sit on opposite sides of the system -- the source registry, which decides
+    whose data prevails, and the configuration panel, which shows the user the
+    list they are ordering. Two copies of this would be two lists that agree
+    until somebody edits one.
+
+    Unranked keeps declaration order, which is what makes a `config.toml`
+    written before priorities existed mean exactly what it used to (CA-110.6).
+    """
+    ordered = sorted(
+        enumerate(items),
+        key=lambda pair: (pair[1][1] is None, pair[1][1] or 0, pair[0]),
+    )
+    return [item for _position, (item, _priority) in ordered]
 
 
 def default_config_path() -> Path:
@@ -208,24 +273,41 @@ def seed_config_if_missing(
     return target
 
 
-def _map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
-    """Translates TOML section names to `Settings` fields.
+#: Where each `Settings` field lives in the TOML file. The four sources are
+#: nested as `[sources.emsc]` and friends but flat in `Settings`, to avoid an
+#: intermediate submodel; every other section is named the same in both.
+#: Declared once because two directions now depend on it -- reading
+#: (`map_toml_keys`) and writing (`config_writer`) -- and a mapping that
+#: disagrees with itself would write a key the loader then ignores.
+SECTION_PATHS: dict[str, tuple[str, ...]] = {
+    field: (
+        ("sources", field.removeprefix("sources_")) if field.startswith("sources_") else (field,)
+    )
+    for field in (
+        "reference",
+        "filter",
+        "sources_emsc",
+        "sources_usgs",
+        "sources_funvisis",
+        "sources_geofon",
+        "dedup",
+        "severity",
+        "notification",
+        "logging",
+        "history",
+    )
+}
 
-    In the TOML file the sources are nested as `[sources.emsc]` / `[sources.usgs]`,
-    but in `Settings` they're called `sources_emsc` / `sources_usgs` to avoid an
-    intermediate submodel. This function bridges that gap without losing validation.
-    """
+
+def map_toml_keys(data: dict[str, Any]) -> dict[str, Any]:
+    """Translates TOML section names to `Settings` fields (see `SECTION_PATHS`)."""
     result = dict(data)
     sources = result.pop("sources", None)
-    if isinstance(sources, dict):
-        if "emsc" in sources:
-            result["sources_emsc"] = sources["emsc"]
-        if "usgs" in sources:
-            result["sources_usgs"] = sources["usgs"]
-        if "funvisis" in sources:
-            result["sources_funvisis"] = sources["funvisis"]
-        if "geofon" in sources:
-            result["sources_geofon"] = sources["geofon"]
+    if not isinstance(sources, dict):
+        return result
+    for field, path in SECTION_PATHS.items():
+        if len(path) == 2 and path[1] in sources:
+            result[field] = sources[path[1]]
     return result
 
 
@@ -270,7 +352,7 @@ def load_config(path: Path | str | None = None) -> Settings:
 
     with open(effective_path, "rb") as fh:
         data = tomllib.load(fh)
-    return Settings(**_map_toml_keys(data))
+    return Settings(**map_toml_keys(data))
 
 
 def has_manual_reference(path: Path | str | None = None) -> bool:

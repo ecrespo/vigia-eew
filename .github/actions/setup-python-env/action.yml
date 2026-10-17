@@ -6,6 +6,13 @@ inputs:
     description: Optional-dependencies group to sync (e.g. "dev", "security").
     required: false
     default: dev
+  python-version:
+    description: >-
+      Interpreter to sync against. Empty means whatever `requires-python`
+      resolves to, which is what every job wants except the compatibility
+      matrix in ci.yml.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -13,9 +20,11 @@ runs:
     - uses: astral-sh/setup-uv@v3
       with:
         enable-cache: true
-        # uv.lock is gitignored in this repo, so key the cache on pyproject.toml
-        # (the default glob **/uv.lock finds nothing and errors the step).
-        cache-dependency-glob: pyproject.toml
+        cache-dependency-glob: uv.lock
     - name: Sync project (${{ inputs.extras }})
       shell: bash
+      env:
+        # uv reads this when set and ignores it when empty, so one step serves
+        # both the pinned matrix legs and the jobs that do not care.
+        UV_PYTHON: ${{ inputs.python-version }}
       run: uv sync --extra "${{ inputs.extras }}"

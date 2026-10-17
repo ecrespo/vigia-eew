@@ -1,10 +1,10 @@
 """Headless TUI dashboard (RF-36, ADR-013).
 
-Alternative frontend to Tkinter+tray for running the agent on a headless
+Alternative frontend to Flet+tray for running the agent on a headless
 server over SSH, with no desktop session: a live status dashboard (WS
 connected/reconnecting, alerts log) and a **non-dismissable** modal alert
 (parity with RF-19) built on Textual, which is already asyncio-native — no
-thread/bridge is needed here (unlike the Tk model in ADR-006), the
+thread/bridge is needed here (unlike the Flet model in ADR-006), the
 `Supervisor` just runs as a Textual worker on the same event loop.
 """
 

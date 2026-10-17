@@ -1,0 +1,30 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Vigía-eew
+GenericName=Earthquake alerts
+GenericName[es]=Alertas sísmicas
+Comment=Real-time desktop earthquake alerts
+Comment[es]=Alerta sísmica de escritorio en tiempo real
+Exec=vigia-eew
+TryExec=vigia-eew
+Icon=vigia-eew
+Terminal=false
+Categories=System;Monitor;
+Keywords=earthquake;seismic;quake;alert;sismo;terremoto;alerta;temblor;
+StartupNotify=false
+StartupWMClass=vigia-eew
+X-GNOME-UsesNotifications=true
+Actions=Settings;Simulate;
+
+[Desktop Action Settings]
+Name=Settings
+Name[es]=Configuración
+Exec=vigia-eew --settings
+Icon=vigia-eew
+
+[Desktop Action Simulate]
+Name=Test the alert
+Name[es]=Probar la alerta
+Exec=vigia-eew --simulate
+Icon=vigia-eew
