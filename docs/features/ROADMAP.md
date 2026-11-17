@@ -116,7 +116,7 @@ calcular · el historial explica por qué se descartó cada evento.
 
 ## v1.1.0 — Un histórico que se puede abrir, y lo que la 1.0 dejó prometido
 
-> Publicada como rama `feature/v1.1.0`; el kit está en [`docs/v1.1/`](../v1.1/README.md).
+> **Publicada el 2026-11-17** (tag `v1.1.0`, GitHub Release y PyPI); el kit está en [`docs/v1.1/`](../v1.1/README.md).
 
 | Ítem | Estado |
 |---|---|

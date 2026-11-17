@@ -11,6 +11,19 @@ It connects over **WebSocket** to the **EMSC** real-time feed (push — no const
 
 It runs on **Linux, Windows, and macOS**, with no API keys, no paid services, and no dependency on any phone.
 
+## What it looks like
+
+**The alert** — it takes the screen, stays on top, and closes only when you acknowledge it. The
+earthquake's data on one side; the epicentre and your reference point on the map on the other.
+
+![The alert window: magnitude, place, distance, coordinates, depth and local time beside a map with the epicentre pinned and the reference point marked](docs/img/alert.png)
+
+**The history** — every earthquake the agent evaluated, alerted or discarded, and why. One filter
+drives the table, the map and its playback; *Summary* gives the figures of the period and
+*Export…* writes them to CSV or GeoJSON.
+
+![The history screen: filters by period, magnitude, distance, verdict and network above a table of earthquakes, beside a map of Venezuela with alerted and discarded earthquakes and the playback controls under it](docs/img/history.png)
+
 ## Why?
 
 A regular desktop notification gets silenced by Do Not Disturb, dismissed with a stray click, or buried behind other windows. In a seismic emergency, that's exactly what must not happen. Vigía forces an alert window to the front, with sound scaled to severity, that only disappears once you confirm you've seen it.
