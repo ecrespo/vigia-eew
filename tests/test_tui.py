@@ -640,3 +640,52 @@ def test_the_terminal_frontend_does_not_load_the_graphical_toolkit() -> None:
     )
 
     assert result.stdout.strip() == "[]"
+
+
+# --- Text from a network is text, never markup --------------------------------------
+#
+# The place is whatever a network sent. Textual reads square brackets in a
+# string as markup: a tag would restyle the row, and an unbalanced one raises.
+
+_HOSTILE = "[bold red]NEAR[/bold red] CARACAS [/nope] [link=http://example.invalid]x[/link]"
+
+
+async def test_a_place_with_brackets_in_it_is_listed_as_it_was_sent(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    store = HistoryStore(tmp_path / "hostile.sqlite3").open()
+    store.record(replace(_arrival("x", magnitude=5.0), region=_HOSTILE))
+    app = _history_app(store)
+    async with app.run_test(size=(200, 40)) as pilot:
+        screen = await _open(pilot)
+        await pilot.pause()
+
+        assert screen.shown[0][2] == _HOSTILE
+        cell = screen.query_one("#history-table", DataTable).get_row_at(0)[2]
+        assert cell.plain == _HOSTILE and not cell.spans
+    store.close()
+
+
+async def test_an_alert_whose_place_has_brackets_in_it_is_still_shown() -> None:
+    """The alert is the one thing that must not fail to draw."""
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(200, 40)) as pilot:
+        app.push_alert(_data(place=_HOSTILE), "critical", lambda: None)
+        await pilot.pause()
+
+        assert isinstance(app.screen, AlertScreen)
+        body = app.screen.query_one("#alert-body", Static)
+        assert _HOSTILE in str(body.render())
+
+
+async def test_a_reason_the_store_gives_for_being_unreadable_is_shown_as_text() -> None:
+    def broken() -> HistoryList:
+        raise RuntimeError("cannot open [/nope] history")
+
+    app = VigiaTuiApp(state=AgentState(), open_history=broken)
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.press("h")
+        await pilot.pause()
+
+        said = str(app.screen.query_one("#history-unavailable", Static).render())
+        assert "cannot open [/nope] history" in said

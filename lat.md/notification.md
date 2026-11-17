@@ -131,3 +131,18 @@ breaks rendering.
 The alert screen's update method is `update_data`, not `refresh` — `Widget.refresh()` already
 exists and takes no arguments. The internal repaint is `_paint`, not `_render`: overriding
 Textual's `Widget._render()` hook returns `None` instead of the widget's visual. See ADR-013.
+
+## Text from a network is never markup
+
+The place, the region and the identifiers of an earthquake are whatever a network sent, and the
+terminal toolkit reads square brackets in a string as markup.
+
+A tag would restyle the screen; an unbalanced one **raises while drawing**. In
+[[src/vigia_eew/tui.py#AlertScreen]] that meant an earthquake whose place held a stray `[/x]`
+produced no alert at all — the failure Art. 1 exists to rule out, reachable from a feed. So every
+widget that shows such text is built with markup off, and the cells of
+[[src/vigia_eew/tui.py#HistoryScreen]] are `Text` objects rather than strings. The graphical
+frontend is not affected: Flet's `Text` has no markup.
+
+The rule for new terminal widgets: a string that came from outside the program goes in as `Text`
+or into a widget with `markup=False`, never as a bare string.

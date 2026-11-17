@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -66,7 +67,11 @@ class AlertScreen(ModalScreen[None]):
         self._locale = locale_code
 
     def compose(self) -> ComposeResult:
-        yield Static(id="alert-body")
+        # `markup=False`: the place is whatever a network sent, and a string
+        # with square brackets in it is markup to Textual -- an unbalanced tag
+        # raises, and this is the one screen that must not fail to draw.
+        # @lat: [[notification#Text from a network is never markup]]
+        yield Static(id="alert-body", markup=False)
 
     def on_mount(self) -> None:
         self._paint()
@@ -172,7 +177,7 @@ class HistoryScreen(Screen[None]):
                 yield Input(placeholder=t(label_key, loc) + hint, id=f"filter-{name}")
             yield Select[str]([], prompt=t("history_filter_verdict", loc), id="filter-verdict")
         yield DataTable(id="history-table", cursor_type="row", zebra_stripes=True)
-        yield Static(id="history-status")
+        yield Static(id="history-status", markup=False)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -197,7 +202,9 @@ class HistoryScreen(Screen[None]):
         table = self.query_one("#history-table", DataTable)
         table.clear()
         for row in listing.rows:
-            table.add_row(*(str(getattr(row, column.key)) for column in COLUMNS))
+            # `Text`, not `str`: a string cell is read as markup, and these
+            # are the networks' words (see `AlertScreen.compose`).
+            table.add_row(*(Text(str(getattr(row, column.key))) for column in COLUMNS))
         self._offer_verdicts()
         if self._period_refused:
             said = t("history_period_invalid", self._locale)
@@ -218,7 +225,7 @@ class HistoryScreen(Screen[None]):
         self.verdicts_offered = available
         select = self.query_one("#filter-verdict", Select)
         chosen = self.listing.query.verdict
-        select.set_options((self._verdict_label(verdict), verdict) for verdict in available)
+        select.set_options((Text(self._verdict_label(verdict)), verdict) for verdict in available)
         if chosen in available:
             select.value = chosen
 

@@ -537,6 +537,10 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   1–150; the *alerted* filter gave 181 entries, the same rows in the same order as the graphical
   list; the reading switch and the pager worked. Not observed over a real SSH connection — the
   headless driver has no terminal — which is the phase's exit criterion and is still owed.
+- **Found by the commit's security review, and wider than this task**: a string cell is read as
+  markup, so a place holding square brackets restyled the row or raised. The same was true of the
+  terminal **alert**, since v0.1: a place with an unbalanced tag raised while drawing and no alert
+  appeared. The table's cells are `Text` and the alert's body has markup off.
 
 ---
 
