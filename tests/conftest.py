@@ -45,6 +45,25 @@ def _isolate_user_config(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_sound(monkeypatch):
+    """The suite never reaches the machine's audio.
+
+    Any test that builds the agent with the default configuration has sound
+    switched on, and the wiring plays it on a daemon thread. On a developer's
+    machine that is the critical alarm, four times, out loud. On a runner with
+    no audio the player falls back to the terminal bell -- a `print` from a
+    thread that outlives its test and lands in whatever another test is
+    capturing: `test_backfill_fills_an_empty_history...` failed on CI with
+    two BEL characters in front of "EMSC".
+
+    Tests of the player itself inject their own (`tests/test_sound.py`).
+    """
+    from vigia_eew.notify import sound as sound_module
+
+    monkeypatch.setattr(sound_module, "_default_player", lambda _path: None)
+
+
+@pytest.fixture(autouse=True)
 def _no_desktop_client(monkeypatch):
     """The suite never starts the Flet desktop client.
 
