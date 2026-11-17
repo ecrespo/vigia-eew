@@ -511,6 +511,39 @@ class Wiring:
         self._show(shell, "history", title, window.view, on_covered=window.pause_playback)
         return window
 
+    def tui_history(self) -> dict[str, Callable[..., Any]]:
+        """What the terminal dashboard is built with to reach the history.
+
+        The way to it, not the history itself: the dashboard opens a read
+        connection when asked and closes it on the way out.
+        """
+        return {"open_history": self.open_tui_history, "close_history": self.close_tui_history}
+
+    def open_tui_history(self) -> Any:
+        """Opens the history for the terminal dashboard and hands it the list (ADR-041).
+
+        The same `HistoryList` the window draws, so a filter means one thing
+        in both frontends -- with the same zone and the same order of trust --
+        and, like the window, through a read connection of its own that never
+        prunes. It raises when the file cannot be read: the dashboard says so
+        and carries on, which is not this method's to decide.
+        """
+        from vigia_eew.notify.history_list import HistoryList
+
+        self._close_history_reader()
+        store = HistoryStore(prune_on_open=False).open()
+        self._history_store = store
+        return HistoryList(
+            store,
+            locale_code=self.locale,
+            zone=self.cfg.notification.timezone,
+            rank=tuple(spec.source for spec in ordered_sources(self.cfg)),
+        )
+
+    def close_tui_history(self) -> None:
+        """Closes the terminal's read connection, when it leaves the history."""
+        self._close_history_reader()
+
     def recover_history(
         self, shell: Any, days: int, report: Callable[[list[str]], None]
     ) -> str | None:

@@ -325,7 +325,7 @@ None. T-182 cites Art. 9 rather than a requirement, as the cut task of v1.0 did.
 | **F12 · Timelapse** | ✅ **Done**, 2026-11-16 — spike verdict *viable with markers*; the observation on the packaged binary is owed |
 | **F13 · Depth** | ✅ **Done**, 2026-11-16 — V-06 measured and not material |
 | **F14 · Figures and export** | ✅ **Done**, 2026-11-17 — the dialog on the packaged binary (V-10) still owed; the export no longer depends on it |
-| **F15 · TUI** | ✅ Ready |
+| **F15 · TUI** | ✅ **Done**, 2026-11-17 — observed headless; the run over a real SSH connection is owed |
 | **F16 · v1.0 promises and cut** | ✅ Ready, with V-09 in view |
 
 **Nothing found requires rewriting a requirement.** Two were reworded during this pass (V-13,

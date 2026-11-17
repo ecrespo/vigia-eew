@@ -166,6 +166,11 @@ arrivals for the split by network and each network's median latency over live ar
 by `notify/history_stats_view.py`; `history_export.py` (pure, no network library) writes it as
 CSV or GeoJSON to a path the user chose. An import contract keeps both pure.
 
+The list behind that screen, `notify/history_list.py` (`HistoryList`: filters, paging, wording),
+imports no toolkit, because two frontends draw it: `notify/history_view.py` in Flet and
+`tui.py`'s `HistoryScreen` in Textual (`h` on the `--tui` dashboard). Import contracts keep the
+list out of both toolkits and the dashboard out of Flet.
+
 `autostart/` installs/uninstalls OS-native autostart (systemd `--user` on Linux,
 LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via
 `--install-autostart`/`--uninstall-autostart`.

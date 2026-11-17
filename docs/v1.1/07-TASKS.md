@@ -506,7 +506,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F15 · The history over SSH
 
-### [ ] T-176 · The list in the terminal
+### [x] T-176 · The list in the terminal — 2026-11-17
 - **What**: a `HistoryScreen` in the Textual app, built on `HistoryList` with its own read
   connection: the table, the filters, the pager; a key to open it.
 - **REQ**: REQ-HIS-015 · **CA**: CA-121.1..CA-121.4 · **ADR**: ADR-041 · **X**: X-7
@@ -516,6 +516,27 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   shows a notice and the dashboard still updates; an alert is pushed over the list and the list is
   back after it.
 - **Hours**: 4–8
+- **As built**: `h` on the dashboard opens `HistoryScreen`: a `DataTable` with the list's seven
+  columns, a field for each criterion (the period's two days, minimum magnitude, maximum
+  distance, networks by name separated by commas, and a select for the verdict), and a status
+  line with the stretch on screen. `n`/`b` turn the page, `e` switches the reading, `c` clears
+  the filters, `escape` goes back. The letters are keys while the table has the focus — it has it
+  on opening — and letters inside a field. No sorting from the terminal: nothing asks for it.
+- **A module nobody listed**: `notify/history_list.py`. `HistoryList` imported no toolkit but
+  lived in `history_view.py`, which imports Flet at the top, so importing it from the dashboard
+  loaded the graphical toolkit on the machines `--tui` exists for. The list, its rows and the
+  field parsers moved; `history_view` re-exports them, and no caller changed. Two import
+  contracts and a fresh-interpreter test keep it so.
+- **Files beyond the task's list**: `notify/history_list.py` *(new)*, `notify/history_view.py`,
+  `app.py` (`run_tui` hands over `wiring.tui_history()`), `pyproject.toml` (two contracts),
+  `tests/test_app.py`, `tests/test_history_view.py`.
+- **Found on the way**: `push_alert` and the status timer used `App.query_one`, which looks in
+  the screen on top. With the history open, an alert would have raised instead of being logged.
+  Both now go through the dashboard's own screen.
+- **Observed** on a **copy** of the history (14 401 arrivals), headless: the screen opened on
+  1–150; the *alerted* filter gave 181 entries, the same rows in the same order as the graphical
+  list; the reading switch and the pager worked. Not observed over a real SSH connection — the
+  headless driver has no terminal — which is the phase's exit criterion and is still owed.
 
 ---
 

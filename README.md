@@ -29,7 +29,7 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 📦 **Full distribution**: PyPI, `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`.
 - 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake.
 - 🖥️ **System tray icon**: connection status, last alert, pause/resume notifications, edit config, quit — best-effort, never blocks startup if unavailable on your desktop.
-- ⌨️ **Headless TUI dashboard (`--tui`)**: run the agent on a server over SSH with no display — a terminal dashboard with live status, an alerts log, and a non-dismissable modal alert (ENTER acknowledges). Combine with `--simulate` to test it.
+- ⌨️ **Headless TUI dashboard (`--tui`)**: run the agent on a server over SSH with no display — a terminal dashboard with live status, an alerts log, the earthquake history as a filterable list (`h`), and a non-dismissable modal alert (ENTER acknowledges). Combine with `--simulate` to test it.
 
 ## Scope of the alert guarantee
 

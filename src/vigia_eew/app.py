@@ -209,17 +209,17 @@ class Application:
         from vigia_eew.tui import VigiaTuiApp
 
         self._prepare(resolve_location=not simulate)
+        self._tui_app = VigiaTuiApp(
+            state=self._agent_state,
+            locale_code=self.wiring.locale,
+            on_start=self._inject_simulated_alert if simulate else None,
+            **self.wiring.tui_history(),
+        )
         if simulate:
-            self._tui_app = VigiaTuiApp(
-                state=self._agent_state,
-                locale_code=self.wiring.locale,
-                on_start=self._inject_simulated_alert,
-            )
             self._ctrl = self.wiring.build_tui_controller(
                 self._tui_app, on_acknowledge=self._after_acknowledge
             )
         else:
-            self._tui_app = VigiaTuiApp(state=self._agent_state, locale_code=self.wiring.locale)
             self._wire_tui(self._tui_app)
         self._log.info("tui_simulation_started" if simulate else "tui_started")
         self._tui_app.run()

@@ -255,6 +255,23 @@ forbidden_modules = [
     "vigia_eew.backfill",
 ]
 
+# The terminal dashboard runs on machines with no display, and reads the history
+# through the list the window draws (ADR-041). That only holds while the list has
+# no toolkit in it, and while the dashboard reaches nothing that draws in Flet:
+# a terminal that loaded the graphical toolkit to list a history would fail where
+# it is needed most.
+[[tool.importlinter.contracts]]
+name = "The terminal frontend loads no graphical toolkit"
+type = "forbidden"
+source_modules = ["vigia_eew.tui", "vigia_eew.notify.history_list"]
+forbidden_modules = ["flet", "flet_map"]
+
+[[tool.importlinter.contracts]]
+name = "The history list belongs to no frontend"
+type = "forbidden"
+source_modules = ["vigia_eew.notify.history_list"]
+forbidden_modules = ["textual", "vigia_eew.notify.history_view", "vigia_eew.notify.history_map"]
+
 [tool.bandit]
 # SAST gate (security.yml). Only the shipped source is scanned (`-r src`); tests are
 # excluded since bandit's asserts/subprocess rules are noise there.

@@ -384,6 +384,10 @@ it, as it is over the dashboard.
 **Consequences.** No map, no playback, no import of Flet. It depends on ADR-032 having put the
 filter state in the list.
 
+**As built (T-176, 2026-11-17).** "No import of Flet" needed the list to move: it lived in
+`history_view.py`, which imports Flet at the top. It is now `notify/history_list.py`, re-exported
+by the view, and import contracts hold both the list and the dashboard to it.
+
 *Satisfies REQ-HIS-015.*
 
 ---

@@ -1111,3 +1111,38 @@ def test_the_verdict_filter_offers_recovered_and_isolates_it(mixed: HistoryStore
     view._apply_verdict()
 
     assert [row.record.source_event_id for row in view.listing.rows] == ["r"]
+
+
+# --- T-176 · the list is its own module, with no toolkit in it (ADR-041, X-7) -------
+
+
+def test_the_list_imports_no_toolkit_at_all() -> None:
+    """Two frontends read the history through it: the window and the terminal.
+
+    A terminal on a machine with no display must not load the graphical
+    toolkit to list a history, so the list cannot live beside the controls
+    that draw it.
+    """
+    import ast
+
+    import vigia_eew.notify.history_list as module
+
+    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+
+    for forbidden in ("flet", "flet_map", "textual", "httpx", "socket", "urllib"):
+        assert not any(name == forbidden or name.startswith(forbidden + ".") for name in imported)
+
+
+def test_the_view_still_hands_out_the_list_it_draws() -> None:
+    """What moved is where the list lives, not who may ask the view for it."""
+    from vigia_eew.notify import history_list, history_view
+
+    assert history_view.HistoryList is history_list.HistoryList
+    assert history_view.COLUMNS is history_list.COLUMNS
+    assert history_view.REASONS is history_list.REASONS

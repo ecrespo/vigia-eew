@@ -630,3 +630,105 @@ def test_the_panel_reached_from_the_navigation_edits_the_file_of_this_run(tmp_pa
     app = Application(Settings(), config_path=path)
 
     assert app.wiring.config_file == path
+
+
+# --- T-176 · the terminal reads the history through its own connection (ADR-041) ---
+
+
+def test_the_terminal_is_handed_the_same_list_the_window_reads(tmp_path, monkeypatch):
+    """Its own read connection, the user's zone and the user's order of trust."""
+    import vigia_eew.history as history_mod
+    from vigia_eew.notify.history_list import HistoryList
+
+    monkeypatch.setattr(history_mod, "default_history_path", lambda: tmp_path / "history.sqlite3")
+    cfg = Settings(notification=Notification(timezone="America/Bogota", sound=False))
+    app = Application(cfg, config_path=tmp_path / "config.toml")
+
+    listing = app.wiring.open_tui_history()
+
+    assert isinstance(listing, HistoryList)
+    assert listing.total == 0
+    assert listing._zone == "America/Bogota"
+    assert listing.query.rank  # the networks, in the order the deduplicator obeys
+    store = app.wiring._history_store
+    assert store is not None and store._db is not None
+
+    app.wiring.close_tui_history()
+
+    assert app.wiring._history_store is None
+    assert store._db is None
+
+
+def test_opening_the_terminal_history_does_not_prune_it(tmp_path, monkeypatch):
+    """A reader that pruned would delete rows because somebody looked."""
+    import vigia_eew.history as history_mod
+    import vigia_eew.wiring as wiring_mod
+
+    monkeypatch.setattr(history_mod, "default_history_path", lambda: tmp_path / "history.sqlite3")
+    made = []
+    real = wiring_mod.HistoryStore
+
+    def recording(*args, **kwargs):
+        made.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(wiring_mod, "HistoryStore", recording)
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+
+    app.wiring.open_tui_history()
+    app.wiring.close_tui_history()
+
+    assert made == [{"prune_on_open": False}]
+
+
+def test_a_history_the_terminal_cannot_open_raises_for_the_dashboard_to_say(tmp_path, monkeypatch):
+    import pytest
+
+    import vigia_eew.wiring as wiring_mod
+    from vigia_eew.history import HistoryTooNew
+
+    def refuse(self):
+        raise HistoryTooNew("written by a newer version")
+
+    monkeypatch.setattr(wiring_mod.HistoryStore, "open", refuse)
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+
+    with pytest.raises(HistoryTooNew):
+        app.wiring.open_tui_history()
+
+    assert app.wiring._history_store is None
+
+
+def test_run_tui_gives_the_dashboard_the_way_to_the_history(tmp_path, monkeypatch):
+    import vigia_eew.tui as tui_mod
+
+    built = []
+
+    class _Dashboard:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+
+        def bind_controller(self, controller):
+            pass
+
+        def bind_supervisor(self, supervisor):
+            pass
+
+        def push_alert(self, *args):
+            pass
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(tui_mod, "VigiaTuiApp", _Dashboard)
+    for simulate in (True, False):
+        app = Application(
+            Settings(notification=Notification(sound=False)),
+            config_path=tmp_path / "config.toml",
+        )
+        monkeypatch.setattr(app, "_prepare", lambda **_kw: None)
+
+        app.run_tui(simulate=simulate)
+
+        assert built[-1]["open_history"] == app.wiring.open_tui_history
+        assert built[-1]["close_history"] == app.wiring.close_tui_history

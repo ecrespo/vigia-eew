@@ -67,7 +67,7 @@ merging with every other arrival that has none.
 The rank travels as one bound, delimited string — a network's position in it is its rank — for
 the reason the source filter does: nothing is interpolated. The screen's switch only sets the
 reading on the query, so the pager, the total and the map follow without knowing about it;
-[[src/vigia_eew/notify/history_view.py#HistoryList]]`.arrivals_of()` gives back the arrivals the
+[[src/vigia_eew/notify/history_list.py#HistoryList]]`.arrivals_of()` gives back the arrivals the
 reading folded away.
 
 ## Times are text, and that is deliberate
@@ -199,7 +199,7 @@ things in two views of one history.
 
 ## The map is a view on the list, never the other way round
 
-[[src/vigia_eew/notify/history_view.py#HistoryList]] depends on the local file and nothing else.
+[[src/vigia_eew/notify/history_list.py#HistoryList]] depends on the local file and nothing else.
 No network, no third party, no image decoding.
 
 That is Art. 3 applied to a feature rather than to a failure: the history answers "why was I not
@@ -215,7 +215,7 @@ come to mean two different things in two views of one history.
 
 ## The list owns the filters and the paging
 
-[[src/vigia_eew/notify/history_view.py#HistoryList]] holds every filter and the page;
+[[src/vigia_eew/notify/history_list.py#HistoryList]] holds every filter and the page;
 [[src/vigia_eew/notify/history_view.py#HistoryView]] only sets them.
 
 v1.0 shipped with REQ-HIS-005 marked as met — *filter by date range, magnitude, distance, verdict
@@ -225,7 +225,8 @@ the screen. `HistoryView.filters` now names the control behind each criterion so
 
 The state is in the list, not in the Flet controls, because the list imports no toolkit. A second
 frontend — the terminal — can then offer the same filters by driving the same object, instead of
-implementing them again and drifting.
+implementing them again and drifting
+([[lat.md/history#The terminal reads the history through the same list]]).
 
 Dates are **local calendar days**, converted to UTC bounds by
 [[src/vigia_eew/timeutil.py#local_day_bounds]], next to the other local-day boundary (RF-40), so
@@ -244,7 +245,7 @@ rows without saying which does not answer "why was I not warned?" for those rows
 
 ## The table pages, the map does not
 
-[[src/vigia_eew/notify/history_view.py#HistoryList]]`.everything()` hands the whole filtered set
+[[src/vigia_eew/notify/history_list.py#HistoryList]]`.everything()` hands the whole filtered set
 to the views that draw it; [[src/vigia_eew/notify/history_window.py#HistoryWindow]] feeds the map
 from that, not from the page.
 
@@ -459,7 +460,7 @@ figure, which is not zero — and an empty set has no sections at all, for the s
 
 Both are computed in Python over the whole filtered set rather than as SQL aggregates: five more
 prepared statements for sets the retentions already bound. So
-[[src/vigia_eew/notify/history_view.py#HistoryList#whole]] reads the set with no limit, where the
+[[src/vigia_eew/notify/history_list.py#HistoryList#whole]] reads the set with no limit, where the
 map and the playback each have one.
 
 [[src/vigia_eew/notify/history_window.py#HistoryWindow]] computes the summary only while it is
@@ -481,3 +482,34 @@ runs.
 
 Bars are containers sized by their value — no charting library
 (decision D-6).
+
+## The terminal reads the history through the same list
+
+`--tui` runs where there is no display, which is where *"why did this machine not alert?"* is
+otherwise answered by reading a log (REQ-HIS-015, ADR-041).
+
+[[src/vigia_eew/tui.py#HistoryScreen]] draws the rows of a
+[[src/vigia_eew/notify/history_list.py#HistoryList]] in a table and sets its filters from fields:
+it decides nothing, so the same filter gives the same entries, in the same order, in the terminal
+and in the window. Only the list — a map and a playback do not fit in a terminal, and v1.0 had
+already settled which of the views is the feature.
+
+**The list moved to a module of its own for this.** It imported no toolkit, but it lived in
+`history_view.py`, which imports Flet at the top: importing the list loaded the graphical
+toolkit. On a server with no display that is the difference between a dashboard that starts and
+one that does not. `history_view` still hands the list out, so nothing that asked it there had to
+change; two import contracts keep the list free of both toolkits and the dashboard free of Flet,
+and a test imports the dashboard in a fresh interpreter and looks at what got loaded.
+
+The dashboard is handed **the way to the history, not the history**
+([[src/vigia_eew/wiring.py#Wiring#open_tui_history]]): a read connection of its own, opened when
+the screen is and closed on the way out, never pruning — as the window's is. A history that cannot
+be read is a screen that says so, with the store's reason; the dashboard under it keeps running.
+
+An alert is modal and is pushed over the list as it is over the dashboard. The history cannot be
+opened over an alert, and the status bar and the alerts log are reached through the dashboard's
+own screen rather than whichever is on top — `App.query_one` looks at the top, and with the
+history open that used to mean an alert could not be logged.
+
+Letters are keys only while the table has the focus, which it has when the screen opens; in a
+filter field a letter is a letter. `escape` leaves from either.

@@ -49,7 +49,7 @@ Scenario: CA-121.4 · An alert takes the terminal
 
 ## Definition of done
 
-- [ ] A history screen in `tui.py` built on `HistoryList`, with a key binding to open it
-- [ ] Its own read connection to the store, like the graphical screen
-- [ ] A test that compares its rows with `HistoryList`'s for the same query
-- [ ] No map, no playback, no import of Flet
+- [x] A history screen in `tui.py` built on `HistoryList`, with a key binding to open it
+- [x] Its own read connection to the store, like the graphical screen
+- [x] A test that compares its rows with `HistoryList`'s for the same query
+- [x] No map, no playback, no import of Flet
