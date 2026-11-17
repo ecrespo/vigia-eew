@@ -100,6 +100,10 @@ warning_max = 5.5
 
 [notification]
 fullscreen = false
+# IANA timezone (e.g. "America/Bogota", "Europe/Madrid") for every time shown:
+# the alert, its desktop notification, the tray, the history and its figures.
+# It is also the calendar day `today_only` above goes by. An unknown name shows UTC.
+# The alert names the zone next to the time: "15:39:00 CEST (Europe/Madrid)".
 timezone = "America/Caracas"
 sound = true
 # System tray icon (RF-34): status, pause/resume, edit config, quit.

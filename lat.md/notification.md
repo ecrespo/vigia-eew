@@ -226,3 +226,28 @@ drill.
 
 Every queue test that existed before the rule passes unchanged; they are the specification of
 what did not move.
+
+## The alert says the time in the configured zone
+
+`[notification] timezone` is the one zone every time on screen is said in, and the alert reads
+it like everything else does.
+
+It did not, until v1.1.0. The key governed the freshness filter, the history, its figures and the
+About screen, but [[src/vigia_eew/wiring.py#Wiring#build_controller]] built the controller — and
+the toaster — without it, and both fell back to their default, Caracas. Nobody outside UTC-4 had
+looked: the alert said *Local time* and was four hours off in Madrid. The tests on the controller
+passed a zone by hand, which is why none of them saw it; the ones added with the fix go through
+the wiring.
+
+**And it says which zone.** "Local time" is only local to whoever configured it, so the alert
+names it: `2026-06-28 15:39:00 CEST (Europe/Madrid)`.
+[[src/vigia_eew/notify/presentation.py#zone_abbreviation]] is computed at the earthquake's own
+instant, because the letters change with daylight saving. Many zones have no letters — the tz
+database gives Caracas `-04` — and a bare `-04` after a time reads as a mistake, so those are
+said as an offset: `UTC-04:00`. The window and the terminal show abbreviation and name; the
+toast, being one line, the abbreviation alone. A name that did not resolve is not shown beside a
+time that is in UTC.
+
+Internally every instant stays UTC; the conversion happens once, in
+[[src/vigia_eew/notify/presentation.py#format_moment]], which is fail-safe: a zone nobody knows
+shows UTC rather than costing the alert.

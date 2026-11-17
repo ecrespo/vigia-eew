@@ -442,3 +442,19 @@ def test_an_alert_can_be_closed_without_being_acknowledged(fake_shell):
     assert acknowledged == []
     assert fake_shell.alerts == []
     assert fake_shell.after_calls == []  # and it stopped counting
+
+
+# --- The time says which zone it is in ---------------------------------------------
+
+
+def test_the_alert_names_the_zone_of_its_time():
+    ev_data = replace(
+        _data(),
+        local_time="2026-06-28 15:39:00",
+        zone_abbreviation="CEST",
+        zone_name="Europe/Madrid",
+    )
+
+    window = AlertWindow(ev_data, on_acknowledge=lambda: None)
+
+    assert "2026-06-28 15:39:00 CEST (Europe/Madrid)" in _all_text(window.view)

@@ -201,3 +201,88 @@ def test_the_drill_label_exists_in_both_languages():
 
     assert t("drill_label", "en") == "DRILL — this is not a real earthquake"
     assert t("drill_label", "es") == "SIMULACRO — no es un sismo real"
+
+
+# --- The toast says the time in the zone it is given (RNF-12) ----------------------
+
+
+def test_the_toast_message_uses_the_zone_it_is_given():
+    _title, caracas = toast_text(_ev(), zone="America/Caracas")
+    _title, madrid = toast_text(_ev(), zone="Europe/Madrid")
+
+    assert "2026-06-28 09:39:00" in caracas
+    assert "2026-06-28 15:39:00" in madrid
+
+
+# --- The time says which zone it is in (RNF-12) ------------------------------------
+#
+# "Local time" is only local to whoever configured it. The alert names the
+# zone -- its abbreviation and its IANA name -- so a time is never ambiguous.
+
+from vigia_eew.notify.presentation import zone_abbreviation  # noqa: E402
+
+_SUMMER = datetime(2026, 6, 28, 12, 0, tzinfo=UTC)
+_WINTER = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+
+
+def test_a_zone_with_an_abbreviation_uses_it():
+    assert zone_abbreviation(_SUMMER, "Europe/Madrid") == "CEST"
+    assert zone_abbreviation(_SUMMER, "Asia/Tokyo") == "JST"
+
+
+def test_the_abbreviation_follows_daylight_saving():
+    assert zone_abbreviation(_WINTER, "Europe/Madrid") == "CET"
+
+
+def test_a_zone_with_no_abbreviation_is_said_as_its_offset():
+    """The tz database has no letters for Caracas: it says "-04"."""
+    assert zone_abbreviation(_SUMMER, "America/Caracas") == "UTC-04:00"
+    assert zone_abbreviation(_SUMMER, "Asia/Kolkata") in ("IST", "UTC+05:30")
+    assert zone_abbreviation(_SUMMER, "Asia/Kathmandu") == "UTC+05:45"
+
+
+def test_a_zone_nobody_knows_is_utc():
+    assert zone_abbreviation(_SUMMER, "Mars/Olympus_Mons") == "UTC"
+
+
+def test_the_event_carries_the_abbreviation_and_the_name_of_its_zone():
+    data = format_event(_ev(), zone="Europe/Madrid")
+
+    assert data.local_time == "2026-06-28 15:39:00"
+    assert data.zone_abbreviation == "CEST"
+    assert data.zone_name == "Europe/Madrid"
+    assert data.local_time_zoned == "2026-06-28 15:39:00 CEST (Europe/Madrid)"
+
+
+def test_the_default_zone_is_named_too():
+    data = format_event(_ev())
+
+    assert data.local_time_zoned == "2026-06-28 09:39:00 UTC-04:00 (America/Caracas)"
+
+
+def test_an_unknown_zone_is_shown_as_utc_and_not_by_the_name_that_failed():
+    data = format_event(_ev(), zone="Mars/Olympus_Mons")
+
+    assert data.local_time_zoned == "2026-06-28 13:39:00 UTC"
+
+
+def test_alert_data_built_without_a_zone_shows_the_bare_time():
+    from vigia_eew.notify.presentation import AlertData
+
+    data = AlertData(
+        magnitude="M 6.1",
+        place="La Guaira",
+        distance="20 km",
+        depth="10 km",
+        local_time="2026-07-04 10:00:00",
+        source="EMSC",
+        severity="critical",
+    )
+
+    assert data.local_time_zoned == "2026-07-04 10:00:00"
+
+
+def test_the_toast_says_the_abbreviation_after_the_time():
+    _title, message = toast_text(_ev(), zone="Europe/Madrid")
+
+    assert message.endswith("2026-06-28 15:39:00 CEST")

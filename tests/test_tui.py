@@ -809,3 +809,18 @@ async def test_the_terminal_alert_can_be_closed_without_acknowledging_it():
 
         assert not isinstance(app.screen, AlertScreen)
         assert acknowledged == []
+
+
+async def test_the_terminal_alert_names_the_zone_of_its_time():
+    data = _replace(
+        _data(),
+        local_time="2026-06-28 15:39:00",
+        zone_abbreviation="CEST",
+        zone_name="Europe/Madrid",
+    )
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(data, "critical", lambda: None)
+        await pilot.pause()
+
+        assert "2026-06-28 15:39:00 CEST (Europe/Madrid)" in _body(app)

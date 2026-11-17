@@ -60,6 +60,11 @@ the roadmap had promised since before 1.0.
   place holding an unbalanced `[/tag]` raised while drawing: no alert. Present since the dashboard
   was written; found by the security review of this release.
 - **Text from a network cannot become a formula** in an exported CSV.
+- **The alert says the time in your timezone.** `[notification] timezone` governed the history
+  and the freshness filter, but the alert, its desktop notification and the tray's "last alert"
+  were built without it and always said the time in Caracas. They now use the configured zone,
+  and the alert **names it**: `15:39:00 CEST (Europe/Madrid)`, or the offset where a zone has no
+  abbreviation — `08:00:00 UTC-04:00 (America/Caracas)`. The toast carries the abbreviation.
 - **An alert while the terminal history is open** is logged on the dashboard instead of raising.
 - **Refreshing the history** re-reads the table as well as the map.
 

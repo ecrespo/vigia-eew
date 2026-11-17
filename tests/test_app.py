@@ -926,3 +926,99 @@ def test_a_simulated_alert_never_reaches_the_history(tmp_path):
         assert "SIMULATED" not in store.sources()
     finally:
         store.close()
+
+
+# --- The configured timezone reaches every notification (RNF-12) -------------------
+#
+# `[notification] timezone` already governed the freshness filter, the history
+# and the About screen. The alert and its toast were built without it and fell
+# back to Caracas, whatever the file said.
+
+
+def _event_at_noon_utc():
+    from datetime import UTC, datetime
+
+    return simulated_event(
+        ReferencePoint(), Settings().severity, now=datetime(2026, 6, 28, 12, 0, tzinfo=UTC)
+    )
+
+
+def _zoned_app(tmp_path, zone: str) -> Application:
+    return Application(
+        Settings(notification=Notification(sound=False, timezone=zone)),
+        state=StateStore(tmp_path / "state.json"),
+    )
+
+
+def test_the_alert_shows_the_time_in_the_configured_timezone(tmp_path):
+    app = _zoned_app(tmp_path, "Europe/Madrid")
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert windows[0].data.local_time == "2026-06-28 14:00:00"
+
+
+def test_the_default_timezone_is_still_caracas(tmp_path):
+    app = Application(
+        Settings(notification=Notification(sound=False)),
+        state=StateStore(tmp_path / "state.json"),
+    )
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert windows[0].data.local_time == "2026-06-28 08:00:00"
+
+
+def test_the_terminal_alert_shows_the_configured_timezone_too(tmp_path):
+    app = _zoned_app(tmp_path, "Asia/Tokyo")
+    tui_app = _FakeTuiApp()
+    ctrl = app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert tui_app.pushed[0][0].local_time == "2026-06-28 21:00:00"
+
+
+def test_the_tray_remembers_the_last_alert_in_the_configured_timezone(tmp_path):
+    app = _zoned_app(tmp_path, "Europe/Madrid")
+    ctrl = app.wiring.build_controller(_window_factory([]), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert "2026-06-28 14:00:00" in app._agent_state.last_alert
+
+
+def test_the_desktop_toast_is_given_the_configured_timezone(tmp_path, fake_shell, monkeypatch):
+    import vigia_eew.wiring as wiring_mod
+
+    built = {}
+    real = wiring_mod.Toaster
+
+    def recording(**kwargs):
+        built.update(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(wiring_mod, "Toaster", recording)
+    app = _zoned_app(tmp_path, "Europe/Madrid")
+
+    app.wiring.build_gui_controller(
+        fake_shell, on_acknowledge=lambda _ev: None, worker_loop=lambda: None
+    )
+
+    assert built["zone"] == "Europe/Madrid"
+
+
+def test_a_timezone_nobody_knows_shows_utc_rather_than_no_alert(tmp_path):
+    """Fail-safe, like every other reader of this key: the alert still appears."""
+    app = _zoned_app(tmp_path, "Mars/Olympus_Mons")
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert len(windows) == 1
+    assert windows[0].data.local_time == "2026-06-28 12:00:00"

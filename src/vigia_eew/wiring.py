@@ -328,6 +328,10 @@ class Wiring:
             reference_point=(self.cfg.reference.lat, self.cfg.reference.lon),
             state=self.agent_state,
             locale_code=self.locale,
+            # The zone the user configured, like every other reader of it:
+            # without this the alert said the time in Caracas wherever it ran.
+            # @lat: [[notification#The alert says the time in the configured zone]]
+            zone=self.cfg.notification.timezone,
             # Every simulated alert -- the scheduled drill and `--simulate`
             # alike -- leaves its record in `state.json` (ADR-040).
             on_drill_presented=self.state.drill_presented,
@@ -355,7 +359,11 @@ class Wiring:
         """The desktop path: a Flet alert with its map, sound, and a desktop toast."""
         from vigia_eew.notify.alert_window import AlertWindow
 
-        toaster = Toaster(reference_name=self.cfg.reference.name, locale_code=self.locale)
+        toaster = Toaster(
+            reference_name=self.cfg.reference.name,
+            locale_code=self.locale,
+            zone=self.cfg.notification.timezone,
+        )
 
         def create_window(
             data: AlertData, severity: SeverityLevel, acknowledge: Callable[[], None]

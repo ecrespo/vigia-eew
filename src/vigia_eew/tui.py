@@ -112,7 +112,7 @@ class AlertScreen(ModalScreen[None]):
             f"{data.distance}\n"
             f"{shaking + chr(10) if shaking else ''}"
             f"{t('depth_label', self._locale)}: {data.depth}\n"
-            f"{t('local_time_label', self._locale)}: {data.local_time}\n"
+            f"{t('local_time_label', self._locale)}: {data.local_time_zoned}\n"
             f"{t('source_label', self._locale)}: {data.source}\n\n"
             f"[{t('acknowledged_button', self._locale)}: ENTER]"
         )

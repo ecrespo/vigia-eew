@@ -276,7 +276,7 @@ class AlertWindow:
                 ft.Container(height=8),
                 line(t("coordinates_label", loc), data.coordinates),
                 line(t("depth_label", loc), data.depth),
-                line(t("local_time_label", loc), data.local_time),
+                line(t("local_time_label", loc), data.local_time_zoned),
                 line(t("source_label", loc), data.source),
                 ft.Container(height=16),
                 ft.FilledButton(

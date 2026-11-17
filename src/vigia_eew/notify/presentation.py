@@ -59,6 +59,22 @@ class AlertData:
     #: A simulated alert -- `--simulate` or the scheduled drill -- which every
     #: frontend labels as one (REQ-UX-008).
     drill: bool = False
+    #: Which zone `local_time` is in: its abbreviation ("CEST", or the offset
+    #: where the zone has none) and its IANA name. "Local" is only local to
+    #: whoever configured it, so the alert says which.
+    zone_abbreviation: str = ""
+    zone_name: str = ""
+
+    @property
+    def local_time_zoned(self) -> str:
+        """The time with its zone: `2026-06-28 15:39:00 CEST (Europe/Madrid)`."""
+        parts = [self.local_time]
+        if self.zone_abbreviation:
+            parts.append(self.zone_abbreviation)
+        # The name only when it adds something: "UTC (UTC)" does not.
+        if self.zone_name and self.zone_name != self.zone_abbreviation:
+            parts.append(f"({self.zone_name})")
+        return " ".join(parts)
 
 
 def format_coordinates(lat: float, lon: float) -> str:
@@ -86,6 +102,38 @@ def format_moment(moment: datetime, zone: str = VENEZUELA_ZONE) -> str:
     except (ZoneInfoNotFoundError, ValueError):
         local = moment.astimezone(UTC)
     return local.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _zone_of(zone: str) -> ZoneInfo | None:
+    """The zone of that name, or None when nobody knows it."""
+    try:
+        return ZoneInfo(zone)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+
+# @lat: [[notification#The alert says the time in the configured zone]]
+def zone_abbreviation(moment: datetime, zone: str) -> str:
+    """How that zone is abbreviated at that instant: `CEST`, `JST`, `UTC-04:00`.
+
+    At an instant, because the letters change with daylight saving. Many
+    zones have no letters at all -- the tz database gives Caracas "-04" -- and
+    a bare "-04" after a time reads as a mistake, so those are said as an
+    offset from UTC. A zone nobody knows is UTC, which is what
+    `format_moment` shows for it.
+    """
+    tz = _zone_of(zone)
+    if tz is None:
+        return "UTC"
+    local = moment.astimezone(tz)
+    name = local.tzname() or ""
+    if name and name[0] not in "+-" and not name[0].isdigit():
+        return name
+    offset = local.utcoffset()
+    minutes = int(offset.total_seconds() // 60) if offset is not None else 0
+    sign = "-" if minutes < 0 else "+"
+    hours, rest = divmod(abs(minutes), 60)
+    return f"UTC{sign}{hours:02d}:{rest:02d}"
 
 
 def _local_time(ev: SeismicEvent, zone: str) -> str:
@@ -128,6 +176,9 @@ def format_event(
         reference_name=reference_name,
         shaking_arrival=estimate.arrival if estimate is not None else None,
         drill=ev.is_drill,
+        zone_abbreviation=zone_abbreviation(ev.time_utc, zone),
+        # A name that did not resolve is not shown: the time is in UTC.
+        zone_name=zone if _zone_of(zone) is not None else "UTC",
     )
 
 
@@ -167,5 +218,6 @@ def toast_text(
     title = t("toast_title", locale_code, magnitude=data.magnitude)
     if data.drill:
         title = f"{t('drill_short', locale_code)} · {title}"
-    message = f"{data.place} · {data.distance} · {data.local_time}"
+    # The abbreviation and not the name: a toast is one line.
+    message = f"{data.place} · {data.distance} · {data.local_time} {data.zone_abbreviation}"
     return title, message
