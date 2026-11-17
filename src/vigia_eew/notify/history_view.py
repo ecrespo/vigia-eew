@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 import flet as ft
@@ -27,6 +28,13 @@ import flet as ft
 from vigia_eew.history import ORDERABLE, EventRecord, HistoryQuery, HistoryStore
 from vigia_eew.i18n import DEFAULT_LOCALE, t
 from vigia_eew.notify.presentation import VENEZUELA_ZONE, format_moment
+from vigia_eew.timeutil import local_day_bounds
+
+#: Rows on a page, which is what the table draws. A Flutter `DataTable` lays
+#: out every cell up front, and 500 rows of seven cells took the screen several
+#: seconds to appear. The rows past this are reached by paging (REQ-HIS-008),
+#: not left out.
+TABLE_ROW_LIMIT = 150
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +89,31 @@ class Row:
     #: needs the numbers the table has already turned into text.
     record: EventRecord
 
+    @property
+    def summary(self) -> str:
+        """The entry in three lines, for a view that has room for one earthquake.
+
+        What a symbol on the map says when it is pointed at (REQ-MAP-006). It
+        is put together from the strings above and nothing else, so a symbol
+        and its row cannot come to describe the same earthquake differently.
+        """
+        verdict = f"{self.verdict} — {self.reason}" if self.reason else self.verdict
+        lines = [f"{self.magnitude} · {self.time}", self.place, f"{self.distance} · {verdict}"]
+        return "\n".join(line for line in lines if line)
+
+
+@dataclass(frozen=True, slots=True)
+class Everything:
+    """The filtered set in full, as far as the caller asked for it."""
+
+    records: list[EventRecord]
+    #: How many the filter matches. More than `records` when it was cut short.
+    total: int
+
+    @property
+    def truncated(self) -> bool:
+        return len(self.records) < self.total
+
 
 class HistoryList:
     """What the table shows, and the single filter both views obey.
@@ -88,6 +121,11 @@ class HistoryList:
     The query object is deliberately exposed: the map reads the very query the
     table ran, which is how one filter can govern two views without either of
     them owning the other (REQ-MAP-004).
+
+    Every filter and the page live here, not in the controls
+    ([[lat.md/history#The list owns the filters and the paging]]). The
+    controls only set them, which is what lets a second frontend -- the
+    terminal -- offer the same filters without writing them again.
     """
 
     def __init__(
@@ -96,7 +134,7 @@ class HistoryList:
         *,
         locale_code: str = DEFAULT_LOCALE,
         zone: str = VENEZUELA_ZONE,
-        page_size: int = 500,
+        page_size: int = TABLE_ROW_LIMIT,
     ) -> None:
         self._store = store
         self._locale = locale_code
@@ -106,6 +144,7 @@ class HistoryList:
         self.rows: list[Row] = []
         self.total = 0
         self.available_sources: list[str] = []
+        self.available_verdicts: list[str] = []
         self.refresh()
 
     # --- Reading ---
@@ -117,6 +156,7 @@ class HistoryList:
         self.rows = [self._format(record) for record in records]
         self.total = self._store.count(self.query)
         self.available_sources = self._store.sources()
+        self.available_verdicts = self._store.verdicts()
 
     def _format(self, record: EventRecord) -> Row:
         return Row(
@@ -148,6 +188,29 @@ class HistoryList:
         self.query = _replace(self.query, offset=0, **criteria)
         self.refresh()
 
+    def set_period(self, first_day: date | None, last_day: date | None) -> None:
+        """Keeps the arrivals of those local calendar days, both inclusive.
+
+        Days are the user's, in the configured zone; either may be `None`. A
+        period that ends before it starts raises `ValueError` and leaves the
+        query -- and so what is on screen -- as it was (CA-114.4).
+        """
+        since, until = local_day_bounds(first_day, last_day, self._zone)
+        self.set_filter(since=since, until=until)
+
+    def set_min_magnitude(self, magnitude: float | None) -> None:
+        self.set_filter(min_magnitude=magnitude)
+
+    def set_max_distance(self, kilometres: float | None) -> None:
+        self.set_filter(max_distance_km=kilometres)
+
+    def set_verdict(self, verdict: str | None) -> None:
+        self.set_filter(verdict=verdict)
+
+    def set_sources(self, names: Sequence[str]) -> None:
+        """Keeps the arrivals of those networks; none chosen means all of them."""
+        self.set_filter(sources=tuple(names))
+
     def clear_filters(self) -> None:
         self.query = HistoryQuery(
             order_by=self.query.order_by,
@@ -167,8 +230,58 @@ class HistoryList:
         if column is None or column.sort_key is None or column.sort_key not in ORDERABLE:
             return
         descending = not self.query.descending if self.query.order_by == column.sort_key else True
-        self.query = _replace(self.query, order_by=column.sort_key, descending=descending)
+        self.set_filter(order_by=column.sort_key, descending=descending)
+
+    # --- Paging (REQ-HIS-008) ---
+
+    @property
+    def stretch(self) -> tuple[int, int, int]:
+        """The first and last entry on screen, counted from one, and the total.
+
+        A history that hides rows without saying which does not answer "why
+        was I not warned?" for those rows. `(0, 0, 0)` when nothing matches.
+        """
+        if not self.rows:
+            return (0, 0, self.total)
+        return (self.query.offset + 1, self.query.offset + len(self.rows), self.total)
+
+    @property
+    def stretch_text(self) -> str:
+        first, last, total = self.stretch
+        return t("history_stretch", self._locale, first=first, last=last, total=total)
+
+    @property
+    def has_previous(self) -> bool:
+        return self.query.offset > 0
+
+    @property
+    def has_next(self) -> bool:
+        return self.query.offset + len(self.rows) < self.total
+
+    def next_page(self) -> None:
+        if self.has_next:
+            self._turn_to(self.query.offset + self.page_size)
+
+    def previous_page(self) -> None:
+        if self.has_previous:
+            self._turn_to(max(0, self.query.offset - self.page_size))
+
+    def _turn_to(self, offset: int) -> None:
+        self.query = _replace(self.query, offset=offset)
         self.refresh()
+
+    def go_to(self, row_id: int, *, limit: int) -> bool:
+        """Turns to the page that holds that row; False if it is not in the set.
+
+        What a symbol pressed on the map needs (REQ-MAP-007): its row may be
+        on a page the table is not showing. `limit` is how far into the set to
+        look -- the caller knows it, because the symbol came from that stretch.
+        """
+        for position, record in enumerate(self.everything(limit).records):
+            if record.id == row_id:
+                self._turn_to(position - position % self.page_size)
+                return True
+        return False
 
     def records(self) -> list[EventRecord]:
         """The stored rows behind what is on screen.
@@ -179,12 +292,24 @@ class HistoryList:
         """
         return [row.record for row in self.rows]
 
+    def everything(self, limit: int) -> Everything:
+        """The whole filtered set in the table's order, up to `limit` of it.
+
+        The table pages; a map does not. A map that drew only the page would
+        move its symbols every time the page was turned, and "the same set"
+        (REQ-MAP-004) would have come to mean "the same 150 rows". So the views
+        that draw the set -- the map, and later the playback -- read this, and
+        say so when `limit` cut it short.
+        """
+        request = _replace(self.query, limit=limit, offset=0)
+        return Everything(self._store.query(request), self.total)
+
+    def row_for(self, record: EventRecord) -> Row:
+        """That record as the table words it, for a view that shows one entry."""
+        return self._format(record)
+
     def label(self, column: Column) -> str:
         return t(column.label_key, self._locale)
-
-    @property
-    def count_text(self) -> str:
-        return t("history_count", self._locale, shown=len(self.rows), total=self.total)
 
 
 def _replace(query: HistoryQuery, **changes: Any) -> HistoryQuery:
@@ -197,19 +322,18 @@ def _replace(query: HistoryQuery, **changes: Any) -> HistoryQuery:
 # --- The controls ----------------------------------------------------------------
 
 
-#: Rows the table draws. A Flutter `DataTable` lays out every cell up front,
-#: and 500 rows of seven cells took the screen several seconds to appear. The
-#: filters narrow the set; the map still shows every record the list holds.
-TABLE_ROW_LIMIT = 150
-
-
 class HistoryView:
-    """The table itself: headers that sort, filters above, a count below.
+    """The table itself: headers that sort, filters above, a pager below.
 
     Decides nothing. Every question it displays an answer to was answered by
     `HistoryList`, which is why those answers are testable without a screen.
     The filters sit in a `ResponsiveRow` (one per line on a narrow window) and
     the table scrolls sideways rather than squeezing its columns (ADR-030).
+
+    There is a control for each criterion the store can filter by (REQ-HIS-007).
+    v1.0 offered two of the five, and the requirement was marked met because a
+    test on the store passed: `filters` exists so that a test can ask the
+    screen, not the store, what can be set from it.
     """
 
     def __init__(
@@ -218,10 +342,16 @@ class HistoryView:
         *,
         locale_code: str = DEFAULT_LOCALE,
         on_changed: Any = None,
+        on_select: Any = None,
     ) -> None:
         self.listing = listing
         self._locale = locale_code
         self._on_changed = on_changed
+        self._on_select = on_select
+        #: The id of the row the user chose, or None. Kept by id rather than by
+        #: position: the row may leave the page and still be the one chosen.
+        self.selected: int | None = None
+        self._chosen_sources: list[str] = []
         filters = self._build_filters()
         self.table = self._build_table()
         self.status = ft.Text("", italic=True)
@@ -238,18 +368,31 @@ class HistoryView:
                         controls=[ft.Row(scroll=ft.ScrollMode.AUTO, controls=[self.table])],
                     ),
                 ),
-                self.status,
+                self._build_pager(),
             ],
         )
         self.refresh()
 
+    # --- Building ---
+
     def _build_filters(self) -> Any:
         loc = self._locale
+        self._since = self._date_field("history_filter_since")
+        self._until = self._date_field("history_filter_until")
+        self._period_error = ft.Text(
+            t("history_period_invalid", loc), color=ft.Colors.ERROR, size=12, visible=False
+        )
         self._magnitude = ft.TextField(
             label=t("history_filter_magnitude", loc),
             keyboard_type=ft.KeyboardType.NUMBER,
             dense=True,
             on_change=lambda _e: self._apply_magnitude(),
+        )
+        self._distance = ft.TextField(
+            label=t("history_filter_distance", loc),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            dense=True,
+            on_change=lambda _e: self._apply_distance(),
         )
         self._any = t("history_filter_any", loc)
         self._verdict = ft.Dropdown(
@@ -257,29 +400,78 @@ class HistoryView:
             value=self._any,
             dense=True,
             expand=True,
-            options=[
-                ft.DropdownOption(key=self._any, text=self._any),
-                ft.DropdownOption(key="alerted", text=t("history_verdict_alerted", loc)),
-                ft.DropdownOption(key="discarded", text=t("history_verdict_discarded", loc)),
-            ],
+            options=[],
             on_select=lambda _e: self._apply_verdict(),
         )
-        return ft.ResponsiveRow(
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            run_spacing=8,
+        self._source_chips = ft.Row(wrap=True, spacing=6, run_spacing=4, controls=[])
+        #: Which criterion each control sets, by the names REQ-HIS-005 uses.
+        self.filters: dict[str, Any] = {
+            "period": (self._since, self._until),
+            "magnitude": self._magnitude,
+            "distance": self._distance,
+            "verdict": self._verdict,
+            "sources": self._source_chips,
+        }
+        return ft.Column(
+            spacing=8,
             controls=[
-                ft.Container(col={"xs": 12, "sm": 4}, content=self._magnitude),
-                ft.Container(col={"xs": 12, "sm": 5}, content=self._verdict),
-                ft.Container(
-                    col={"xs": 12, "sm": 3},
-                    content=ft.OutlinedButton(
-                        content=ft.Text(t("history_filter_clear", loc)),
-                        icon=ft.Icons.FILTER_ALT_OFF,
-                        on_click=lambda _e: self._clear(),
-                    ),
+                ft.ResponsiveRow(
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    run_spacing=8,
+                    controls=[
+                        # Two to a line: the table's pane is half a window
+                        # wide, and four fields across wrapped their labels.
+                        ft.Container(col=6, content=self._since),
+                        ft.Container(col=6, content=self._until),
+                        ft.Container(col=6, content=self._magnitude),
+                        ft.Container(col=6, content=self._distance),
+                    ],
+                ),
+                self._period_error,
+                ft.ResponsiveRow(
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    run_spacing=8,
+                    controls=[
+                        ft.Container(col={"xs": 12, "sm": 4}, content=self._verdict),
+                        ft.Container(
+                            col={"xs": 12, "sm": 5},
+                            content=ft.Row(
+                                spacing=8,
+                                controls=[
+                                    ft.Text(t("history_filter_source", loc), size=12),
+                                    ft.Container(expand=True, content=self._source_chips),
+                                ],
+                            ),
+                        ),
+                        ft.Container(
+                            col={"xs": 12, "sm": 3},
+                            content=ft.OutlinedButton(
+                                content=ft.Text(t("history_filter_clear", loc)),
+                                icon=ft.Icons.FILTER_ALT_OFF,
+                                on_click=lambda _e: self._clear(),
+                            ),
+                        ),
+                    ],
                 ),
             ],
         )
+
+    def _date_field(self, label_key: str) -> Any:
+        """A day typed as YYYY-MM-DD, with a calendar beside it for whoever prefers one."""
+        field = ft.TextField(
+            label=t(label_key, self._locale),
+            hint_text=DATE_HINT,
+            dense=True,
+            on_change=lambda _e: self._apply_period(),
+        )
+        # `suffix_icon`, not `suffix`: a suffix is drawn only while the field
+        # has focus or text, and a calendar nobody can see is no help.
+        field.suffix_icon = ft.IconButton(
+            icon=ft.Icons.CALENDAR_MONTH,
+            icon_size=18,
+            on_click=lambda _e: self._pick_day(field),
+        )
+        return field
 
     def _build_table(self) -> Any:
         return ft.DataTable(
@@ -298,47 +490,214 @@ class HistoryView:
             rows=[],
             column_spacing=20,
             heading_row_color=ft.Colors.SURFACE_CONTAINER,
+            # A row is chosen by pressing it; the column of tick boxes Flutter
+            # adds to a selectable table would suggest choosing several.
+            show_checkbox_column=False,
+        )
+
+    def _build_pager(self) -> Any:
+        """Where in the filtered set the table is, and the way to the rest of it."""
+        self._previous = ft.IconButton(
+            icon=ft.Icons.CHEVRON_LEFT,
+            tooltip=t("history_page_previous", self._locale),
+            on_click=lambda _e: self._turn(-1),
+        )
+        self._next = ft.IconButton(
+            icon=ft.Icons.CHEVRON_RIGHT,
+            tooltip=t("history_page_next", self._locale),
+            on_click=lambda _e: self._turn(+1),
+        )
+        return ft.Row(
+            spacing=4,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[self._previous, self._next, ft.Container(expand=True, content=self.status)],
         )
 
     # --- Behaviour ---
 
     def refresh(self) -> None:
         """Redraws the table from whatever the listing currently holds."""
-        rows = self.listing.rows
+        listing = self.listing
         self.table.rows = [
-            ft.DataRow(cells=[ft.DataCell(ft.Text(str(getattr(row, c.key)))) for c in COLUMNS])
-            for row in rows[:TABLE_ROW_LIMIT]
+            ft.DataRow(
+                data=row.record.id,
+                selected=row.record.id is not None and row.record.id == self.selected,
+                on_select_change=lambda _e, row_id=row.record.id: self.choose(row_id),
+                cells=[ft.DataCell(ft.Text(str(getattr(row, c.key)))) for c in COLUMNS],
+            )
+            for row in listing.rows
         ]
-        text = self.listing.count_text if self.listing.total else t("history_empty", self._locale)
-        if len(rows) > TABLE_ROW_LIMIT:
-            text += " · " + t("history_table_limit", self._locale, shown=TABLE_ROW_LIMIT)
-        self.status.value = text
+        self.status.value = (
+            listing.stretch_text if listing.total else t("history_empty", self._locale)
+        )
+        self._previous.disabled = not listing.has_previous
+        self._next.disabled = not listing.has_next
+        self._offer_what_is_there()
         if self._on_changed is not None:
             self._on_changed()
+
+    def _offer_what_is_there(self) -> None:
+        """Lists the verdicts and networks the history holds (CA-114.3).
+
+        Rebuilt on every refresh: what is in the file changes while the screen
+        is open -- the agent is writing to it -- and a filter that offers a
+        network nobody has heard from can only ever return nothing.
+        """
+        loc = self._locale
+        self._verdict.options = [
+            ft.DropdownOption(key=self._any, text=self._any),
+            *(
+                ft.DropdownOption(key=verdict, text=_verdict_label(verdict, loc))
+                for verdict in self.listing.available_verdicts
+            ),
+        ]
+        self._source_chips.controls = [
+            ft.Chip(
+                label=ft.Text(source),
+                data=source,
+                selected=source in self._chosen_sources,
+                on_select=lambda _e, name=source: self._toggle_source(name),
+            )
+            for source in self.listing.available_sources
+        ]
+
+    def choose(self, row_id: int | None) -> None:
+        """The user pressed that row: choose it, or let go of it if it was chosen."""
+        self.select(None if row_id == self.selected else row_id)
+        if self._on_select is not None:
+            self._on_select(self.selected)
+
+    def select(self, row_id: int | None) -> None:
+        """Marks that row as the chosen one, without telling anybody.
+
+        `choose` is the user acting on the table; this is the table being told
+        -- by the map, when a symbol was pressed. Keeping the two apart is what
+        stops a selection from echoing between the views.
+        """
+        self.selected = row_id
+        self.refresh()
 
     def _sort(self, column_key: str) -> None:
         self.listing.sort_by(column_key)
         self.refresh()
 
-    def _apply_magnitude(self) -> None:
-        raw = (self._magnitude.value or "").strip()
-        try:
-            value = float(raw) if raw else None
-        except ValueError:
-            return  # a half-typed number is not a filter yet
-        self.listing.set_filter(min_magnitude=value)
+    def _turn(self, step: int) -> None:
+        if step > 0:
+            self.listing.next_page()
+        else:
+            self.listing.previous_page()
         self.refresh()
+
+    def _apply_magnitude(self) -> None:
+        value = _number(self._magnitude.value)
+        if value is _NOT_YET:
+            return
+        self.listing.set_min_magnitude(value)
+        self.refresh()
+
+    def _apply_distance(self) -> None:
+        value = _number(self._distance.value)
+        if value is _NOT_YET:
+            return
+        self.listing.set_max_distance(value)
+        self.refresh()
+
+    def _apply_period(self) -> None:
+        """Sets the period from the two fields, or says why it cannot (CA-114.4)."""
+        first, last = _day(self._since.value), _day(self._until.value)
+        if first is _NOT_YET or last is _NOT_YET:
+            return  # a half-typed date is not a filter yet
+        try:
+            self.listing.set_period(first, last)
+        except ValueError:
+            # The list refused and kept its query, so the table still shows the
+            # entries of the last period that made sense.
+            self._period_error.visible = True
+            return
+        self._period_error.visible = False
+        self.refresh()
+
+    def _pick_day(self, field: Any) -> None:
+        """Opens a calendar for that field. Typing the date works without it."""
+        page = self._page_of(field)
+        if page is None:
+            return  # not on a page: nothing to open a dialog on
+
+        def chosen(event: Any) -> None:
+            picked = getattr(event.control, "value", None)
+            if picked is not None:
+                field.value = picked.strftime("%Y-%m-%d")
+                self._apply_period()
+                page.update()
+
+        page.show_dialog(ft.DatePicker(on_change=chosen))
+
+    @staticmethod
+    def _page_of(field: Any) -> Any:
+        """The page that field is on, or None before the view is shown."""
+        try:
+            return field.page
+        except RuntimeError:
+            return None
 
     def _apply_verdict(self) -> None:
         chosen = self._verdict.value
-        self.listing.set_filter(verdict=chosen if chosen in ("alerted", "discarded") else None)
+        self.listing.set_verdict(chosen if chosen in self.listing.available_verdicts else None)
+        self.refresh()
+
+    def _toggle_source(self, name: str) -> None:
+        if name in self._chosen_sources:
+            self._chosen_sources.remove(name)
+        else:
+            self._chosen_sources.append(name)
+        self.listing.set_sources(self._chosen_sources)
         self.refresh()
 
     def _clear(self) -> None:
-        self._magnitude.value = ""
+        self._since.value = self._until.value = ""
+        self._magnitude.value = self._distance.value = ""
         self._verdict.value = self._any
+        self._chosen_sources.clear()
+        self._period_error.visible = False
         self.listing.clear_filters()
         self.refresh()
+
+
+#: How a day is typed into the period fields.
+DATE_HINT = "YYYY-MM-DD"
+
+#: "Not a value yet": what a half-typed number or date parses to. Distinct from
+#: `None`, which is a value -- an empty field means "no bound".
+_NOT_YET: Any = object()
+
+
+def _number(raw: str | None) -> Any:
+    """The number in a field: None when empty, `_NOT_YET` while it does not parse."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return _NOT_YET
+
+
+def _day(raw: str | None) -> Any:
+    """The day in a field: None when empty, `_NOT_YET` while it does not parse."""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return _NOT_YET
+
+
+def _verdict_label(verdict: str, locale_code: str) -> str:
+    """The phrase for a verdict, or the stored word when there is none yet."""
+    key = f"history_verdict_{verdict}"
+    label = t(key, locale_code)
+    return verdict if label == key else label
 
 
 def rows_for(store: HistoryStore, query: HistoryQuery) -> Sequence[EventRecord]:

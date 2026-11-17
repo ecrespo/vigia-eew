@@ -499,3 +499,19 @@ def test_the_networks_present_in_the_history_can_be_listed(store: HistoryStore) 
     _populate(store)
 
     assert store.sources() == ["EMSC", "FUNVISIS", "GEOFON", "USGS"]
+
+
+# --- T-156 · the verdicts the history actually holds (REQ-HIS-007, ADR-032) ---
+
+
+def test_the_store_lists_the_verdicts_it_holds(tmp_path: Path) -> None:
+    """Like `sources()`: the filter offers what is there, not what might be."""
+    store = HistoryStore(tmp_path / "h.sqlite3").open()
+    assert store.verdicts() == []
+
+    store.record(_record(source_event_id="a", verdict="discarded", reason="radius"))
+    store.record(_record(source_event_id="b", verdict="alerted"))
+    store.record(_record(source_event_id="c", verdict="discarded", reason="magnitude"))
+
+    assert store.verdicts() == ["alerted", "discarded"]
+    store.close()

@@ -112,6 +112,91 @@ them. Prose about the map is fine; an import of it is not.
 Both views read **one** query object. The list owns it and the map reads it, so a filter cannot
 come to mean two different things in two views of one history.
 
+## The list owns the filters and the paging
+
+[[src/vigia_eew/notify/history_view.py#HistoryList]] holds every filter and the page;
+[[src/vigia_eew/notify/history_view.py#HistoryView]] only sets them.
+
+v1.0 shipped with REQ-HIS-005 marked as met — *filter by date range, magnitude, distance, verdict
+and network* — and a screen that offered two of the five. The requirement says *"when the user
+queries"*; its criterion said *"a query"*, and a test on the store satisfied it. Nobody had asked
+the screen. `HistoryView.filters` now names the control behind each criterion so that a test can.
+
+The state is in the list, not in the Flet controls, because the list imports no toolkit. A second
+frontend — the terminal — can then offer the same filters by driving the same object, instead of
+implementing them again and drifting.
+
+Dates are **local calendar days**, converted to UTC bounds by
+[[src/vigia_eew/timeutil.py#local_day_bounds]], next to the other local-day boundary (RF-40), so
+that "a day" means one thing in the filter that discards and in the filter that reads. A period
+that ends before it starts is refused by the list, which keeps its query: the screen says so and
+still shows the entries of the last period that made sense.
+
+The verdicts and networks offered are the ones the file holds. A filter that offers a network
+nobody has heard from can only return nothing — and a verdict added later is offered without
+anyone touching the control.
+
+Setting any filter, or sorting, returns to the first page: page three of the old set means nothing
+in the new one. The page is the table's limit, 150 rows, because a Flutter `DataTable` lays out
+every cell up front. v1.0 loaded 500 and drew 150 with no way to the rest; a history that hides
+rows without saying which does not answer "why was I not warned?" for those rows.
+
+## The table pages, the map does not
+
+[[src/vigia_eew/notify/history_view.py#HistoryList]]`.everything()` hands the whole filtered set
+to the views that draw it; [[src/vigia_eew/notify/history_window.py#HistoryWindow]] feeds the map
+from that, not from the page.
+
+If the map drew the table's page, turning the page would move the symbols, and "both views show
+the same set" would have quietly come to mean "the same 150 rows". The set is what the filter
+selects; the page is how much of it a table can lay out.
+
+The map draws up to `MAP_SYMBOL_LIMIT` and says how many of how many when the set is larger,
+for the reason an unknown verdict is still drawn: leaving earthquakes off in silence under-reports
+the history. **The limit is provisional** — 500 is what v1.0 happened to draw, not a measurement —
+and the spike that opens the timelapse replaces it.
+
+## A symbol can be pointed at
+
+[[src/vigia_eew/notify/history_map.py#HistoryMap]] draws each symbol as a `flet-map` `Marker`
+holding a round container, not as a `CircleMarker`.
+
+A `CircleMarker` is a painted shape: it has no tooltip and no events, so a circle could not say
+which earthquake it was. That was checked on the real client before designing around it — a
+marker's tooltip shows, pointing and pressing fire, and the press does not also reach the map. A
+view whose whole argument is *where* and that cannot answer *which one is that?* delivers half.
+
+The tooltip is the row the list already formatted for the table, joined into three lines. The map
+is handed the words; it does not word an earthquake itself, because a second wording is a second
+chance for a symbol and its row to disagree.
+
+The cost is real: a marker carries a control where a circle carried none. How many the map can
+redraw is unmeasured, which is why the limit above is provisional.
+
+**Nothing above the map may take the pointer from it.** The "map unavailable" notice is centred by
+a container that fills the whole stack, drawn over the map. With painted circles nobody noticed.
+With markers it swallowed every hover and press, so no symbol answered — and every test passed,
+because Flet controls are dataclasses here and a dataclass has no hit-testing. It was found by
+opening the real window, and is held by a test on the structure: whatever fills the stack above
+the map is a `TransparentPointer`. A feature whose point is "the user can point at it" is not
+verified until something has pointed at it.
+
+## The table and the map point at the same thing
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] wires the selection in both directions,
+keyed by the id of the row a symbol stands for.
+
+A row pressed in the table highlights its symbol. A symbol pressed on the map brings the table to
+the page that holds its row and highlights it. The list still imports no map and the map knows
+nothing about tables: each reports what was pressed, and the window decides what that means.
+
+`choose` and `select` are separate on purpose. `choose` is the user acting on a view, and tells
+the window; `select` is a view being told. With one method the two views would echo each other.
+
+The selected symbol is larger and its ring thicker — shape, not colour — following the rule the
+map already applies to alerts and discards. A filter that removes the chosen earthquake lets go
+of it; turning the page does not, because the earthquake is still in the set and on the map.
+
 ## Tiles are fetched only because somebody is looking at a map
 
 [[src/vigia_eew/notify/map_view.py#tile_layer]] is the only place in the agent that names the tile
@@ -181,7 +266,8 @@ it wherever a tile is, and the legend because a symbol nobody can read explains 
 [[src/vigia_eew/notify/history_window.py#HistoryWindow]] owns the wiring so that neither view has
 to know about the other.
 
-The direction is one-way: the list decides the set and the map is handed the records it produced.
+The direction is one-way for **the set**: the list decides it and the map is handed the records it
+produced. (Which one is highlighted travels both ways, and is a separate matter.)
 A map still showing symbols the table has filtered away would not be a second opinion — it would
 be the product contradicting itself on one screen (REQ-MAP-004).
 

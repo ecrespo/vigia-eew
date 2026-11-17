@@ -108,17 +108,29 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "history_filter_verdict": {"en": "Verdict", "es": "Veredicto"},
     "history_filter_source": {"en": "Network", "es": "Red"},
     "history_filter_any": {"en": "Any", "es": "Cualquiera"},
-    "history_filter_clear": {"en": "Clear filters", "es": "Limpiar filtros"},
-    "history_count": {"en": "{shown} of {total}", "es": "{shown} de {total}"},
-    "history_table_limit": {
-        "en": "table shows the first {shown}; filter to narrow it",
-        "es": "la tabla muestra los primeros {shown}; filtra para acotar",
+    # REQ-HIS-007: the three criteria the store could filter by and the screen could not.
+    "history_filter_since": {"en": "From", "es": "Desde"},
+    "history_filter_until": {"en": "To", "es": "Hasta"},
+    "history_filter_distance": {"en": "Maximum distance (km)", "es": "Distancia máxima (km)"},
+    "history_period_invalid": {
+        "en": "The period ends before it starts.",
+        "es": "El período termina antes de empezar.",
     },
+    "history_page_previous": {"en": "Previous page", "es": "Página anterior"},
+    "history_page_next": {"en": "Next page", "es": "Página siguiente"},
+    "history_filter_clear": {"en": "Clear filters", "es": "Limpiar filtros"},
+    # REQ-HIS-008: which stretch of the filtered set is on screen, and of how many.
+    "history_stretch": {"en": "{first}–{last} of {total}", "es": "{first}–{last} de {total}"},
     "history_empty": {
         "en": "Nothing recorded yet.",
         "es": "Todavía no hay nada registrado.",
     },
     # The map (REQ-MAP-002, REQ-MAP-005).
+    # The map draws the filtered set up to a bound, and says so when it stops short.
+    "map_truncated": {
+        "en": "Showing {shown} of {total}",
+        "es": "Mostrando {shown} de {total}",
+    },
     "map_unavailable": {
         "en": "Map unavailable (no tiles and no connection). The list still works.",
         "es": "Mapa no disponible (sin teselas ni conexión). El listado sigue funcionando.",

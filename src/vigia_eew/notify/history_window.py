@@ -30,8 +30,16 @@ from vigia_eew.notify.history_map import DEFAULT_ZOOM, HistoryMap, centre_of
 from vigia_eew.notify.history_view import HistoryList, HistoryView
 from vigia_eew.notify.presentation import VENEZUELA_ZONE
 
-#: Height of the map when it sits under the table on a narrow window.
-MAP_HEIGHT = 520
+#: Height of each pane -- the table with its filters, and the map. Raised from
+#: 520 when the filters went from two controls to five: the table was left
+#: with room for six rows.
+MAP_HEIGHT = 680
+
+#: Symbols the map draws at once. **Provisional**: it is the figure the map
+#: happened to draw in v1.0 (the list loaded 500 rows), not a measurement.
+#: Nobody has measured what a redraw costs, and since the symbols became
+#: markers each one is heavier. T-163 measures it and replaces this number.
+MAP_SYMBOL_LIMIT = 500
 
 
 class HistoryWindow:
@@ -55,9 +63,18 @@ class HistoryWindow:
         # of what the history holds.
         centre = reference or centre_of(self.listing.records(), fallback=(10.4806, -66.9036))
         self.map = (
-            HistoryMap(locale_code=locale_code, zoom=zoom, centre=centre) if with_map else None
+            HistoryMap(
+                locale_code=locale_code, zoom=zoom, centre=centre, on_select=self._symbol_pressed
+            )
+            if with_map
+            else None
         )
-        self.table = HistoryView(self.listing, locale_code=locale_code, on_changed=self._redraw_map)
+        self.table = HistoryView(
+            self.listing,
+            locale_code=locale_code,
+            on_changed=self._redraw_map,
+            on_select=self._row_chosen,
+        )
         panes: list[Any] = [
             ft.Container(
                 col=ui_scale.HISTORY_TABLE_COLUMNS, height=MAP_HEIGHT, content=self.table.view
@@ -106,8 +123,45 @@ class HistoryWindow:
 
         One direction only: the list decides the set and the map follows it.
         """
-        if getattr(self, "map", None) is not None:
-            self.map.show(self.listing.records())  # type: ignore[union-attr]
+        if getattr(self, "map", None) is None:
+            return
+        # The whole filtered set, not the table's page (ADR-032): turning a
+        # page must not move the map.
+        # @lat: [[history#The table pages, the map does not]]
+        everything = self.listing.everything(MAP_SYMBOL_LIMIT)
+        table = getattr(self, "table", None)  # not there yet while it is being built
+        chosen = None if table is None else table.selected
+        if (
+            table is not None
+            and chosen is not None
+            and all(record.id != chosen for record in everything.records)
+        ):
+            # The filter removed it: a highlight on something no longer shown
+            # would point at nothing.
+            table.selected = chosen = None
+        self.map.show(  # type: ignore[union-attr]
+            everything.records,
+            total=everything.total,
+            describe=lambda record: self.listing.row_for(record).summary,
+            selected=chosen,
+        )
+
+    # --- The table and the map point at the same thing (REQ-MAP-007) ---
+    #
+    # Wired here and nowhere else: the list still imports no map, and the map
+    # still knows nothing about tables. Selection is keyed by the id of the row
+    # a symbol stands for.
+
+    def _row_chosen(self, row_id: int | None) -> None:
+        """The user chose a row in the table: highlight its symbol."""
+        if self.map is not None:
+            self.map.select(row_id)
+
+    def _symbol_pressed(self, row_id: int) -> None:
+        """The user pressed a symbol: bring the table to its row and highlight it."""
+        # @lat: [[history#The table and the map point at the same thing]]
+        self.listing.go_to(row_id, limit=MAP_SYMBOL_LIMIT)
+        self.table.select(row_id)
 
 
 def unavailable_view(

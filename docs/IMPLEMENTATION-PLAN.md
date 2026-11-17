@@ -311,6 +311,7 @@ unaffected).
 | RF-14 | `notify/toast.py`, `notify/presentation.py` | F4 |
 | RF-15..RF-19 | `notify/alert_window.py`, `notify/flet_shell.py`, `notify/map_view.py` (ADR-030) | F4 |
 | RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
+| REQ-HIS-005, 007, 008 · REQ-MAP-006, 007 | `notify/history_view.py` (`HistoryList` owns filters and paging), `notify/history_map.py` (markers, selection), `notify/history_window.py`, `timeutil.py` (`local_day_bounds`), `history.py` (`verdicts`) (v1.1, ADR-032, ADR-033) | F10 |
 | REQ-GUI-011..013 | `cli.py` (`--history`), `app.py`, `wiring.py`, `notify/navigation.py`, `notify/flet_shell.py`, `packaging/` (v1.1, ADR-031) | F9 |
 | RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |
 | RF-21 | `simulation.py`, `cli.py` (`--simulate`), `app.py` | F5 |

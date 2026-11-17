@@ -304,7 +304,7 @@ None. T-182 cites Art. 9 rather than a requirement, as the cut task of v1.0 did.
 | Phase | Verdict |
 |---|---|
 | **F9 · Door** | ✅ **Done**, 2026-11-16 |
-| **F10 · Full query** | ✅ Ready, with `MAP_SYMBOL_LIMIT` provisional (V-01) and a Wayland smoke owed (V-11) |
+| **F10 · Full query** | ✅ **Done**, 2026-11-16 — `MAP_SYMBOL_LIMIT` still provisional (V-01); the Wayland smoke (V-11) still owed |
 | **F11 · One earthquake** | ✅ Ready (V-07 is about expectations, not about the work) |
 | **F12 · Timelapse** | ⚠️ **T-163 first.** T-164 can follow it at once; T-165 and T-166 wait for its verdict |
 | **F13 · Depth** | ✅ Ready — V-02 resolved as D-10 |

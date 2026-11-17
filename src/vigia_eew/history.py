@@ -461,6 +461,16 @@ class HistoryStore:
         cursor = self._connection.execute("SELECT DISTINCT source FROM events ORDER BY source")
         return [row[0] for row in cursor]
 
+    def verdicts(self) -> list[str]:
+        """The verdicts actually present, for the filter to offer (REQ-HIS-007).
+
+        Listed from the file for the reason `sources()` is: a verdict nobody
+        has recorded is a filter that can only return nothing. It also means a
+        verdict added later needs no change in the control that offers it.
+        """
+        cursor = self._connection.execute("SELECT DISTINCT verdict FROM events ORDER BY verdict")
+        return [row[0] for row in cursor]
+
     def rows(self, *, limit: int = 1000) -> list[EventRecord]:
         """Everything, oldest first -- the whole file in the order it happened."""
         return self.query(HistoryQuery(descending=False, limit=limit))

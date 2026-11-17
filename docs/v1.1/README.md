@@ -227,13 +227,13 @@ points. Wayland is still the product's biggest open risk and **this kit does not
 | **Requirements not closed** | **1** — REQ-TLP-007's bound and step limits, which T-163 sets |
 | **Estimate** | 90–165 hours for everything; 43–80 for the minimum cut (F9–F12) |
 | **Branch** | `feature/v1.1.0`, from `develop` |
-| **Implementation** | **F9 done** (T-152..T-155), 2026-11-16. F10..F16 pending — progress in [07-TASKS](07-TASKS.md) |
+| **Implementation** | **F9 and F10 done** (T-152..T-160), 2026-11-16. F11..F16 pending — progress in [07-TASKS](07-TASKS.md) |
 | **Verified against the file system** | `cli.py` has no `--history`; `vigia-eew.desktop` has `Actions=Settings;Simulate;`; `HistoryView` has two filters; `offset` is unused in the interface; `SCHEMA_VERSION = 1`; no trace of F-03 or F-13 in `src/` |
 | **Not verified** | The test suite was not run for this evaluation; the facts above come from reading the code. The P-1 trial ran on X11 under Xvfb, not on a Wayland session |
 
 ## Next step
 
-**F10, tasks T-156 to T-160**, once the maintainer approves it: each phase waits for a go-ahead.
+**F11, tasks T-161 and T-162**, once the maintainer approves it: each phase waits for a go-ahead.
 
 ```bash
 vigia-eew --history    # today: "unrecognized arguments"

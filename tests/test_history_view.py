@@ -391,3 +391,475 @@ def test_the_tray_entry_opens_one_history_screen(tmp_path: Path, fake_shell) -> 
     assert first is second
     assert [key for key, _title, _view in fake_shell.screens] == ["history"]
     wiring.close_history()
+
+
+# --- T-156 · the list owns every filter and the paging (REQ-HIS-005/007/008) -----
+#
+# REQ-HIS-005 was met by the store and not by the screen: the interface offered
+# two filters of five. These tests are written against the list -- the object
+# the screen and the terminal both drive -- and compare it with the store.
+
+from datetime import date  # noqa: E402
+
+from vigia_eew.history import HistoryQuery  # noqa: E402
+
+UTC_ZONE = "UTC"
+
+
+def _ids(records) -> list[str]:
+    return [record.source_event_id for record in records]
+
+
+def _listed(listing: HistoryList) -> list[str]:
+    return _ids(row.record for row in listing.rows)
+
+
+@pytest.fixture
+def utc_listing(store: HistoryStore) -> HistoryList:
+    return HistoryList(store, zone=UTC_ZONE)
+
+
+def test_a_period_is_given_in_local_days(store: HistoryStore) -> None:
+    """CA-114.2: the last day of the fixture, as the user's calendar has it."""
+    listing = HistoryList(store, zone=UTC_ZONE)
+
+    listing.set_period(date(2026, 9, 19), date(2026, 9, 19))
+
+    assert set(_listed(listing)) == {"usgs-small", "fun-far"}
+    expected = store.query(
+        HistoryQuery(
+            since=datetime(2026, 9, 19, tzinfo=UTC),
+            until=datetime(2026, 9, 20, tzinfo=UTC) - timedelta(microseconds=1),
+            limit=listing.page_size,
+        )
+    )
+    assert _listed(listing) == _ids(expected)
+
+
+def test_a_period_follows_the_configured_zone(store: HistoryStore) -> None:
+    """In Caracas the 17th ends at 04:00 UTC on the 18th: the first event is inside."""
+    listing = HistoryList(store, zone="America/Caracas")
+
+    listing.set_period(date(2026, 9, 17), date(2026, 9, 17))
+
+    assert _listed(listing) == ["emsc-big"]
+
+
+def test_a_period_can_be_open_on_either_side(utc_listing: HistoryList) -> None:
+    utc_listing.set_period(None, date(2026, 9, 18))
+    assert _listed(utc_listing) == ["emsc-big"]
+
+    utc_listing.set_period(date(2026, 9, 19), None)
+    assert set(_listed(utc_listing)) == {"usgs-small", "fun-far"}
+
+    utc_listing.set_period(None, None)
+    assert len(utc_listing.rows) == 3
+
+
+def test_a_period_that_ends_before_it_starts_is_refused(utc_listing: HistoryList) -> None:
+    """CA-114.4: refused, and what was on screen stays."""
+    utc_listing.set_period(date(2026, 9, 19), date(2026, 9, 19))
+    before = (utc_listing.query, _listed(utc_listing))
+
+    with pytest.raises(ValueError):
+        utc_listing.set_period(date(2026, 9, 20), date(2026, 9, 19))
+
+    assert (utc_listing.query, _listed(utc_listing)) == before
+
+
+def test_a_maximum_distance_is_a_filter(store: HistoryStore, utc_listing: HistoryList) -> None:
+    utc_listing.set_max_distance(100.0)
+
+    assert set(_listed(utc_listing)) == {"emsc-big", "usgs-small"}
+    assert _listed(utc_listing) == _ids(
+        store.query(HistoryQuery(max_distance_km=100.0, limit=utc_listing.page_size))
+    )
+
+
+def test_networks_are_a_filter(store: HistoryStore, utc_listing: HistoryList) -> None:
+    utc_listing.set_sources(["EMSC", "FUNVISIS"])
+
+    assert set(_listed(utc_listing)) == {"emsc-big", "fun-far"}
+    assert _listed(utc_listing) == _ids(
+        store.query(HistoryQuery(sources=("EMSC", "FUNVISIS"), limit=utc_listing.page_size))
+    )
+
+
+def test_no_network_chosen_means_every_network(utc_listing: HistoryList) -> None:
+    utc_listing.set_sources(["EMSC"])
+    utc_listing.set_sources([])
+
+    assert len(utc_listing.rows) == 3
+
+
+def test_a_date_range_and_a_network_combine(store: HistoryStore, utc_listing) -> None:
+    """CA-114.2, as worded: a range and a network, and exactly what the store says."""
+    utc_listing.set_period(date(2026, 9, 19), date(2026, 9, 19))
+    utc_listing.set_sources(["USGS"])
+
+    assert _listed(utc_listing) == ["usgs-small"]
+    assert utc_listing.total == store.count(utc_listing.query) == 1
+
+
+def test_only_the_verdicts_in_the_history_are_offered(tmp_path: Path) -> None:
+    """CA-114.3: a verdict nobody has seen is a filter that can only return nothing."""
+    only_alerts = HistoryStore(tmp_path / "alerts.sqlite3").open()
+    only_alerts.record(_record())
+
+    listing = HistoryList(only_alerts)
+
+    assert listing.available_verdicts == ["alerted"]
+    assert listing.available_sources == ["GEOFON"]
+    only_alerts.close()
+
+
+# --- Paging (REQ-HIS-008, CA-114.5, CA-114.6) -------------------------------------
+
+
+@pytest.fixture(scope="module")
+def long_store(tmp_path_factory) -> HistoryStore:
+    """400 arrivals a minute apart: e-0 is the oldest, e-399 the newest.
+
+    Built once for the module: every test here only reads it, and four hundred
+    commits per test is what made this file the slowest in the suite.
+    """
+    made = HistoryStore(tmp_path_factory.mktemp("long") / "long.sqlite3").open()
+    for n in range(400):
+        made.record(
+            _record(
+                source_event_id=f"e-{n}",
+                occurred_at=_WHEN + timedelta(minutes=n),
+                magnitude=3.0 + (n % 30) / 10,
+            )
+        )
+    yield made
+    made.close()
+
+
+def test_a_page_is_what_the_table_can_draw(long_store: HistoryStore) -> None:
+    from vigia_eew.notify.history_view import TABLE_ROW_LIMIT
+
+    listing = HistoryList(long_store)
+
+    assert listing.page_size == TABLE_ROW_LIMIT == 150
+    assert len(listing.rows) == 150
+    assert listing.stretch == (1, 150, 400)
+
+
+def test_every_matching_entry_can_be_reached(long_store: HistoryStore) -> None:
+    """CA-114.5: the last entry of the set is on the last page."""
+    listing = HistoryList(long_store)
+
+    listing.next_page()
+    assert listing.stretch == (151, 300, 400)
+    listing.next_page()
+
+    assert listing.stretch == (301, 400, 400)
+    assert _listed(listing)[-1] == "e-0"  # newest first, so the oldest comes last
+    assert listing.total == long_store.count(listing.query)
+
+
+def test_the_pages_together_are_the_whole_set_once(long_store: HistoryStore) -> None:
+    listing = HistoryList(long_store)
+    seen = _listed(listing)
+    while listing.has_next:
+        listing.next_page()
+        seen += _listed(listing)
+
+    assert len(seen) == 400
+    assert len(set(seen)) == 400
+
+
+def test_there_is_no_page_past_the_last_nor_before_the_first(long_store) -> None:
+    listing = HistoryList(long_store)
+    assert listing.has_previous is False
+
+    listing.previous_page()
+    assert listing.stretch == (1, 150, 400)
+
+    listing.next_page()
+    listing.next_page()
+    assert listing.has_next is False
+    listing.next_page()
+    assert listing.stretch == (301, 400, 400)
+
+    listing.previous_page()
+    assert listing.stretch == (151, 300, 400)
+
+
+def test_changing_a_filter_returns_to_the_first_page(long_store: HistoryStore) -> None:
+    """CA-114.6: page three of the old set means nothing in the new one."""
+    listing = HistoryList(long_store)
+    listing.next_page()
+    listing.next_page()
+
+    listing.set_min_magnitude(3.0)
+
+    assert listing.stretch[0] == 1
+
+
+def test_sorting_returns_to_the_first_page(long_store: HistoryStore) -> None:
+    listing = HistoryList(long_store)
+    listing.next_page()
+
+    listing.sort_by("magnitude")
+
+    assert listing.stretch[0] == 1
+
+
+def test_an_empty_set_has_an_empty_stretch(tmp_path: Path) -> None:
+    empty = HistoryStore(tmp_path / "empty2.sqlite3").open()
+
+    listing = HistoryList(empty)
+
+    assert listing.stretch == (0, 0, 0)
+    assert listing.has_next is False
+    empty.close()
+
+
+def test_the_stretch_is_said_in_words(long_store: HistoryStore) -> None:
+    listing = HistoryList(long_store)
+    listing.next_page()
+
+    assert listing.stretch_text == "151–300 of 400"
+    assert HistoryList(long_store, locale_code="es").stretch_text == "1–150 de 400"
+
+
+# --- T-157 · the controls (CA-114.1; Flet dataclasses, no display) ----------------
+
+
+def _view(store: HistoryStore, **kwargs):
+    from vigia_eew.notify.history_view import HistoryView
+
+    return HistoryView(HistoryList(store, zone=UTC_ZONE), **kwargs)
+
+
+def _shown(view) -> list[str]:
+    return [row.data for row in view.table.rows]
+
+
+def test_the_five_criteria_are_on_the_screen(store: HistoryStore) -> None:
+    """CA-114.1: each can be set from the screen, without editing a file."""
+    view = _view(store)
+
+    assert set(view.filters) == {"period", "magnitude", "distance", "verdict", "sources"}
+
+
+def test_the_period_fields_filter_by_day(store: HistoryStore) -> None:
+    view = _view(store)
+
+    view._since.value = "2026-09-19"
+    view._until.value = "2026-09-19"
+    view._apply_period()
+
+    assert len(view.table.rows) == 2
+    assert view._period_error.visible is False
+
+
+def test_a_half_typed_date_is_not_a_filter_yet(store: HistoryStore) -> None:
+    view = _view(store)
+
+    view._since.value = "2026-09-"
+    view._apply_period()
+
+    assert len(view.table.rows) == 3
+    assert view._period_error.visible is False
+
+
+def test_a_period_that_ends_before_it_starts_is_said_on_screen(store: HistoryStore) -> None:
+    """CA-114.4: the screen says so and keeps the entries of the last valid filter."""
+    view = _view(store)
+    view._since.value = "2026-09-19"
+    view._apply_period()
+    assert len(view.table.rows) == 2
+
+    view._until.value = "2026-09-18"
+    view._apply_period()
+
+    assert view._period_error.visible is True
+    assert view._period_error.value
+    assert len(view.table.rows) == 2
+
+    view._until.value = "2026-09-19"
+    view._apply_period()
+    assert view._period_error.visible is False
+
+
+def test_the_distance_field_filters_by_distance(store: HistoryStore) -> None:
+    view = _view(store)
+
+    view._distance.value = "100"
+    view._apply_distance()
+
+    assert len(view.table.rows) == 2
+
+
+def test_the_networks_offered_are_the_ones_in_the_history(store: HistoryStore) -> None:
+    """CA-114.3: GEOFON is not in this history, so it is not offered."""
+    view = _view(store)
+
+    assert [chip.data for chip in view._source_chips.controls] == ["EMSC", "FUNVISIS", "USGS"]
+
+
+def test_choosing_networks_filters_by_them(store: HistoryStore) -> None:
+    view = _view(store)
+
+    view._toggle_source("EMSC")
+    assert _shown_sources(view) == {"EMSC"}
+
+    view._toggle_source("USGS")
+    assert _shown_sources(view) == {"EMSC", "USGS"}
+
+    view._toggle_source("EMSC")
+    view._toggle_source("USGS")
+    assert len(view.table.rows) == 3  # none chosen is every network
+
+
+def _shown_sources(view) -> set[str]:
+    return {row.record.source for row in view.listing.rows}
+
+
+def test_a_chosen_network_is_marked_as_chosen(store: HistoryStore) -> None:
+    view = _view(store)
+
+    view._toggle_source("USGS")
+
+    chosen = {chip.data: chip.selected for chip in view._source_chips.controls}
+    assert chosen == {"EMSC": False, "FUNVISIS": False, "USGS": True}
+
+
+def test_the_verdicts_offered_are_the_ones_in_the_history(tmp_path: Path) -> None:
+    """CA-114.3, and X-1: a verdict added later needs no change in the control."""
+    held = HistoryStore(tmp_path / "three.sqlite3").open()
+    held.record(_record(source_event_id="a"))
+    held.record(_record(source_event_id="b", verdict="recovered"))
+    view = _view(held)
+
+    keys = [option.key for option in view._verdict.options]
+
+    assert keys == [view._any, "alerted", "recovered"]
+    view._verdict.value = "recovered"
+    view._apply_verdict()
+    assert len(view.table.rows) == 1
+    held.close()
+
+
+def test_the_pager_moves_through_the_set_and_says_where_it_is(long_store) -> None:
+    """CA-114.5: the stretch and the total, and the way to the rest."""
+    view = _view(long_store)
+    assert view.status.value == "1–150 of 400"
+    assert view._previous.disabled is True
+    assert view._next.disabled is False
+
+    view._turn(+1)
+    view._turn(+1)
+
+    assert view.status.value == "301–400 of 400"
+    assert len(view.table.rows) == 100
+    assert view._next.disabled is True
+    assert view._previous.disabled is False
+
+    view._turn(-1)
+    assert view.status.value == "151–300 of 400"
+
+
+def test_nothing_loads_more_than_it_shows(long_store: HistoryStore) -> None:
+    view = _view(long_store)
+
+    assert len(view.listing.rows) == len(view.table.rows) == 150
+
+
+def test_clearing_resets_every_control(store: HistoryStore) -> None:
+    view = _view(store)
+    view._since.value = "2026-09-19"
+    view._apply_period()
+    view._distance.value = "50"
+    view._apply_distance()
+    view._toggle_source("USGS")
+
+    view._clear()
+
+    assert (view._since.value, view._until.value, view._distance.value) == ("", "", "")
+    assert not any(chip.selected for chip in view._source_chips.controls)
+    assert len(view.table.rows) == 3
+
+
+def test_the_new_controls_are_translated(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(store, locale_code="es", zone=UTC_ZONE), locale_code="es")
+
+    assert view._since.label == "Desde"
+    assert view._until.label == "Hasta"
+    assert view._distance.label == "Distancia máxima (km)"
+    assert view.status.value == "1–3 de 3"
+
+
+# --- T-160 · going to the page that holds a row (CA-114.9) ------------------------
+
+
+def test_the_list_goes_to_the_page_that_holds_a_row(long_store: HistoryStore) -> None:
+    listing = HistoryList(long_store)
+    target = next(r for r in listing.everything(1000).records if r.source_event_id == "e-100")
+
+    assert listing.go_to(target.id, limit=1000) is True
+
+    assert listing.stretch == (151, 300, 400)  # e-100 is the 300th, newest first
+    assert target.id in [row.record.id for row in listing.rows]
+
+
+def test_going_to_a_row_that_is_not_in_the_set_changes_nothing(long_store) -> None:
+    listing = HistoryList(long_store)
+    listing.next_page()
+
+    assert listing.go_to(987_654, limit=1000) is False
+    assert listing.stretch == (151, 300, 400)
+
+
+# --- The calendar beside each date field ------------------------------------------
+
+
+class _DialogPage:
+    def __init__(self) -> None:
+        self.dialogs: list = []
+        self.updates = 0
+
+    def show_dialog(self, dialog) -> None:
+        self.dialogs.append(dialog)
+
+    def update(self) -> None:
+        self.updates += 1
+
+
+def test_each_date_field_has_a_calendar_that_is_always_in_view(store: HistoryStore) -> None:
+    """`suffix` only shows while the field has focus; an icon nobody sees is no help."""
+    view = _view(store)
+
+    for field in (view._since, view._until):
+        assert field.suffix_icon is not None
+        assert field.suffix is None
+
+
+def test_a_day_picked_on_the_calendar_becomes_the_filter(store: HistoryStore) -> None:
+    view = _view(store)
+    page = _DialogPage()
+    view._page_of = lambda _field: page
+
+    view._since.suffix_icon.on_click(None)
+    picker = page.dialogs[-1]
+    picker.value = datetime(2026, 9, 19, tzinfo=UTC)
+    picker.on_change(type("Event", (), {"control": picker})())
+
+    assert view._since.value == "2026-09-19"
+    assert len(view.table.rows) == 2
+    assert page.updates == 1
+
+
+def test_a_calendar_with_no_page_to_open_on_does_nothing(store: HistoryStore) -> None:
+    """The field still takes a typed date; the calendar is a convenience."""
+    view = _view(store)
+
+    view._since.suffix_icon.on_click(None)  # the view is not on a page in this test
+
+    assert view._since.value in (None, "")
+    assert len(view.table.rows) == 3

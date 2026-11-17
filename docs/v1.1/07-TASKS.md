@@ -23,7 +23,8 @@
 > **First batch: T-152 to T-155.** Run, review, adjust, and only then go on. F9 does not touch the
 > schema, the configuration or the pipeline, and it is verified with one command.
 >
-> **F9 is done** (2026-11-16): 773 tests, gate green. Next batch: **F10, T-156 to T-160**.
+> **F9 and F10 are done** (2026-11-16): 848 tests, gate green. Next batch: **F11, T-161 and
+> T-162**.
 
 ## A constraint on every task
 
@@ -104,7 +105,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F10 · The interface queries everything the store knows
 
-### [ ] T-156 · The list owns the filters and the paging
+### [x] 2026-11-16 T-156 · The list owns the filters and the paging
 - **What**: `HistoryList` gains the period (local days → UTC bounds through `timeutil`), the
   maximum distance, the networks, the pages and `stretch`; `HistoryStore.verdicts()`. An invalid
   period is refused and the query stays as it was.
@@ -117,8 +118,11 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   the same query; with 400 matching rows the last page ends at row 400 and `stretch` is
   `(301, 400, 400)`; `HistoryList`'s module still imports no toolkit.
 - **Hours**: 3–5
+- **As built**: `set_period`, `set_min_magnitude`, `set_max_distance`, `set_verdict`, `set_sources`;
+  `stretch`, `has_next`, `has_previous`, `next_page`, `previous_page`. Sorting also returns to the
+  first page. An unknown time zone falls back to UTC days rather than to no filter.
 
-### [ ] T-157 · The controls
+### [x] 2026-11-16 T-157 · The controls
 - **What**: date range, maximum distance and network controls in `HistoryView`; the verdict and
   network options listed from the store; a pager showing the stretch and the total.
 - **REQ**: REQ-HIS-007, REQ-HIS-008 · **CA**: CA-114.1, CA-114.5
@@ -128,8 +132,11 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Done**: the five filters are on the screen in both languages; the status reads
   *"151–300 of 1 240"*; `TABLE_ROW_LIMIT` is the page size and nothing loads more than it shows.
 - **Hours**: 4–7
+- **As built**: the period is two fields typed as `YYYY-MM-DD` with a calendar button beside each;
+  the networks are chips, none chosen meaning all. The old status ("500 of 14 370 · the table shows
+  the first 150") and its two strings are gone: the pager says the stretch.
 
-### [ ] T-158 · The map reads the whole filtered set **[P]**
+### [x] 2026-11-16 T-158 · The map reads the whole filtered set **[P]**
 - **What**: `HistoryList.everything(limit)`; `HistoryWindow` feeds the map from it instead of from
   the table's page; a notice when the set exceeds `MAP_SYMBOL_LIMIT`.
 - **REQ**: REQ-HIS-008, REQ-MAP-004 *(inherited)* · **CA**: CA-114.5, CA-114.10 · **ADR**: ADR-032
@@ -140,8 +147,10 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   gives both figures.
 - **Note**: `MAP_SYMBOL_LIMIT` is provisional until T-163 and says so in its comment.
 - **Hours**: 1–3
+- **As built**: `HistoryList.everything(limit)` returns the records and the total. The notice sits
+  in the legend: *"Showing 500 of 14 374"* on the local history.
 
-### [ ] T-159 · Symbols are markers, with a tooltip
+### [x] 2026-11-16 T-159 · Symbols are markers, with a tooltip
 - **What**: `HistoryMap.show()` builds a `MarkerLayer`; the tooltip is the list's own formatted row
   (`HistoryList.row_for`).
 - **REQ**: REQ-MAP-006 · **CA**: CA-114.7 · **ADR**: ADR-033
@@ -151,8 +160,14 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   smoke shows a tooltip on hover (`VIGIA_GUI_TESTS=1`); `plan()`'s existing tests pass unchanged.
 - **lat.md**: `history.md` — why markers and not circles (P-1).
 - **Hours**: 3–5
+- **As built**: `Row.summary` words the tooltip from the table's own strings.
+- **Found on the real client, not by the suite**: the "map unavailable" notice was centred by a
+  container filling the stack above the map, and it took every hover and press — no symbol
+  answered, with every test green. A controlled trial confirmed it (with the overlay, no click
+  reached the marker; without it, it did). It is now a `TransparentPointer`, held by a structural
+  test. Observed after the fix: the tooltip shows the row's data.
 
-### [ ] T-160 · The table and the map point at the same thing
+### [x] 2026-11-16 T-160 · The table and the map point at the same thing
 - **What**: selection keyed by row id. A row chosen highlights its marker — thicker ring and larger
   size; a marker pressed selects its row, moving the table to its page (`HistoryList.go_to`).
 - **REQ**: REQ-MAP-007 · **CA**: CA-114.8, CA-114.9 · **ADR**: ADR-033 · **X**: X-6
@@ -163,6 +178,14 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   id; its size and ring differ from the rest with colours ignored; the import test on the list
   still passes.
 - **Hours**: 3–6
+- **As built**: `HistoryView.choose` (the user acting, tells the window) and `select` (being
+  told) are separate so the views do not echo. Pressing the chosen row again lets go of it. A
+  filter that removes the chosen earthquake lets go of it; turning the page does not.
+- **Observed on the real client**: a row pressed highlights its symbol; a symbol pressed is
+  highlighted. **Not done**: the table goes to the page that holds the row but does not scroll to
+  it within the page.
+- **Owed**: the trial ran under X11 (Xvfb). The smoke on a Wayland session (Analyze V-11) is still
+  to be run by the maintainer.
 
 ---
 
