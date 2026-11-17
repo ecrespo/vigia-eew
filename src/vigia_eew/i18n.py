@@ -186,6 +186,69 @@ _CATALOG: dict[str, dict[Locale, str]] = {
         "en": "Nothing recorded yet.",
         "es": "Todavía no hay nada registrado.",
     },
+    # The figures of the period (REQ-EST-001..003). Every basis line says how
+    # many entries a figure was computed over, and the period they span.
+    "history_stats": {"en": "Summary", "es": "Resumen"},
+    "history_stats_hint": {
+        "en": "The figures of what the filters select",
+        "es": "Las cifras de lo que seleccionan los filtros",
+    },
+    "history_stats_empty": {
+        "en": "No data for this filter.",
+        "es": "No hay datos para este filtro.",
+    },
+    "history_stats_per_day": {"en": "Earthquakes per day", "es": "Sismos por día"},
+    "history_stats_by_magnitude": {"en": "By magnitude", "es": "Por magnitud"},
+    "history_stats_by_verdict": {"en": "By verdict", "es": "Por veredicto"},
+    "history_stats_by_reason": {"en": "Discarded, by reason", "es": "Descartados, por motivo"},
+    "history_stats_by_source": {"en": "Arrivals by network", "es": "Llegadas por red"},
+    "history_stats_latency": {
+        "en": "Delivery delay by network (median)",
+        "es": "Demora de entrega por red (mediana)",
+    },
+    "history_stats_over_earthquake": {
+        "en": "Earthquakes counted: {count} · {period}",
+        "es": "Sismos contados: {count} · {period}",
+    },
+    "history_stats_over_arrival": {
+        "en": "Arrivals counted: {count} · {period}",
+        "es": "Llegadas contadas: {count} · {period}",
+    },
+    "history_stats_over_live": {
+        "en": "Live arrivals: {count} · {period}",
+        "es": "Llegadas en vivo: {count} · {period}",
+    },
+    "history_stats_no_figure": {"en": "No figure", "es": "Sin cifra"},
+    "history_stats_no_live": {"en": "No live arrivals", "es": "Sin llegadas en vivo"},
+    "history_stats_no_reason": {"en": "No reason recorded", "es": "Sin motivo registrado"},
+    # The export (REQ-HIS-014): the user's own data, to the user's own disk.
+    "history_export": {"en": "Export…", "es": "Exportar…"},
+    "history_export_hint": {
+        "en": "Save what the filters select to a file on this computer",
+        "es": "Guardar en un archivo de este equipo lo que seleccionan los filtros",
+    },
+    "history_export_format": {"en": "Format", "es": "Formato"},
+    "history_export_csv": {"en": "CSV (spreadsheet)", "es": "CSV (hoja de cálculo)"},
+    "history_export_geojson": {"en": "GeoJSON (map)", "es": "GeoJSON (mapa)"},
+    "history_export_path": {"en": "Save as", "es": "Guardar como"},
+    "history_export_browse": {"en": "Choose where…", "es": "Elegir dónde…"},
+    "history_export_save": {"en": "Save", "es": "Guardar"},
+    "history_export_no_path": {
+        "en": "Type where to save the file.",
+        "es": "Escribe dónde guardar el archivo.",
+    },
+    "history_export_no_dialog": {
+        "en": "The system's file dialog is not available here. Type the path instead.",
+        "es": "El diálogo de archivos del sistema no está disponible aquí. Escribe la ruta.",
+    },
+    "history_export_done": {
+        "en": "Saved {count} entries to {path}",
+        "es": "Se guardaron {count} entradas en {path}",
+    },
+    "history_export_failed": {
+        "en": "The file could not be written: {reason}",
+        "es": "No se pudo escribir el archivo: {reason}",
+    },
     # The map (REQ-MAP-002, REQ-MAP-005).
     # The map draws the filtered set up to a bound, and says so when it stops short.
     "map_truncated": {

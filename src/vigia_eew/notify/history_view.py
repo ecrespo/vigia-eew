@@ -372,6 +372,18 @@ class HistoryList:
         request = _replace(request, reading=reading)
         return Everything(self._store.query(request), self._store.count(request))
 
+    def whole(self, reading: str | None = None) -> list[EventRecord]:
+        """The filtered set with no bound, in the table's order.
+
+        What the figures and the export read (ADR-038): a summary of the first
+        five hundred, or a file holding them, would be a claim about a set
+        nobody asked for. The retentions are what bound it. `reading` asks for
+        it in a reading other than the one on screen -- the figures need both.
+        """
+        # A negative limit is SQLite's way of saying "all of them".
+        request = _replace(self.query, limit=-1, offset=0, reading=reading or self.query.reading)
+        return self._store.query(request)
+
     def row_for(self, record: EventRecord) -> Row:
         """That record as the table words it, for a view that shows one entry."""
         return self._format(record)

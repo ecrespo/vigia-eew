@@ -160,6 +160,12 @@ the history file, as a third verdict `recovered`. It reads periods through
 `ingest/catalogue.py`, shares the deduplicator's predicate (`same_earthquake`) to join an
 earthquake already known, and an import contract forbids it everything that can alert.
 
+The history screen also counts and writes out the filtered set: `history_stats.py` (pure) turns
+its two readings into figures — earthquakes for the splits per day, by magnitude and by verdict,
+arrivals for the split by network and each network's median latency over live arrivals — drawn
+by `notify/history_stats_view.py`; `history_export.py` (pure, no network library) writes it as
+CSV or GeoJSON to a path the user chose. An import contract keeps both pure.
+
 `autostart/` installs/uninstalls OS-native autostart (systemd `--user` on Linux,
 LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via
 `--install-autostart`/`--uninstall-autostart`.

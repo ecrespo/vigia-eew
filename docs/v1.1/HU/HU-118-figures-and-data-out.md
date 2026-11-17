@@ -99,9 +99,10 @@ Scenario: CA-118.12 · A file that cannot be written is said
 
 ## Definition of done
 
-- [ ] `history_stats.py` and `history_export.py`, pure, with an import test each
-- [ ] A summary view inside the history screen, with bars built from containers
-- [ ] Latency as a median over live arrivals, with its sample size
-- [ ] An *Export…* action that offers CSV and GeoJSON and writes atomically
-- [ ] A way to give the destination that works where the system file dialog does not (P-5)
-- [ ] `lat.md/history.md` records the reading of REQ-HIS-006 the export rests on
+- [x] `history_stats.py` and `history_export.py`, pure, with an import test each
+- [x] A summary view inside the history screen, with bars built from containers
+- [x] Latency as a median over live arrivals, with its sample size
+- [x] An *Export…* action that offers CSV and GeoJSON and writes atomically
+- [x] A way to give the destination that works where the system file dialog does not (P-5) —
+  the path field is always there; the dialog on the packaged binary is still to be observed
+- [x] `lat.md/history.md` records the reading of REQ-HIS-006 the export rests on

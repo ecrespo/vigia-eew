@@ -169,6 +169,13 @@ No sync, no remote backup, no telemetry — amendment E-06 and REQ-HIS-006.
 There is no client in this module to point anywhere, and a test fails if the module so much as
 mentions a network library. It is a file on one computer, and that is the whole design.
 
+**What that forbids is the agent transmitting it** — not the user saving their own data to their
+own disk (REQ-HIS-014). The reading is written here rather than assumed, and it is kept checkable
+rather than trusted: [[src/vigia_eew/history_export.py#write]] writes records to a file somebody
+else opened, imports `csv` and `json` and nothing that could send, and both a test on its imports
+and an import contract fail if that changes. An export is an explicit action of the user, to a
+path they chose, and it opens no connection.
+
 ## The query is a finite set of statements, not a string that gets built
 
 [[src/vigia_eew/history.py#HistoryQuery]] carries every filter as a bound value, and the ordering
@@ -428,3 +435,42 @@ An alert pauses it. The wiring registers the window's pause with the shell
 ([[lat.md/notification#A screen is told when an alert covers it]]); after the alert the screen is
 back as it was, paused on the same step. Leaving or closing the history pauses it too, since the
 timer would otherwise keep a playback nobody sees alive.
+
+## Figures name their base, and the export writes what is on screen
+
+*"The filter's count"* has two readings since one earthquake stopped being one row, so every
+figure says which it counts (X-8).
+
+[[src/vigia_eew/history_stats.py#summarise]] takes both readings of one filter: what is said about earthquakes — per day, by magnitude, by verdict and
+reason — counts earthquakes; what is said about networks — the split by network, the latency —
+counts arrivals, because a network is measured by what it delivered. Each split adds up to its
+own sample, which is an arithmetic identity on purpose: it is what catches a split that counts
+twice or drops a category.
+
+The sample and the period are **fields of the result**, not text a view adds (REQ-EST-003):
+"a median of 40 minutes" over three arrivals and over three hundred are different claims, and a
+second frontend cannot forget to say which.
+
+**Latency is a median, over what was received live.** `recorded_at − occurred_at` per network. A
+median because about one arrival in ten reaches the agent days late and a mean would report those
+days as typical. Only live arrivals ([[src/vigia_eew/history.py#received_live]]) because a
+recovered row's "reception" is the moment somebody pressed a button. A network with none has no
+figure, which is not zero — and an empty set has no sections at all, for the same reason.
+
+Both are computed in Python over the whole filtered set rather than as SQL aggregates: five more
+prepared statements for sets the retentions already bound. So
+[[src/vigia_eew/notify/history_view.py#HistoryList#whole]] reads the set with no limit, where the
+map and the playback each have one.
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] computes the summary only while it is
+open, and once per set: it compares what the filters select, as the playback does, so a page
+turned or a column sorted reads nothing again. The summary reads both readings whatever the table
+shows; the **export writes the reading on screen**, whole, so the file has as many entries as the
+table says there are.
+
+The export's destination is a path field, always; the system's dialog only fills it in. Nothing
+has to detect whether a dialog exists (P-5): where there is none the field still works. The file
+is written beside its destination and renamed over it
+([[src/vigia_eew/notify/history_window.py#write_export]]), so a failure leaves the earlier export
+or nothing, never half a file. Bars are containers sized by their value — no charting library
+(decision D-6).

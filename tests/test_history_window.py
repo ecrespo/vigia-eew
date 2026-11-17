@@ -886,3 +886,410 @@ def test_when_the_recovery_ends_the_outcome_is_shown_and_the_views_are_read_agai
     assert len(window.map.markers) == 4
     assert _table_rows(window) == 4
     assert "recovered" in window.listing.available_verdicts
+
+
+# --- T-173, T-175 · the whole filtered set, with no bound (ADR-038) ------------------
+
+
+def test_the_list_hands_over_the_whole_set_however_long_it_is(long_store: HistoryStore) -> None:
+    listing = HistoryList(long_store)
+
+    whole = listing.whole()
+
+    assert len(listing.rows) == 150
+    assert len(whole) == listing.total == 400
+
+
+def test_the_whole_set_can_be_asked_for_in_either_reading(twice: HistoryStore) -> None:
+    listing = HistoryList(twice)
+
+    assert len(listing.whole()) == 3  # the reading on screen: per arrival
+    assert len(listing.whole("earthquake")) == 2
+    listing.set_reading("earthquake")
+    assert len(listing.whole()) == 2
+    assert len(listing.whole("arrival")) == 3
+
+
+def test_the_whole_set_is_still_the_filtered_one(long_store: HistoryStore) -> None:
+    listing = HistoryList(long_store)
+    listing.set_min_magnitude(5.0)
+
+    whole = listing.whole()
+
+    assert len(whole) == listing.total
+    assert all(record.magnitude >= 5.0 for record in whole)
+
+
+# --- T-173 · the summary on the screen (REQ-EST-001, CA-118.6, CA-118.7) -------------
+
+
+def _titles(window) -> list[str]:
+    return [section.title for section in window.stats.sections]
+
+
+def _line(window, title: str, label: str):
+    section = next(s for s in window.stats.sections if s.title == title)
+    return next(line for line in section.lines if line.label == label)
+
+
+def test_the_summary_is_put_away_until_it_is_asked_for(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, locale_code="en")
+
+    assert window.stats_panel.visible is False
+    assert window.stats.sections == []
+
+
+def test_asking_for_the_summary_shows_the_figures_of_the_set(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice, locale_code="en")
+
+    window.stats_button.on_click(None)
+
+    assert window.stats_panel.visible is True
+    assert "By magnitude" in _titles(window)
+    # Two earthquakes, though three arrivals: each figure counts its own base.
+    assert _line(window, "By verdict", "Alerted").value == "2"
+    assert _line(window, "Arrivals by network", "EMSC").value == "1"
+    assert _line(window, "Arrivals by network", "GEOFON").value == "1"
+    assert _line(window, "Arrivals by network", "USGS").value == "1"
+
+
+def test_the_summary_counts_earthquakes_whatever_the_table_is_reading(twice) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice, locale_code="en")
+    window.stats_button.on_click(None)
+    before = [(s.title, s.basis, s.lines) for s in window.stats.sections]
+
+    _read_per_earthquake(window)
+
+    assert [(s.title, s.basis, s.lines) for s in window.stats.sections] == before
+
+
+def test_asking_again_puts_the_summary_away(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, locale_code="en")
+    window.stats_button.on_click(None)
+
+    window.stats_button.on_click(None)
+
+    assert window.stats_panel.visible is False
+
+
+def test_changing_a_filter_changes_the_summary(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, locale_code="en")
+    window.stats_button.on_click(None)
+    assert _line(window, "By verdict", "Alerted").value == "2"
+
+    window.table._magnitude.value = "5"
+    window.table._apply_magnitude()
+
+    assert _line(window, "By verdict", "Alerted").value == "1"
+    assert "Earthquakes counted: 1" in next(
+        s.basis for s in window.stats.sections if s.title == "By verdict"
+    )
+
+
+def test_a_filter_that_matches_nothing_says_there_is_no_data(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, locale_code="en")
+    window.stats_button.on_click(None)
+
+    window.table._magnitude.value = "9"
+    window.table._apply_magnitude()
+
+    assert window.stats.sections == []
+
+
+def test_turning_a_page_does_not_compute_the_summary_again(long_store, monkeypatch) -> None:
+    """The set is read whole for it: once per set, not once per page."""
+    from vigia_eew.notify import history_window
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    calls = []
+    real = history_window.summarise
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(history_window, "summarise", counting)
+    window = HistoryWindow(long_store, locale_code="en")
+    window.stats_button.on_click(None)
+    assert len(calls) == 1
+
+    window.table._turn(+1)
+
+    assert len(calls) == 1
+
+
+def test_reading_the_file_again_computes_the_summary_again(store: HistoryStore) -> None:
+    from dataclasses import replace
+
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, locale_code="en")
+    window.stats_button.on_click(None)
+    store.record(replace(_record(magnitude=5.5, event_id="new"), correlation_id="tr-new"))
+
+    window.refresh()
+
+    assert _line(window, "By verdict", "Alerted").value == "3"
+
+
+def test_the_summary_is_there_without_a_map(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(store, locale_code="en", with_map=False)
+    window.stats_button.on_click(None)
+
+    window.table._magnitude.value = "5"
+    window.table._apply_magnitude()
+
+    assert _line(window, "By verdict", "Alerted").value == "1"
+
+
+# --- T-175 · Export… (REQ-HIS-014, CA-118.8, CA-118.12, P-5) -------------------------
+
+
+@pytest.fixture
+def out(tmp_path: Path) -> Path:
+    """An empty directory to export into, apart from the one the history file is in."""
+    directory = tmp_path / "out"
+    directory.mkdir()
+    return directory
+
+
+def _exporting_window(store: HistoryStore, directory: Path, **kwargs):
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    return HistoryWindow(store, locale_code="en", export_directory=directory, **kwargs)
+
+
+def _leftovers(directory: Path) -> list[str]:
+    return sorted(path.name for path in directory.iterdir())
+
+
+def test_the_export_is_put_away_until_it_is_asked_for(store, out: Path) -> None:
+    window = _exporting_window(store, out)
+    assert window.export_panel.visible is False
+
+    window.export_button.on_click(None)
+
+    assert window.export_panel.visible is True
+
+
+def test_the_destination_starts_in_the_users_documents_as_csv(store, out: Path) -> None:
+    window = _exporting_window(store, out)
+
+    assert window.export_format.value == "csv"
+    assert window.export_path.value == str(out / "vigia-eew-history.csv")
+
+
+def test_choosing_the_other_format_changes_the_extension_offered(store, out: Path) -> None:
+    window = _exporting_window(store, out)
+
+    window.export_format.value = "geojson"
+    window.export_format.on_select(None)
+
+    assert window.export_path.value == str(out / "vigia-eew-history.geojson")
+
+
+def test_a_name_the_user_typed_is_not_renamed_for_them(store, out: Path) -> None:
+    window = _exporting_window(store, out)
+    window.export_path.value = str(out / "mine.txt")
+
+    window.export_format.value = "geojson"
+    window.export_format.on_select(None)
+
+    assert window.export_path.value == str(out / "mine.txt")
+
+
+def test_the_export_holds_the_whole_filtered_set_not_one_page(long_store, out) -> None:
+    """CA-118.8."""
+    import csv
+
+    window = _exporting_window(long_store, out)
+    window.table._magnitude.value = "3.5"
+    window.table._apply_magnitude()
+    assert window.listing.total > len(window.listing.rows)  # more than a page
+
+    window.export_save.on_click(None)
+
+    with open(out / "vigia-eew-history.csv", encoding="utf-8", newline="") as handle:
+        rows = list(csv.reader(handle))
+    assert len(rows) - 1 == window.listing.total
+    assert window.export_status.value == (
+        f"Saved {window.listing.total} entries to {out / 'vigia-eew-history.csv'}"
+    )
+    assert _leftovers(out) == ["vigia-eew-history.csv"]
+
+
+def test_the_export_writes_the_reading_on_screen(twice: HistoryStore, out: Path) -> None:
+    import json
+
+    window = _exporting_window(twice, out)
+    window.export_format.value = "geojson"
+    window.export_format.on_select(None)
+    _read_per_earthquake(window)
+
+    window.export_save.on_click(None)
+
+    document = json.loads((out / "vigia-eew-history.geojson").read_text(encoding="utf-8"))
+    assert len(document["features"]) == window.listing.total == 2
+
+
+def test_a_destination_that_cannot_be_written_is_said_and_leaves_nothing(
+    store: HistoryStore, out: Path
+) -> None:
+    """CA-118.12."""
+    locked = out / "locked"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        window = _exporting_window(store, locked)
+
+        window.export_save.on_click(None)
+
+        assert window.export_status.value.startswith("The file could not be written: ")
+        assert "Permission denied" in window.export_status.value
+        assert _leftovers(locked) == []
+    finally:
+        locked.chmod(0o700)
+
+
+def test_a_directory_that_is_not_there_is_said(store: HistoryStore, out: Path) -> None:
+    window = _exporting_window(store, out)
+    window.export_path.value = str(out / "nowhere" / "out.csv")
+
+    window.export_save.on_click(None)
+
+    assert window.export_status.value.startswith("The file could not be written: ")
+    assert _leftovers(out) == []
+
+
+def test_a_failure_while_writing_leaves_no_partial_file(store, out, monkeypatch) -> None:
+    from vigia_eew import history_export
+
+    def half_way(records, out, format_name):
+        out.write("occurred_at,recorded_at\n")
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(history_export, "write", half_way)
+    window = _exporting_window(store, out)
+
+    window.export_save.on_click(None)
+
+    assert window.export_status.value == ("The file could not be written: No space left on device")
+    assert _leftovers(out) == []
+
+
+def test_an_export_replaces_the_file_of_an_earlier_one(store, out: Path) -> None:
+    window = _exporting_window(store, out)
+    window.export_save.on_click(None)
+    window.table._magnitude.value = "5"
+    window.table._apply_magnitude()
+
+    window.export_save.on_click(None)
+
+    lines = (out / "vigia-eew-history.csv").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1 + 1
+    assert _leftovers(out) == ["vigia-eew-history.csv"]
+
+
+def test_with_no_destination_typed_nothing_is_written(store, out: Path) -> None:
+    window = _exporting_window(store, out)
+    window.export_path.value = "   "
+
+    window.export_save.on_click(None)
+
+    assert window.export_status.value == "Type where to save the file."
+    assert _leftovers(out) == []
+
+
+def test_a_path_under_the_home_directory_may_be_typed_with_a_tilde(
+    store, out: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("HOME", str(out))
+    window = _exporting_window(store, out)
+    window.export_path.value = "~/mine.csv"
+
+    window.export_save.on_click(None)
+
+    assert _leftovers(out) == ["mine.csv"]
+
+
+# The system's dialog only fills the field in: the path field is always there,
+# so the export works where the dialog does not (P-5).
+
+
+def test_the_system_dialog_fills_in_the_destination(store, out: Path) -> None:
+    import asyncio
+
+    asked = []
+
+    async def dialog(file_name: str, directory: str) -> str | None:
+        asked.append((file_name, directory))
+        return str(out / "chosen.csv")
+
+    window = _exporting_window(store, out, choose_destination=dialog)
+
+    asyncio.run(window.export_browse.on_click(None))
+
+    assert asked == [("vigia-eew-history.csv", str(out))]
+    assert window.export_path.value == str(out / "chosen.csv")
+    assert _leftovers(out) == []  # choosing where is not saving
+
+
+def test_a_dialog_the_user_cancelled_leaves_the_destination_alone(store, out) -> None:
+    import asyncio
+
+    async def cancelled(file_name: str, directory: str) -> str | None:
+        return None
+
+    window = _exporting_window(store, out, choose_destination=cancelled)
+
+    asyncio.run(window.export_browse.on_click(None))
+
+    assert window.export_path.value == str(out / "vigia-eew-history.csv")
+    assert window.export_status.value == ""
+
+
+def test_where_the_dialog_is_not_available_the_path_field_still_exports(
+    store: HistoryStore, out: Path
+) -> None:
+    """P-5: no dialog is not no export."""
+    import asyncio
+
+    async def broken(file_name: str, directory: str) -> str | None:
+        raise RuntimeError("zenity: command not found")
+
+    window = _exporting_window(store, out, choose_destination=broken)
+
+    asyncio.run(window.export_browse.on_click(None))
+
+    assert window.export_status.value == (
+        "The system's file dialog is not available here. Type the path instead."
+    )
+    window.export_save.on_click(None)
+    assert _leftovers(out) == ["vigia-eew-history.csv"]
+
+
+def test_off_a_page_the_real_dialog_is_unavailable_rather_than_an_error(
+    store: HistoryStore, out: Path
+) -> None:
+    """The default chooser, with no desktop client behind it."""
+    import asyncio
+
+    window = _exporting_window(store, out)
+
+    asyncio.run(window.export_browse.on_click(None))
+
+    assert "not available" in window.export_status.value

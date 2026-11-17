@@ -223,6 +223,11 @@ It is also the argument for D-7's order of cutting: dropping EP-18 drops this ri
 present on the development machine); nothing guarantees it on a user's. ADR-038 specifies a path
 field as fallback and T-175 records what the packaged binary did. P-5 closes there.
 
+**After T-175 (2026-11-17): still open, and no longer blocking anything.** The path field is
+always shown and the dialog only fills it in, so the export works whatever the answer is. Under
+Xvfb, from the source tree, the dialog returned nothing and raised nothing. The packaged binary
+and a real session were not tried.
+
 ### V-11 · P-1 was tried under X11 🟡
 
 The trial that showed a marker's tooltip, hover and click ran on a virtual X display. Flutter's
@@ -319,7 +324,7 @@ None. T-182 cites Art. 9 rather than a requirement, as the cut task of v1.0 did.
 | **F11 · One earthquake** | ✅ **Done**, 2026-11-16 |
 | **F12 · Timelapse** | ✅ **Done**, 2026-11-16 — spike verdict *viable with markers*; the observation on the packaged binary is owed |
 | **F13 · Depth** | ✅ **Done**, 2026-11-16 — V-06 measured and not material |
-| **F14 · Figures and export** | ✅ Ready |
+| **F14 · Figures and export** | ✅ **Done**, 2026-11-17 — the dialog on the packaged binary (V-10) still owed; the export no longer depends on it |
 | **F15 · TUI** | ✅ Ready |
 | **F16 · v1.0 promises and cut** | ✅ Ready, with V-09 in view |
 

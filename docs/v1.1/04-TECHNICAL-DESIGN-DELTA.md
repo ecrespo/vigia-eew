@@ -307,6 +307,11 @@ retention already bounds. *A charting library*: D-6.
 **Consequences.** The whole filtered set is read into memory for the summary and the export. Today
 the local history holds ~14 000 rows; acceptable, and bounded by the retentions.
 
+**As built (T-175, 2026-11-17) — point 7 changed.** The path field is always shown, pre-filled
+with the documents directory, and `FilePicker.save_file()` is a button that fills it in. Offering
+the field only *where the dialog is not available* needed code to find out which case it was in;
+a dialog that fails, or does nothing, now leaves the export working.
+
 *Satisfies REQ-EST-001..003, REQ-HIS-014.*
 
 ---

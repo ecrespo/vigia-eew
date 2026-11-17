@@ -414,7 +414,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F14 · Figures and data out
 
-### [ ] T-172 · The figures
+### [x] T-172 · The figures — 2026-11-17
 - **What**: `history_stats.py`, pure: the splits over earthquakes and over arrivals, the median
   latency over arrivals received live, every figure with its sample size and period.
 - **REQ**: REQ-EST-001, REQ-EST-002, REQ-EST-003 · **CA**: CA-118.1..CA-118.5, CA-118.7 · **ADR**:
@@ -426,8 +426,18 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   with none has no figure; nine arrivals within the hour and one ten days late give a figure within
   the hour; an empty input gives an empty summary, not zeros.
 - **Hours**: 3–5
+- **As built**: `summarise(earthquakes, arrivals, zone=)` returns a `Summary` of five `Split`s and
+  one `Latency` per network; each carries `sample`, `period` and — the splits — its `base`
+  (`earthquake` or `arrival`). A day is a **local** calendar day (UTC when the zone is unknown).
+  Magnitude bands are one unit wide, `M<2`, `M2` .. `M6`, `M7+`. The reasons are split among the
+  discarded earthquakes only and add up to them; a discard with no reason is counted under its
+  own key rather than dropped. Only non-empty categories are listed.
+- **Import contract**: *The figures and the export are pure* forbids both modules the toolkit, the
+  network libraries, the presentation, ingestion and the recovery; both also sit in their own
+  layer under `notify`. `sqlite3` is not in the contract — the record type lives in `history`,
+  which opens the database — so each module's own `ast` test covers it.
 
-### [ ] T-173 · The summary on the screen
+### [x] T-173 · The summary on the screen — 2026-11-17
 - **What**: `notify/history_stats_view.py`: the figures, bars built from containers, each with its
   sample size and period; a way to it from the history screen.
 - **REQ**: REQ-EST-001, REQ-EST-003 · **CA**: CA-118.6, CA-118.7
@@ -438,8 +448,15 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Done**: every figure in the view has its sample size beside it; changing a filter changes the
   summary; no dependency was added to `pyproject.toml`.
 - **Hours**: 4–6
+- **As built**: split like the list — `describe()` words the sections and needs no display,
+  `StatsView` draws them. A *Summary* button in the header opens a panel under it; put away, it
+  costs no height and reads nothing. Each split says its basis once (*Earthquakes counted: N ·
+  period*); each latency says its own (*Live arrivals: N · period*), or *No figure · No live
+  arrivals*. An empty set shows one sentence and no section. The window computes it once per set
+  — it compares what the filters select, as the playback does — and always from both readings,
+  whatever the table shows. `HistoryList.whole()` reads the set with no limit.
 
-### [ ] T-174 · The exporter **[P]**
+### [x] T-174 · The exporter **[P]** — 2026-11-17
 - **What**: `history_export.py`, pure: CSV and GeoJSON.
 - **REQ**: REQ-HIS-014 · **CA**: CA-118.9, CA-118.10, CA-118.11
 - **Files**: `src/vigia_eew/history_export.py` *(new)*, `tests/test_history_export.py` *(new)*,
@@ -449,8 +466,12 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   GeoJSON loads as a `FeatureCollection` with `[longitude, latitude]`; an `ast` test finds no
   network import in the module.
 - **Hours**: 2–4
+- **As built**: `write_csv`, `write_geojson` and `write(records, out, format_name)` over `FORMATS`.
+  Fourteen columns named as the schema names them; what is unknown is an empty cell in CSV and
+  `null` in GeoJSON. The `ast` test is an allow-list — `csv`, `json` and the language's own
+  furniture — not only a list of what is forbidden.
 
-### [ ] T-175 · *Export…*
+### [x] T-175 · *Export…* — 2026-11-17
 - **What**: the action on the history screen: format, destination by the system dialog or by a path
   field where the dialog is not available, an atomic write, and the error shown when it fails.
 - **REQ**: REQ-HIS-014 · **CA**: CA-118.8, CA-118.12 · **Closes**: P-5
@@ -462,6 +483,21 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   file; the dialog was tried on the packaged binary and the result is recorded here.
 - **lat.md**: `history.md` — the reading of REQ-HIS-006 the export rests on.
 - **Hours**: 2–4
+- **As built — a deviation from ADR-038 §7, on purpose**: the path field is **always** there,
+  pre-filled with the documents directory, and the system dialog is a button that only fills it
+  in. The ADR offered the field *where the dialog is not available*, which needs code that finds
+  out which case it is in; this needs none, and a dialog that fails or does nothing leaves the
+  export working. `write_export()` writes beside the destination and renames (`0600`, as
+  `mkstemp` makes it). The format follows the name it offered, never a name the user typed.
+- **Observed**, against a **copy** of the history (14 393 arrivals, 14 345 earthquakes): the
+  summary in 185 ms; CSV in 108 ms (2.5 MB) and GeoJSON in 211 ms (6.5 MB), each with exactly
+  the filter's count. The latencies match the kit's own figures (EMSC 39 min, FUNVISIS 19 min,
+  USGS 4.8 h). On the real client under Xvfb, from the source tree: both panels built, six
+  sections drawn, and *Save* wrote the file.
+- **P-5 is not closed.** Under Xvfb the system dialog returned nothing and no `zenity` process
+  was seen — indistinguishable from a cancel, and no error to report. Nothing was tried on the
+  **packaged binary**, nor on a real session: that is still owed by the maintainer. What this
+  task settles is that the answer no longer decides whether the export works.
 
 ---
 

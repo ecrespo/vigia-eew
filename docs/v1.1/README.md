@@ -227,13 +227,17 @@ points. Wayland is still the product's biggest open risk and **this kit does not
 | **Requirements not closed** | **1** — REQ-TLP-007's bound and step limits, which T-163 sets |
 | **Estimate** | 90–165 hours for everything; 43–80 for the minimum cut (F9–F12) |
 | **Branch** | `feature/v1.1.0`, from `develop` |
-| **Implementation** | **F9..F13 done** (T-152..T-171), 2026-11-16. F14..F16 pending — progress in [07-TASKS](07-TASKS.md) |
+| **Implementation** | **F9..F14 done** (T-152..T-175): F9–F13 on 2026-11-16, F14 on 2026-11-17. F15 and F16 pending — progress in [07-TASKS](07-TASKS.md) |
 | **Verified against the file system** | `cli.py` has no `--history`; `vigia-eew.desktop` has `Actions=Settings;Simulate;`; `HistoryView` has two filters; `offset` is unused in the interface; `SCHEMA_VERSION = 1`; no trace of F-03 or F-13 in `src/` |
 | **Not verified** | The test suite was not run for this evaluation; the facts above come from reading the code. The P-1 trial ran on X11 under Xvfb, not on a Wayland session |
 
 ## Next step
 
-**F14, tasks T-172..T-175**, once the maintainer approves it: each phase waits for a go-ahead.
+**F15, task T-176**, once the maintainer approves it: each phase waits for a go-ahead.
+
+Owed by the maintainer from F14: the system file dialog tried on the packaged binary (P-5, V-10).
+The export does not depend on the answer — the path field is always there — but the answer is
+still not known.
 
 Owed by the maintainer from F12: the playback observed on the packaged binary (T-166's last
 criterion), and a rerun of the spike on the real session (10 §7).

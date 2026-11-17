@@ -1,7 +1,9 @@
-"""The history screen: one filter, three readings of it (REQ-MAP-004, REQ-TLP-004).
+"""The history screen: one filter, and every reading of it (REQ-MAP-004, REQ-TLP-004).
 
 The table, the map and the playback answer the same question in three ways,
-so there is one filter and all of them obey it. A map still showing symbols the table has filtered
+so there is one filter and all of them obey it -- and so do the summary and
+the export, which are that same set counted and that same set written out
+(REQ-EST-001, REQ-HIS-014). A map still showing symbols the table has filtered
 away is not a second opinion -- it is the product contradicting itself on one
 screen.
 
@@ -18,15 +20,23 @@ table below it.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import contextlib
+import os
+import tempfile
+from collections.abc import Awaitable, Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 import flet as ft
+from platformdirs import user_documents_dir
 
-from vigia_eew.history import HistoryStore
+from vigia_eew import history_export
+from vigia_eew.history import EventRecord, HistoryStore
+from vigia_eew.history_stats import summarise
 from vigia_eew.i18n import DEFAULT_LOCALE, t
 from vigia_eew.notify import ui_scale
 from vigia_eew.notify.history_map import DEFAULT_ZOOM, HistoryMap, centre_of
+from vigia_eew.notify.history_stats_view import StatsView
 from vigia_eew.notify.history_view import HistoryList, HistoryView
 from vigia_eew.notify.presentation import VENEZUELA_ZONE
 from vigia_eew.notify.timelapse import PLAYBACK_SYMBOL_LIMIT, Frame
@@ -35,6 +45,14 @@ from vigia_eew.notify.timelapse_view import TimelapseView, Timer
 #: Carries out a recovery of so many days and reports its outcome, line by
 #: line, when it ends -- or returns at once the reason it will not start.
 Recover = Callable[[int, Callable[[Sequence[str]], None]], str | None]
+
+#: Asks the user where to save: given the name to suggest and the directory to
+#: open in, it answers with the path chosen, or None when they cancelled. It
+#: raises where there is no dialog to ask with.
+ChooseDestination = Callable[[str, str], Awaitable[str | None]]
+
+#: The name an export is offered under; the format gives it its extension.
+EXPORT_NAME = "vigia-eew-history"
 
 #: Height of each pane -- the table with its filters, and the map. Raised from
 #: 520 when the filters went from two controls to five: the table was left
@@ -70,12 +88,20 @@ class HistoryWindow:
         rank: Sequence[str] = (),
         after: Timer | None = None,
         on_recover: Recover | None = None,
+        export_directory: Path | str | None = None,
+        choose_destination: ChooseDestination | None = None,
     ) -> None:
         self._locale = locale_code
         self._on_recover = on_recover
+        self._export_directory = Path(export_directory or user_documents_dir())
+        self._choose_destination = choose_destination or _system_dialog
         self.listing = HistoryList(store, locale_code=locale_code, zone=zone, rank=rank)
         #: The filters of the set the playback holds, or None before it has one.
         self._played_signature: tuple[Any, ...] | None = None
+        #: The filters of the set the summary on screen was computed over.
+        self._summarised_signature: tuple[Any, ...] | None = None
+        self.stats = StatsView(locale_code=locale_code, zone=zone)
+        self._zone = zone
         # The map opens on the user's reference point when there is one: the
         # history is worldwide, and the midpoint of earthquakes in Alaska and
         # Georgia is the Atlantic. Without one it falls back to the midpoint
@@ -102,7 +128,7 @@ class HistoryWindow:
         self.table = HistoryView(
             self.listing,
             locale_code=locale_code,
-            on_changed=self._redraw_map,
+            on_changed=self._set_changed,
             on_select=self._row_chosen,
         )
         panes: list[Any] = [
@@ -131,6 +157,8 @@ class HistoryWindow:
             ),
         ]
         header.extend(self._build_recovery())
+        header.extend(self._build_summary())
+        header.extend(self._build_export())
         if on_close is not None:
             header.append(ft.IconButton(icon=ft.Icons.CLOSE, on_click=lambda _e: on_close()))
         self.view = ft.SafeArea(
@@ -145,6 +173,8 @@ class HistoryWindow:
                         content=ft.Row(controls=header),
                     ),
                     self._recovery_outcome,
+                    self.export_panel,
+                    self.stats_panel,
                     ft.Container(
                         padding=16,
                         content=ft.ResponsiveRow(controls=panes, spacing=16, run_spacing=16),
@@ -224,6 +254,7 @@ class HistoryWindow:
         # The agent writes while the screen is open: the set the playback
         # holds may no longer be what the same filters select.
         self._played_signature = None
+        self._summarised_signature = None
         # The list first: the table draws what the list holds, and without
         # this it kept the page it had read before -- the map showed a
         # recovered earthquake the table did not.
@@ -241,8 +272,171 @@ class HistoryWindow:
         if self.playback is not None:
             self.playback.pause()
 
+    def _set_changed(self) -> None:
+        """Called by the table whenever what it shows has changed."""
+        self._redraw_map()
+        self._summarise()
+
+    # --- The figures of the set (REQ-EST-001..003) ---
+
+    def _build_summary(self) -> list[Any]:
+        """The *Summary* action, and the panel it opens under the header.
+
+        Put away until asked for: it costs the table and the map no height,
+        and the whole set is not read for figures nobody is looking at.
+        """
+        self.stats_panel = ft.Container(
+            visible=False,
+            padding=ft.Padding.only(left=16, right=16, top=12),
+            content=self.stats.view,
+        )
+        self.stats_button = ft.OutlinedButton(
+            content=ft.Text(t("history_stats", self._locale)),
+            icon=ft.Icons.BAR_CHART,
+            tooltip=t("history_stats_hint", self._locale),
+            on_click=lambda _e: self._toggle_summary(),
+        )
+        return [self.stats_button]
+
+    def _toggle_summary(self) -> None:
+        self.stats_panel.visible = not self.stats_panel.visible
+        self._summarise()
+
+    def _summarise(self) -> None:
+        """Computes the figures of the filtered set, when they are on screen.
+
+        Once per set: a page turned, a column sorted or the reading switched
+        leaves the set -- and so its figures -- as they were. Both readings are
+        read whatever the table shows, because each figure counts its own base
+        (X-8): earthquakes for what is said about earthquakes, arrivals for
+        what is said about networks.
+        """
+        panel = getattr(self, "stats_panel", None)  # not there yet while it is being built
+        if panel is None or not panel.visible:
+            return
+        signature = self.listing.filter_signature
+        if signature == self._summarised_signature:
+            return
+        # @lat: [[history#Figures name their base, and the export writes what is on screen]]
+        self.stats.show(
+            summarise(
+                self.listing.whole("earthquake"), self.listing.whole("arrival"), zone=self._zone
+            )
+        )
+        self._summarised_signature = signature
+
+    # --- The set, written to a file of the user's (REQ-HIS-014) ---
+
+    def _build_export(self) -> list[Any]:
+        """The *Export…* action, and the panel it opens under the header.
+
+        The destination is a path field, always: the system's dialog only
+        fills it in. So the export works the same where there is no dialog to
+        open -- a packaged binary on a machine without one (P-5) -- and no
+        code has to find out which of the two cases it is in.
+        """
+        loc = self._locale
+        self.export_format = ft.Dropdown(
+            label=t("history_export_format", loc),
+            value="csv",
+            dense=True,
+            width=220,
+            options=[
+                ft.DropdownOption(key=name, text=t(f"history_export_{name}", loc))
+                for name in history_export.FORMATS
+            ],
+            on_select=lambda _e: self._format_chosen(),
+        )
+        self._offered_path = self._default_destination("csv")
+        self.export_path = ft.TextField(
+            label=t("history_export_path", loc), value=self._offered_path, dense=True, expand=True
+        )
+        self.export_browse = ft.IconButton(
+            icon=ft.Icons.FOLDER_OPEN,
+            tooltip=t("history_export_browse", loc),
+            on_click=self._browse,
+        )
+        self.export_save = ft.FilledButton(
+            content=ft.Text(t("history_export_save", loc)),
+            icon=ft.Icons.SAVE_ALT,
+            on_click=lambda _e: self._export(),
+        )
+        self.export_status = ft.Text("", size=12, selectable=True)
+        self.export_panel = ft.Container(
+            visible=False,
+            padding=ft.Padding.only(left=16, right=16, top=12),
+            content=ft.Column(
+                spacing=6,
+                controls=[
+                    ft.Row(
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            self.export_format,
+                            self.export_path,
+                            self.export_browse,
+                            self.export_save,
+                        ],
+                    ),
+                    self.export_status,
+                ],
+            ),
+        )
+        self.export_button = ft.OutlinedButton(
+            content=ft.Text(t("history_export", loc)),
+            icon=ft.Icons.FILE_DOWNLOAD,
+            tooltip=t("history_export_hint", loc),
+            on_click=lambda _e: self._toggle_export(),
+        )
+        return [self.export_button]
+
+    def _toggle_export(self) -> None:
+        self.export_panel.visible = not self.export_panel.visible
+
+    def _default_destination(self, format_name: str) -> str:
+        extension = history_export.FORMATS[format_name].extension
+        return str(self._export_directory / (EXPORT_NAME + extension))
+
+    def _format_chosen(self) -> None:
+        """Follows the format with the extension -- of the name it offered, not of one typed."""
+        offered = self._default_destination(self.export_format.value or "csv")
+        if self.export_path.value == self._offered_path:
+            self.export_path.value = offered
+        self._offered_path = offered
+
+    async def _browse(self, _event: Any) -> None:
+        """Asks the system's dialog where to save, and puts the answer in the field."""
+        typed = Path((self.export_path.value or "").strip() or self._offered_path).expanduser()
+        try:
+            chosen = await self._choose_destination(typed.name, str(typed.parent))
+        except Exception:  # noqa: BLE001 - whatever it was, there is no dialog here
+            self.export_status.value = t("history_export_no_dialog", self._locale)
+            return
+        if chosen:
+            self.export_path.value = chosen
+
+    def _export(self) -> None:
+        """Writes the reading on screen, whole, to the path in the field."""
+        typed = (self.export_path.value or "").strip()
+        if not typed:
+            self.export_status.value = t("history_export_no_path", self._locale)
+            return
+        destination = Path(typed).expanduser()
+        # The whole filtered set in the reading on screen, not the page: the
+        # file holds as many entries as the table says there are (CA-118.8).
+        records = self.listing.whole()
+        try:
+            write_export(destination, records, self.export_format.value or "csv")
+        except (OSError, ValueError) as exc:
+            reason = exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)
+            self.export_status.value = t("history_export_failed", self._locale, reason=reason)
+            return
+        self.export_status.value = t(
+            "history_export_done", self._locale, count=len(records), path=destination
+        )
+
     def _redraw_map(self) -> None:
-        """Called by the table whenever what it shows has changed.
+        """Follows the table on the map and in the playback.
 
         One direction only: the list decides the set and the map follows it.
 
@@ -335,6 +529,35 @@ class HistoryWindow:
         # @lat: [[history#The table and the map point at the same thing]]
         self.listing.go_to(row_id, limit=MAP_SYMBOL_LIMIT)
         self.table.select(row_id)
+
+
+def write_export(destination: Path, records: Sequence[EventRecord], format_name: str) -> None:
+    """Writes those records to `destination`, whole or not at all (CA-118.12).
+
+    To a temporary file beside the destination, renamed over it once complete
+    -- the rule `state.json` and the configuration already follow -- so a disk
+    that fills half-way leaves the earlier export, or nothing, and never half
+    a file somebody will open as if it were all of it.
+    """
+    fd, tmp = tempfile.mkstemp(dir=destination.parent, suffix=".tmp")
+    try:
+        # `newline=""`: the tabular writer ends its own rows.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as out:
+            history_export.write(records, out, format_name)
+        os.replace(tmp, destination)  # atomic on the same filesystem
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+async def _system_dialog(file_name: str, directory: str) -> str | None:
+    """The system's save dialog, through the toolkit (ADR-038 §7).
+
+    It raises wherever it cannot be opened -- off a page, or on a machine with
+    no dialog to show -- and the screen then says to type the path instead.
+    """
+    return await ft.FilePicker().save_file(file_name=file_name, initial_directory=directory)
 
 
 def unavailable_view(
