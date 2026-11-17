@@ -126,13 +126,11 @@ def test_the_task_count_still_matches_what_the_plan_promised() -> None:
 
 V11_TASKS = REPO_ROOT / "docs" / "v1.1" / "07-TASKS.md"
 
-#: The v1.1 tasks that are not `[x]`, and the words each entry must carry for
-#: that to be a decision. T-182 is the cut itself: everything the repository
-#: controls is done, and what is left -- the tag, and the phases' exit criteria
-#: observed on the installed packages -- is the maintainer's to do.
-V11_OPEN: dict[str, tuple[str, ...]] = {
-    "T-182": ("tag", "Owed by the maintainer"),
-}
+#: The v1.1 tasks that are not `[x]`. None: v1.1.0 was tagged and published on
+#: 2026-11-17. What was never looked at on a screen did not stop being owed
+#: when the release went out, so T-182 has to keep saying so -- see
+#: `test_the_cut_still_says_what_nobody_has_seen`.
+V11_OPEN: dict[str, tuple[str, ...]] = {}
 
 
 def test_the_package_declares_the_v1_1_0_cut() -> None:
@@ -180,3 +178,23 @@ def test_every_v1_1_task_is_done_or_openly_owed() -> None:
         section = text.split(f"{task} ·", 1)[1].split("\n### ", 1)[0]
         for word in words:
             assert word in section, f"{task} does not say {word!r}"
+
+
+def test_the_cut_still_says_what_nobody_has_seen() -> None:
+    """Published is not the same as observed, and the register keeps the two apart."""
+    text = V11_TASKS.read_text(encoding="utf-8")
+    section = text.split("T-182 ·", 1)[1].split("\n### ", 1)[0]
+
+    assert "Published" in section
+    assert "Still not seen on a screen" in section
+
+
+def test_every_image_the_readme_shows_is_in_the_repository() -> None:
+    """GitHub renders a missing image as a broken icon, on the project's front page."""
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    shown = re.findall(r"!\[[^\]]*\]\(([^)\s]+)", readme)
+
+    assert shown, "the README shows no image"
+    for path in shown:
+        assert not path.startswith("http"), f"{path} is not served from this repository"
+        assert (REPO_ROOT / path).is_file(), f"README.md shows {path}, which is not there"

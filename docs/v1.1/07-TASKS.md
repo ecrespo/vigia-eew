@@ -23,8 +23,8 @@
 > **First batch: T-152 to T-155.** Run, review, adjust, and only then go on. F9 does not touch the
 > schema, the configuration or the pipeline, and it is verified with one command.
 >
-> **F9 to F13 are done** (2026-11-16), **F14 to F16** on 2026-11-17: gate green. What is left is
-> T-182's last step — the tag — and the observations listed there, which are the maintainer's.
+> **F9 to F13 are done** (2026-11-16), **F14 to F16** on 2026-11-17, and **v1.1.0 was published**
+> the same day. What is left is what T-182 lists as never seen on a screen.
 
 ## A constraint on every task
 
@@ -656,7 +656,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **The existing tests**: the 17 of `test_alert_queue.py` and the 8 of `test_controller.py` that
   existed pass unchanged; `test_presentation_guarantee.py` gained the two cases V-09 asked for.
 
-### [ ] T-182 · The v1.1.0 cut
+### [x] T-182 · The v1.1.0 cut — 2026-11-17
 - **What**: version `1.1.0`; the changelog; `README.md` and `CLAUDE.md` (the new options and
   modules); `docs/IMPLEMENTATION-PLAN.md` (structure, phase table, requirement → module matrix);
   the roadmap and the backlog; a note in `docs/v1/HU/HU-112` on its drift; this kit's README.
@@ -682,15 +682,29 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   cleanly on ENTER, leaving `last_drill` with both instants; `--history` opens on an empty history
   and stays up with nothing in its log; `--backfill 400` is refused with its reason;
   `--check-config` passes.
-- **Owed by the maintainer** — why this task is not `[x]`:
-  - **The tag.** `v1.1.0` is what makes `build.yml` publish, and publishing is a decision, not a
-    commit. Nothing was pushed.
-  - **Seen on a screen, on the installed package**: the playback playing thirty days in under a
-    minute (F12); the system save dialog (F14, P-5); the summary and the export panels as drawn
-    (F14); `--tui` and `h` over a real SSH connection (F15); the line about the shaking and the
-    drill label as drawn (F16). All of these are asserted on the controls; none was looked at.
-  - **Under Wayland**: the map's markers (V-11), from F10.
-  - The `.deb`, `.rpm` and AppImage were not built; only the onefile binary was.
+- **Published, 2026-11-17**, at the maintainer's request, by `packaging/RELEASING.md`: PR #21
+  (`feature/v1.1.0` → `develop`), PR #22 and #25 (`develop` → `main`), the tag `v1.1.0` on `main`
+  at `93e7037`. `build.yml` built every package on the three platforms, smoke-tested each binary,
+  created the GitHub Release with its eight assets — wheel, sdist, `.exe` and its installer,
+  `.dmg`, AppImage, `.deb`, `.rpm` — and published `1.1.0` to PyPI.
+- **What the release found on its way out**, none of it in the plan:
+  - The pre-push scanners refused the branch: new advisories against the lock. Pillow's floor
+    moved to 13.0.0 and five locked packages were lifted.
+  - A test failed on Python 3.14 in the PR to `main` after passing minutes earlier. The suite
+    played the real alert sound on a thread; on a runner with no audio that is the terminal bell,
+    printed into another test's captured output. `conftest.py` now replaces the player (PR #23).
+  - The first `v1.1.0` tag failed at the macOS `.dmg` — `hdiutil: No space left on device` — and
+    **published nothing**: the publish jobs wait for every platform. `build_macos.sh` now gives
+    the image its size (PR #24). The fix was tried with a manual dispatch of `build.yml` on its
+    branch, which builds and publishes nothing, and the tag was re-created on the new commit.
+- **Still not seen on a screen**, and the release did not change that. All of it is asserted on
+  the controls; none was looked at:
+  - the playback playing thirty days in under a minute, on the installed package (F12);
+  - the system save dialog (F14, P-5), and the summary and export panels as drawn (F14);
+  - `--tui` and `h` over a real SSH connection (F15);
+  - the line about the shaking and the drill label as drawn (F16);
+  - the map's markers under Wayland (V-11, from F10).
+- **Not done**: the apt repository was not updated with the new `.deb` (`RELEASING.md`, step 6).
 
 ---
 
