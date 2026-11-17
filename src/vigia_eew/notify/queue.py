@@ -5,6 +5,10 @@ the current one shows the next. An `update` of the event on screen **refreshes i
 place** without generating a new alert (RF-11). The queue is pure logic (injected
 callbacks): it knows nothing about the UI toolkit, so it can be tested without a screen.
 
+A **drill** -- a simulated alert -- never delays or displaces a real one
+(REQ-UX-009): it is taken only when the queue is idle, and a real alert that
+arrives while one is on screen closes it unacknowledged and takes its place.
+
 `AsyncioUiBridge` crosses the thread boundary from ADR-006: the asyncio loop publishes
 events to a thread-safe `queue.Queue` and the UI thread drains them periodically with
 `widget.after` -- which `FletShell` provides, thread-safe.
@@ -31,11 +35,15 @@ class AlertQueue:
         show: _Sink,
         update: _Sink | None = None,
         on_acknowledge: _Sink | None = None,
+        dismiss: _Sink | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._show = show
         self._update = update
         self._on_acknowledge = on_acknowledge
+        #: Takes the alert on screen off it **without** an acknowledgement.
+        #: Only ever called for a drill a real alert is replacing.
+        self._dismiss = dismiss
         self._pending: deque[SeismicEvent] = deque()
         self._current: SeismicEvent | None = None
         self._paused = False
@@ -55,6 +63,25 @@ class AlertQueue:
     def paused(self) -> bool:
         """True if presentation of new alerts is paused (RF-34)."""
         return self._paused
+
+    @property
+    def idle(self) -> bool:
+        """Nothing on screen and nothing waiting."""
+        return self._current is None and not self._pending
+
+    # @lat: [[notification#A drill never costs a real alert]]
+    def offer_drill(self, ev: SeismicEvent) -> bool:
+        """Shows a drill if nothing real could be delayed by it; says whether it did.
+
+        Refused -- not queued -- while an alert is on screen or waiting, and
+        while notifications are paused: a drill that queued up would be shown
+        the moment the user resumed, or right behind a real earthquake, and
+        neither is a moment anybody chose. The caller offers it again later.
+        """
+        if self._paused or not self.idle:
+            return False
+        self.enqueue(ev)
+        return True
 
     # @lat: [[notification#Pausing delays presentation, it never drops events]]
     def pause(self) -> None:
@@ -87,7 +114,25 @@ class AlertQueue:
         if ev.action == "update" and self._current is not None and ev.id == self._current.id:
             self._refresh(ev)
             return
+        if self._current is not None and self._current.is_drill and not ev.is_drill:
+            self._displace_drill(ev)
+            return
         self._pending.append(ev)
+        self._show_next_if_free()
+
+    def _displace_drill(self, ev: SeismicEvent) -> None:
+        """A real alert arrived while a drill was on screen: the drill goes.
+
+        Closed without acknowledgement -- nobody saw it out, so
+        `on_acknowledge` is not called for it -- and the real alert goes to
+        the front of whatever is waiting, which can only be other drills.
+        """
+        drill = self._current
+        self._current = None
+        if drill is not None and self._dismiss is not None:
+            self._dismiss(drill)
+        self._log.info("drill_displaced id=%s by=%s", drill.id if drill else None, ev.id)
+        self._pending.appendleft(ev)
         self._show_next_if_free()
 
     def _refresh(self, ev: SeismicEvent) -> None:

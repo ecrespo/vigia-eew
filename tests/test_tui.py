@@ -689,3 +689,123 @@ async def test_a_reason_the_store_gives_for_being_unreadable_is_shown_as_text() 
 
         said = str(app.screen.query_one("#history-unavailable", Static).render())
         assert "cannot open [/nope] history" in said
+
+
+# --- T-178, T-179 · the terminal alert: the shaking, and the drill label -----------
+
+from dataclasses import replace as _replace  # noqa: E402
+
+_ARRIVES = datetime(2026, 6, 28, 13, 40, tzinfo=UTC)
+
+
+class _Clock:
+    def __init__(self, moment: datetime) -> None:
+        self.moment = moment
+
+    def __call__(self) -> datetime:
+        return self.moment
+
+
+def _body(app) -> str:
+    return str(app.screen.query_one("#alert-body", Static).render())
+
+
+async def test_the_terminal_alert_says_how_long_ago_the_shaking_should_have_arrived():
+    clock = _Clock(_ARRIVES + timedelta(minutes=20))
+    app = VigiaTuiApp(state=AgentState(), now=clock)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_replace(_data(), shaking_arrival=_ARRIVES), "critical", lambda: None)
+        await pilot.pause()
+
+        assert "The shaking should already have arrived ≈ 20 min ago" in _body(app)
+
+
+async def test_the_terminal_alert_recounts_while_it_is_on_screen():
+    clock = _Clock(_ARRIVES - timedelta(seconds=30))
+    app = VigiaTuiApp(state=AgentState(), now=clock)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_replace(_data(), shaking_arrival=_ARRIVES), "critical", lambda: None)
+        await pilot.pause()
+        assert "Shaking expected in ≈ 30 s" in _body(app)
+
+        clock.moment += timedelta(seconds=31)
+        app.screen.recount()  # what the one-second interval calls
+        await pilot.pause()
+
+        assert "The shaking should already have arrived ≈ 1 s ago" in _body(app)
+
+
+async def test_the_terminal_alert_counts_on_an_interval():
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_data(), "critical", lambda: None)
+        await pilot.pause()
+
+        assert app.screen.recount_timer is not None
+
+
+async def test_without_an_estimate_the_terminal_alert_has_no_line():
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_data(), "critical", lambda: None)
+        await pilot.pause()
+
+        assert "haking" not in _body(app)
+        assert "M 6.1" in _body(app)
+
+
+async def test_a_revision_recomputes_the_line_in_the_terminal():
+    clock = _Clock(_ARRIVES + timedelta(minutes=5))
+    app = VigiaTuiApp(state=AgentState(), now=clock)
+    async with app.run_test(size=(120, 40)) as pilot:
+        handle = app.push_alert(
+            _replace(_data(), shaking_arrival=_ARRIVES), "critical", lambda: None
+        )
+        await pilot.pause()
+
+        handle.refresh(_replace(_data(), shaking_arrival=_ARRIVES + timedelta(minutes=3)))
+        await pilot.pause()
+
+        assert "≈ 2 min ago" in _body(app)
+
+
+async def test_a_drill_is_labelled_first_in_the_terminal():
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_replace(_data(), drill=True), "critical", lambda: None)
+        await pilot.pause()
+
+        assert _body(app).lstrip().startswith("DRILL — this is not a real earthquake")
+
+
+async def test_a_drill_is_labelled_in_spanish_in_the_terminal():
+    app = VigiaTuiApp(state=AgentState(), locale_code="es")
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_replace(_data(), drill=True), "critical", lambda: None)
+        await pilot.pause()
+
+        assert "SIMULACRO — no es un sismo real" in _body(app)
+
+
+async def test_a_real_alert_has_no_drill_label_in_the_terminal():
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_alert(_data(), "critical", lambda: None)
+        await pilot.pause()
+
+        assert "DRILL" not in _body(app)
+
+
+async def test_the_terminal_alert_can_be_closed_without_acknowledging_it():
+    """What a real alert does to a drill on screen (REQ-UX-009)."""
+    acknowledged: list[int] = []
+    app = VigiaTuiApp(state=AgentState())
+    async with app.run_test(size=(120, 40)) as pilot:
+        handle = app.push_alert(_data(), "critical", lambda: acknowledged.append(1))
+        await pilot.pause()
+
+        handle.close()
+        await pilot.pause()
+
+        assert not isinstance(app.screen, AlertScreen)
+        assert acknowledged == []

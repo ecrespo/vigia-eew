@@ -114,6 +114,28 @@ calcular · el historial explica por qué se descartó cada evento.
 
 ---
 
+## v1.1.0 — Un histórico que se puede abrir, y lo que la 1.0 dejó prometido
+
+> Publicada como rama `feature/v1.1.0`; el kit está en [`docs/v1.1/`](../v1.1/README.md).
+
+| Ítem | Estado |
+|---|---|
+| El histórico tiene puerta (`--history`, lanzador, navegación entre pantallas) | ✅ F9 |
+| La pantalla consulta todo lo que guarda el histórico (cinco filtros, paginación, tabla ↔ mapa) | ✅ F10 |
+| Un sismo, un punto (lectura por sismo) | ✅ F11 |
+| Timelapse del histórico | ✅ F12 |
+| Recuperación desde los catálogos (`--backfill`) | ✅ F13 |
+| Cifras del periodo y exportación a CSV / GeoJSON | ✅ F14 |
+| El histórico en `--tui` | ✅ F15 |
+| **F-03 · Cuenta atrás hasta la sacudida** — prometida para la 1.0 y no entregada entonces | ✅ F16 |
+| **F-13 · Simulacro programado** — prometido para la 0.7 y no entregado entonces | ✅ F16 |
+
+**Lo que F-03 resultó ser.** Medido sobre tres meses de histórico, ninguna llegada a menos de
+1 000 km se recibió antes que su onda S. La línea de la alerta dice casi siempre *«la sacudida ya
+debió llegar hace ≈ 19 min»*: es una estimación de cuándo tembló, no una cuenta atrás. La cuenta
+atrás existe y está probada con un reloj inyectado; con las fuentes actuales no ocurre. Es el
+dato que activa la condición de F-05 más abajo.
+
 ## Más allá de 1.0 — no comprometido
 
 | Ítem | Condición que lo activaría |

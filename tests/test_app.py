@@ -732,3 +732,197 @@ def test_run_tui_gives_the_dashboard_the_way_to_the_history(tmp_path, monkeypatc
 
         assert built[-1]["open_history"] == app.wiring.open_tui_history
         assert built[-1]["close_history"] == app.wiring.close_tui_history
+
+
+# --- T-180 · the scheduled drill, wired (REQ-UX-007, ADR-040) ----------------------
+
+from vigia_eew.config import Drill  # noqa: E402
+
+
+def _drilling_app(tmp_path, **cfg_kw) -> Application:
+    return Application(
+        Settings(notification=Notification(sound=False), **cfg_kw),
+        state=StateStore(tmp_path / "state.json"),
+    )
+
+
+def _window_factory(windows: list):
+    class _Window:
+        def __init__(self, data, on_acknowledge):
+            self.data, self.on_acknowledge, self.closed = data, on_acknowledge, False
+
+        def refresh(self, data):
+            self.data = data
+
+        def close(self):
+            self.closed = True
+
+    def create(data, severity, on_acknowledge):
+        windows.append(_Window(data, on_acknowledge))
+        return windows[-1]
+
+    return create
+
+
+def test_with_the_default_configuration_there_is_no_drill_task(tmp_path):
+    """CA-120.2: switched off, nothing ever wakes to ask."""
+    app = _drilling_app(tmp_path)
+    app.wiring.build_tui_controller(_FakeTuiApp(), on_acknowledge=lambda _ev: None)
+
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
+
+    assert "drill" not in sup.names
+
+
+def test_switched_on_the_drill_is_one_more_supervised_task(tmp_path):
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True, interval_days=7))
+    app.wiring.build_tui_controller(_FakeTuiApp(), on_acknowledge=lambda _ev: None)
+
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
+
+    assert sup.names[-1] == "drill"
+
+
+def test_with_nothing_to_show_a_drill_on_there_is_no_drill_task(tmp_path):
+    """No controller was built: there is no alert to test."""
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
+
+    assert "drill" not in sup.names
+
+
+def test_the_scheduler_reads_the_interval_and_the_last_drill_of_this_machine(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True, interval_days=7))
+    tui_app = _FakeTuiApp()
+    app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
+    now = datetime(2026, 12, 1, 14, 0, tzinfo=UTC)
+    app.state.drill_presented(now - timedelta(days=6))
+    scheduler = app.wiring.build_drill_scheduler(now=lambda: now)
+
+    assert scheduler.check() is False
+    assert tui_app.pushed == []
+
+    app.state.drill_presented(now - timedelta(days=8))
+    assert scheduler.check() is True
+    assert len(tui_app.pushed) == 1
+    assert tui_app.pushed[0][0].drill is True
+
+
+def test_a_drill_shown_by_the_agent_is_recorded_and_then_acknowledged(tmp_path):
+    """CA-120.3, through the real wiring and the real state file."""
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    assert ctrl.offer_drill(simulated_event(app.cfg.reference, app.cfg.severity)) is True
+    on_disk = StateStore(tmp_path / "state.json")
+    on_disk.load()
+    assert on_disk.state.last_drill is not None
+    assert on_disk.state.last_drill.acknowledged_at is None
+
+    windows[0].on_acknowledge()
+
+    on_disk.load()
+    assert on_disk.state.last_drill.acknowledged_at is not None
+
+
+def test_a_drill_a_real_alert_replaced_stays_unacknowledged_on_record(tmp_path):
+    """CA-120.4."""
+    app = _drilling_app(tmp_path)
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+    ctrl.offer_drill(simulated_event(app.cfg.reference, app.cfg.severity))
+
+    real = simulated_event(app.cfg.reference, app.cfg.severity).model_copy(
+        update={"id": "real", "source": "EMSC"}
+    )
+    ctrl.enqueue(real)
+    windows[1].on_acknowledge()
+
+    assert windows[0].closed is True
+    assert app.state.last_drill().acknowledged_at is None
+
+
+def test_on_the_desktop_the_offer_crosses_to_the_ui_thread(tmp_path, fake_shell):
+    """The scheduler runs on the worker loop; the controller lives on the UI one."""
+    from datetime import UTC, datetime
+
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+    ctrl = app.wiring.build_gui_controller(
+        fake_shell, on_acknowledge=lambda _ev: None, worker_loop=lambda: None
+    )
+    scheduler = app.wiring.build_drill_scheduler(now=lambda: datetime(2026, 12, 1, tzinfo=UTC))
+
+    assert scheduler.check() is True
+    assert ctrl.alert_queue.current is None  # nothing touched from this thread
+
+    fake_shell.run_pending()
+
+    assert ctrl.alert_queue.current is not None and ctrl.alert_queue.current.is_drill
+    assert len(fake_shell.alerts) == 1
+
+
+def test_paused_notifications_postpone_the_drill(tmp_path):
+    """CA-120.10."""
+    from datetime import UTC, datetime
+
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+    tui_app = _FakeTuiApp()
+    ctrl = app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
+    scheduler = app.wiring.build_drill_scheduler(now=lambda: datetime(2026, 12, 1, tzinfo=UTC))
+    ctrl.pause()
+
+    scheduler.check()
+    assert tui_app.pushed == [] and app.state.last_drill() is None
+
+    ctrl.resume()
+    assert tui_app.pushed == []  # it did not queue up to ambush the resume
+    scheduler.check()
+    assert len(tui_app.pushed) == 1
+
+
+def test_the_about_screen_is_given_the_last_drill(tmp_path, monkeypatch, fake_shell):
+    from datetime import UTC, datetime
+
+    import vigia_eew.notify.about_window as about_window
+
+    seen = {}
+    monkeypatch.setattr(
+        about_window, "about_view", lambda **kwargs: seen.update(kwargs) or object()
+    )
+    app = _drilling_app(tmp_path)
+    app.state.drill_presented(datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC))
+
+    app.wiring.open_about(fake_shell)
+
+    assert seen["last_drill"].presented_at == datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC)
+    assert seen["zone"] == app.cfg.notification.timezone
+
+
+# --- T-179 · a drill is not an earthquake (CA-120.6, X-3) --------------------------
+
+
+def test_a_simulated_alert_never_reaches_the_history(tmp_path):
+    """The history is written by the pipeline; a drill is injected past it."""
+    from vigia_eew.history import HistoryStore
+
+    app = _drilling_app(tmp_path)
+    writer = app.wiring.build_history()
+    assert writer is not None
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(simulated_event(app.cfg.reference, app.cfg.severity))
+    windows[0].on_acknowledge()
+
+    assert writer.pending == 0
+    app.wiring.close_history()
+    store = HistoryStore(prune_on_open=False).open()
+    try:
+        assert store.count() == 0
+        assert "SIMULATED" not in store.sources()
+    finally:
+        store.close()

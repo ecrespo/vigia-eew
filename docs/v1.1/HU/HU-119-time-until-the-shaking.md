@@ -79,8 +79,8 @@ Scenario: CA-119.8 · A revision recomputes it
 
 ## Definition of done
 
-- [ ] `shaking.py`, pure: an estimate from an event and an instant, with the clock injected
-- [ ] The line in the graphical alert and in the terminal one, updated while on screen
-- [ ] Strings in English and Spanish, both with the approximation mark
-- [ ] The method and its assumptions in `docs/TECHNICAL-DESIGN.md` (ADR-039) and `lat.md`
-- [ ] No dependency added, and no travel-time table (D-9)
+- [x] `shaking.py`, pure: an estimate from an event and an instant, with the clock injected
+- [x] The line in the graphical alert and in the terminal one, updated while on screen
+- [x] Strings in English and Spanish, both with the approximation mark
+- [x] The method and its assumptions in `docs/TECHNICAL-DESIGN.md` (ADR-039) and `lat.md`
+- [x] No dependency added, and no travel-time table (D-9)

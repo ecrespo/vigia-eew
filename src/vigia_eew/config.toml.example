@@ -135,3 +135,12 @@ recovered_retention_days = 365
 # [filter] that decides alerts -- a map of the region is wider than an alarm.
 recovery_radius_km = 1000
 recovery_min_magnitude = 2.5
+
+[drill]
+# The agent testing itself, like a smoke detector: every `interval_days` it
+# shows a SIMULATED alert, labelled as a drill, so a machine that has not
+# alerted in months still proves it can. Off unless you turn it on.
+# A drill never delays a real alert, is never recorded as an earthquake, and
+# waits while notifications are paused. The last one is shown under "About".
+enabled = false
+interval_days = 30

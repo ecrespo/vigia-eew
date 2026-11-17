@@ -146,3 +146,83 @@ frontend is not affected: Flet's `Text` has no markup.
 
 The rule for new terminal widgets: a string that came from outside the program goes in as `Text`
 or into a widget with `markup=False`, never as a bare string.
+
+## The alert says when the shaking arrives, or when it did
+
+Under the distance the alert carries one more line: how long until the shaking reaches the
+reference point, or how long ago it should have (REQ-ALE-011..013, ADR-039).
+
+[[src/vigia_eew/shaking.py#estimate]] is one velocity over the hypocentral distance: 3.5 km/s
+across the epicentral distance and the depth, squared and summed. Without the depth an earthquake
+70 km under the reference point would read as zero seconds; with it, about twenty. No travel-time
+table and no dependency (decision D-9).
+
+**The case that happens is the elapsed one.** On three months of history no arrival within
+1 000 km was received before its S wave; alerts came a median of 19.5 minutes after it. So the
+sentence was designed for *"the shaking should already have arrived ≈ 19 min ago"*, and the
+countdown is the rare branch — kept, because a faster source would make it the common one. It has
+only ever been seen with an injected clock.
+
+**It reads as an estimate.** [[src/vigia_eew/notify/presentation.py#shaking_line]] puts the
+approximation mark in every branch and both languages. A time still ahead is whole seconds rounded
+**down** — beyond some 150 km the fastest S path runs through the mantle and the model is a few
+seconds late, so the safe error is to say less. With under a second left it becomes the elapsed
+sentence: never a zero that reads as "now", never a negative figure. Elapsed is seconds, then
+minutes, then — beyond two hours, which the ADR did not foresee and USGS's median delay makes
+ordinary — hours.
+
+**The event carries an instant, not a sentence.** `AlertData.shaking_arrival` is fixed for an
+event; the alert stays on screen, so each frontend recounts against its own clock once a second —
+[[src/vigia_eew/notify/alert_window.py#AlertWindow]] on the shell's timer, changing one control's
+value and only when the sentence changed, and [[src/vigia_eew/tui.py#AlertScreen]] on Textual's
+interval. A revision replaces the instant and the next count uses it.
+
+**It never conditions the alert.** With an origin time ahead of the clock by more than half a
+minute, or an input that is not a number, there is no estimate: the alert is whole and lacks the
+line, and [[src/vigia_eew/notify/controller.py#AlertController]] logs why.
+
+## The agent tests itself, and says that it is a test
+
+An agent that goes months without alerting has no other way to show it still can, so it can be
+told to run a drill every so many days (REQ-UX-007, ADR-040). Off by default.
+
+A product that opens a window that cannot be ignored without anyone having asked is not a good
+first contact, hence the default. Switched on, [[src/vigia_eew/drill.py#DrillScheduler]] is one
+more supervised task: it waits a minute after the agent starts, then wakes hourly, and offers a
+drill when [[src/vigia_eew/drill.py#is_due]] says so. A task and not a UI timer because the
+agent's tasks are restarted when they fail and stopped with the rest; a UI timer is neither.
+
+**A drill is the simulated event, and the source says so.** `SeismicEvent.is_drill` is
+`source == "SIMULATED"` — no flag to keep in step. Every such alert is labelled as a drill before
+anything else on it, in both frontends and both languages, and so is its toast; `--simulate` is
+the same thing asked for by hand and carries the same label.
+
+**A drill is never a row of the history.** It is injected at the controller and the history is
+written by the pipeline, so the table, the map, the playback, the figures and the export ignore
+drills without any of them filtering anything out. A test pins that down.
+
+The scheduler decides *when*; it does not decide *whether*
+([[lat.md/notification#A drill never costs a real alert]]). It only **offers**, across to the UI
+thread where the controller lives, and a drill nobody took is still due at the next wake.
+
+## A drill never costs a real alert
+
+REQ-ALE-005 says one alert at a time; REQ-UX-009 says which wins.
+[[src/vigia_eew/notify/queue.py#AlertQueue]] is the component the guarantee rests on, and this is
+the one rule F16 added to it.
+
+**A drill is taken only by an idle queue.** [[src/vigia_eew/notify/queue.py#AlertQueue#offer_drill]]
+refuses it — it does not queue it — while an alert is on screen or waiting, and while
+notifications are paused. A drill that queued would be shown right behind a real earthquake, or
+the instant the user resumed; neither is a moment anybody chose.
+
+**A real alert does not wait behind a drill.** Arriving while one is on screen, it closes the
+drill *without acknowledgement* and takes its place. `on_acknowledge` is not called for the drill:
+nobody saw it out, and the record says so
+([[lat.md/state#The last drill is patched into the file, not saved over it]]). The windows gained
+a `close()` for this and nothing else may use it — an alert that can be closed without ENTER is
+exactly what the contract above forbids, so it is reachable only through the queue, only for a
+drill.
+
+Every queue test that existed before the rule passes unchanged; they are the specification of
+what did not move.

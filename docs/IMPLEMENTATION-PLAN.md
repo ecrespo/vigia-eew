@@ -34,6 +34,8 @@ vigia-eew/
 │   ├── tui.py                  # headless Textual dashboard, modal alert, history list (--tui, RF-36, ADR-041)
 │   ├── simulation.py           # simulated_event (M6.1 La Guaira)
 │   ├── backfill.py             # recovery of a period into the history; cannot alert (ADR-036)
+│   ├── shaking.py              # S-wave arrival at the reference point: pure (ADR-039)
+│   ├── drill.py                # is_due + DrillScheduler: the scheduled drill (ADR-040)
 │   ├── history_stats.py        # the figures of a filtered set: pure, two bases (ADR-038)
 │   ├── history_export.py       # the filtered set as CSV or GeoJSON: pure, no network (ADR-038)
 │   ├── config.py               # Settings (pydantic) + config.toml loading + first-run seeding
@@ -324,6 +326,8 @@ unaffected).
 | REQ-TLP-001..008 | `notify/timelapse.py` (pure `Timeline`: steps, frames, dwell), `notify/timelapse_view.py` (play, pause, seek, speed, trail), `notify/history_window.py` (feeds and paints it), `notify/history_map.py` (`strengths`), `wiring.py` (timer, pause on an alert) (v1.1, ADR-035) | F12 |
 | REQ-EST-001..003 · REQ-HIS-014 | `history_stats.py` (`summarise`: splits over earthquakes and arrivals, median latency over live arrivals), `notify/history_stats_view.py` (`describe`, `StatsView`), `history_export.py` (`write_csv`, `write_geojson`), `notify/history_window.py` (the *Summary* and *Export…* panels, `write_export`), `notify/history_view.py` (`HistoryList.whole`) |
 | REQ-HIS-015 | `tui.py` (`HistoryScreen`, `HistoryUnavailableScreen`, the `h` binding), `notify/history_list.py` (`HistoryList`, toolkit-free, shared with the window), `wiring.py` (`open_tui_history`, `close_tui_history`, `tui_history`), `app.py` (`run_tui`) |
+| REQ-ALE-011..013 | `shaking.py` (`estimate`, `unavailable_reason`), `notify/presentation.py` (`AlertData.shaking_arrival`, `shaking_line`), `notify/alert_window.py` and `tui.py` (`AlertScreen`) — the line, recounted once a second —, `notify/controller.py` (the clock, and the log when there is no estimate) |
+| REQ-UX-007..009 | `drill.py` (`is_due`, `DrillScheduler`), `config.py` (`[drill]`), `models.py` (`SeismicEvent.is_drill`, `LastDrill`), `state.py` (`drill_presented`, `drill_acknowledged`, `last_drill`), `notify/queue.py` (`idle`, `offer_drill`, a real alert displaces a drill), `notify/controller.py`, `notify/alert_window.py` and `tui.py` (the label, `close()`), `notify/about.py`, `wiring.py` (`build_drill_scheduler`) |
 | REQ-HIS-009 | `history.py` (`HistoryQuery.reading`/`rank`, the per-earthquake statements, `arrivals`), `notify/history_view.py` (the switch, `arrivals_of`), `wiring.py` (hands over the network order) (v1.1, ADR-034) | F11 |
 | REQ-GUI-011..013 | `cli.py` (`--history`), `app.py`, `wiring.py`, `notify/navigation.py`, `notify/flet_shell.py`, `packaging/` (v1.1, ADR-031) | F9 |
 | RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |

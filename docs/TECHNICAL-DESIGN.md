@@ -744,6 +744,38 @@ Python package — the GNOME Shell extension (GJS) that consumes the signal and 
   same compositor. Controls are plain dataclasses, so the suite builds every view headless; the
   test conftest forbids starting the client.
 
+### ADR-039 — Time until the shaking: one velocity over the hypocentral distance
+- **Context**: the roadmap promised since v0.1 that the alert would say how long until it shakes
+  (F-03). Measured on three months of local history, no arrival within 1 000 km was received
+  before its S wave; alerts came a median of 19.5 minutes after it (decision D-9).
+- **Decision**: `shaking.py`, pure: travel time = √(epicentral distance² + depth²) ÷ 3.5 km/s;
+  arrival = origin time + travel time; the result is the signed difference to an injected clock.
+  No estimate — and the alert shown whole without the line — when the origin time is more than
+  30 s ahead of the clock or an input is not finite. The presentation rounds a remaining time
+  **down**, words the elapsed case as the ordinary one, and marks every branch as approximate.
+  Each alert recounts once a second while it is on screen.
+- **Assumptions, declared**: one velocity for every depth and distance; a straight path; a
+  preliminary location. Beyond ~150 km the fastest S path runs through the mantle and the model
+  is a few seconds late; rounding down keeps that on the safe side.
+- **Alternatives considered and rejected**: a travel-time table (a scientific dependency for a
+  figure shown to the minute); epicentral distance alone (an earthquake under the reference
+  point would read as zero seconds).
+- **Detail**: `docs/v1.1/04-TECHNICAL-DESIGN-DELTA.md` §10. *Satisfies REQ-ALE-011..013.*
+
+### ADR-040 — The scheduled drill is a simulated alert the queue knows to be one
+- **Context**: an agent that has not alerted in months has no way to show it still can (F-13).
+- **Decision**: `[drill] enabled` (default false) and `interval_days` (30). A supervised task
+  wakes hourly and **offers** the event `--simulate` uses. `AlertQueue` takes a drill only when
+  idle and not paused, and a real alert arriving while one is on screen closes it unacknowledged
+  and takes its place. A simulated event is recognised by `source == "SIMULATED"` and every
+  frontend labels it. `state.json` gains `last_drill`, patched into the file rather than saved
+  over it, because `--simulate` writes it from another process.
+- **Alternatives considered and rejected**: a flag on `SeismicEvent` (`source` already says it);
+  a timer on the UI thread (neither supervised nor restarted).
+- **Consequences**: a drill is presented within an hour of falling due, and never reaches the
+  history, which the pipeline writes and a drill does not pass through.
+- **Detail**: `docs/v1.1/04-TECHNICAL-DESIGN-DELTA.md` §11. *Satisfies REQ-UX-007..009.*
+
 ## 12. Traceability
 
 Every ADR and component references an RF from `PRD.md`. The complete RF→module matrix is in

@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigia-eew"
-version = "1.0.0"                       # semantic versioning (RF-27)
+version = "1.1.0"                       # semantic versioning (RF-27)
 description = "Real-time desktop seismic alert agent, impossible to ignore (EMSC push + USGS backup)."
 readme = "README.md"
 requires-python = ">=3.13"             # amendment E-01: 3.12 is security-only (RNF-11)
@@ -158,12 +158,12 @@ layers = [
     "vigia_eew.wiring",
     "vigia_eew.tui | vigia_eew.tray",
     "vigia_eew.notify | vigia_eew.autostart | vigia_eew.backfill",
-    "vigia_eew.history_stats | vigia_eew.history_export",
+    "vigia_eew.history_stats | vigia_eew.history_export | vigia_eew.shaking",
     "vigia_eew.pipeline",
     "vigia_eew.ingest",
     "vigia_eew.simulation",
     "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf | vigia_eew.config_writer | vigia_eew.history",
-    "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env",
+    "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env | vigia_eew.drill",
 ]
 
 # Lo que el pipeline decide no puede depender de cómo se presenta. Redundante con

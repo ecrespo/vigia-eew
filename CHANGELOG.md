@@ -6,6 +6,70 @@ de publicación en `packaging/RELEASING.md`.
 
 ## [Sin publicar]
 
+## [1.1.0] - 2026-11-17
+
+The history could be written from the first day and could not be opened: the only way in was a
+tray menu that GNOME does not show. This release makes it a screen — with a door, every filter
+the store has, a map that plays, figures, and a file to take away — and delivers the two things
+the roadmap had promised since before 1.0.
+
+### Added
+- **A door into the history** (REQ-GUI-011..013) — `vigia-eew --history` opens it alone, with no
+  agent and no tray; the launcher has an action for it; and the history, the settings and *About*
+  each lead to the other two. An alert still takes the window from any of them.
+- **The screen queries everything the history knows** (REQ-HIS-005, 007, 008 · REQ-MAP-006, 007)
+  — the five filters the store always had (period, magnitude, distance, verdict, network) instead
+  of two; paging that says which stretch is on screen; a map that draws the whole filtered set,
+  not the visible page; symbols that describe themselves when pointed at; and a row and its symbol
+  that select each other.
+- **One earthquake, one line** (REQ-HIS-009) — an earthquake reported by several networks can be
+  read as one entry, with every arrival still there to be seen.
+- **The history plays** (REQ-TLP-001..008) — a playback of the filtered set on the map, one
+  earthquake at a time, with the date in view, speeds, seeking and an optional trail. An alert
+  pauses it.
+- **A history with depth** (REQ-HIS-010..013) — `vigia-eew --backfill DAYS`, or *Recover* on the
+  screen, completes the history from the networks' own catalogues. Recovered entries are a third
+  verdict, kept for their own retention (365 days), and the recovery cannot alert.
+- **Figures and data out** (REQ-EST-001..003, REQ-HIS-014) — a summary of the filtered set:
+  earthquakes per day, by magnitude, by verdict and reason, arrivals by network, and **each
+  network's median delivery delay**, every figure with its sample and its period. *Export…* writes
+  the set to CSV or GeoJSON, to a path you choose; it opens no connection.
+- **The history in the terminal** (REQ-HIS-015) — `h` on the `--tui` dashboard lists it, with the
+  same filters and pager, for machines with no display.
+- **When the shaking arrives — or when it did** (REQ-ALE-011..013, F-03) — the alert estimates the
+  S wave's arrival at your reference point (3.5 km/s over the hypocentral distance) and says how
+  long is left, rounded down, or how long ago it should have arrived. Measured on three months of
+  history no arrival beat its S wave, so the second sentence is the one you will read. It is
+  marked as an estimate, and an alert whose estimate cannot be computed is shown whole without it.
+- **Scheduled drill** (REQ-UX-007..009, F-13) — opt-in: `[drill] enabled = true` has the agent show
+  a simulated alert every `interval_days`, so a machine that has not alerted in months still
+  proves it can. A drill waits while a real alert is up or notifications are paused, a real alert
+  replaces a drill without waiting for it, and *About* shows the last one and whether it was
+  acknowledged.
+
+### Changed
+- **A simulated alert says it is a drill** — `--simulate` and the scheduled drill are labelled
+  *DRILL — this is not a real earthquake* above everything else, in the window, in the terminal
+  and in the toast. A drill is never a row of the history.
+- **The history list is its own module** (`notify/history_list.py`), with no toolkit in it, so the
+  terminal dashboard reads the history without loading the graphical one.
+- **The configuration panel has twelve sections** — `[drill]` appeared in it by itself.
+
+### Fixed
+- **The terminal alert could fail to appear.** Text from a network was drawn as markup, and a
+  place holding an unbalanced `[/tag]` raised while drawing: no alert. Present since the dashboard
+  was written; found by the security review of this release.
+- **Text from a network cannot become a formula** in an exported CSV.
+- **An alert while the terminal history is open** is logged on the dashboard instead of raising.
+- **Refreshing the history** re-reads the table as well as the map.
+
+### Known limits
+- The countdown branch of the shaking estimate has never occurred with the current sources; it is
+  verified with an injected clock only.
+- The system's save dialog is untested on the packaged binary. The export does not depend on it:
+  the destination is a path field, and the dialog only fills it in.
+- Wayland is unchanged: see *Scope of the alert guarantee* in the README.
+
 ## [1.0.0] - 2026-10-17
 
 The first stable release. What makes it 1.0.0 is not the feature list: it is that

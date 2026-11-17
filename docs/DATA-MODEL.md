@@ -115,7 +115,17 @@ class AppState(BaseModel):
     alerted_ids: list[AlertedId] = []
     recent_signatures: list[EventSignature] = []
     detected_location: DetectedLocation | None = None
+    last_drill: LastDrill | None = None     # ADR-040; absent until the first drill
+
+class LastDrill(BaseModel):
+    presented_at: datetime                  # UTC: when the drill was put on screen
+    acknowledged_at: datetime | None = None # None: replaced by a real alert, or never seen out
 ```
+
+`last_drill` is optional, so `version` stays at 1: a file written before it loads, and an older
+agent ignores it. It is the one field two processes write — the agent and `vigia-eew --simulate`
+— so it is **patched into the file as it is on disk** and never written as part of a stale
+snapshot (`StateStore.drill_presented` / `drill_acknowledged`). Only the last drill is kept.
 
 ### 2.1 Location (cross-platform, via `platformdirs`)
 | OS | Path |
@@ -207,6 +217,10 @@ retention_days = 90               # entries the agent evaluated
 recovered_retention_days = 365    # entries recovered from the catalogues (v1.1, D-5)
 recovery_radius_km = 1000         # what a recovery asks for (v1.1, D-10)
 recovery_min_magnitude = 2.5
+
+[drill]
+enabled = false       # the agent testing itself; off unless turned on (ADR-040)
+interval_days = 30
 ```
 
 ### 3.2 Pydantic definition (reference)
@@ -303,7 +317,8 @@ The history's own model — the `events` table, its indexes and the two retentio
 ## 4. Simulated event (`--simulate`) — RF-21
 
 Injects a `SeismicEvent` with `source="SIMULATED"` to validate notification without a real
-earthquake. Default values (configurable via flags):
+earthquake. The scheduled drill (`[drill]`, ADR-040) injects the same event. Either way the alert
+is labelled as a drill, never reaches the history, and is recorded as `last_drill`. Default values (configurable via flags):
 
 ```python
 SeismicEvent(

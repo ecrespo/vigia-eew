@@ -23,7 +23,8 @@
 > **First batch: T-152 to T-155.** Run, review, adjust, and only then go on. F9 does not touch the
 > schema, the configuration or the pipeline, and it is verified with one command.
 >
-> **F9 to F13 are done** (2026-11-16): gate green. Next batch: **F14, T-172..T-175**.
+> **F9 to F13 are done** (2026-11-16), **F14 to F16** on 2026-11-17: gate green. What is left is
+> T-182's last step — the tag — and the observations listed there, which are the maintainer's.
 
 ## A constraint on every task
 
@@ -546,7 +547,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F16 · What v1.0 promised, and the cut
 
-### [ ] T-177 · The estimate
+### [x] T-177 · The estimate — 2026-11-17
 - **What**: `shaking.py`, pure: hypocentral distance, 3.5 km/s, the signed time, `None` when it
   cannot be computed.
 - **REQ**: REQ-ALE-011, REQ-ALE-012, REQ-ALE-013 · **CA**: CA-119.4, CA-119.7 · **ADR**: ADR-039
@@ -556,8 +557,13 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Done**: an event under the reference point at 70 km gives 20 s at its origin time; an origin
   time ahead of the clock gives `None`; the method and its assumptions are in the ADR.
 - **Hours**: 2–3
+- **As built**: `estimate(event, now)` returns a `ShakingEstimate` — hypocentral distance, travel
+  time, the **arrival instant**, and the signed seconds remaining — and `unavailable_reason()`
+  says why there is none, for the log. An origin time up to 30 s ahead of the clock is believed
+  (`ORIGIN_AHEAD_TOLERANCE_S`): two machines' clocks disagree by seconds. ADR-039 and ADR-040 are
+  now in `docs/TECHNICAL-DESIGN.md` as well as in the delta.
 
-### [ ] T-178 · The alert shows it
+### [x] T-178 · The alert shows it — 2026-11-17
 - **What**: the line in `AlertData`, formatted — remaining rounded down, elapsed in seconds or
   minutes, the approximation mark — in both languages; the graphical and the terminal alert update
   it once a second while on screen and recompute it on a revision.
@@ -571,8 +577,19 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   never a negative number; `--simulate` shows the line; with `estimate` returning `None` the alert's
   other guarantees are asserted unchanged and a log line names the reason.
 - **Hours**: 3–6
+- **As built**: `AlertData` carries `shaking_arrival`, an instant, not a sentence: the alert stays
+  on screen, so each frontend recounts with `shaking_line(arrival, now, locale)`. The window does
+  it on the shell's timer, changing one control and only when the sentence changed; the terminal
+  on Textual's interval. The line sits under the distance, and is absent — not empty — with no
+  estimate.
+- **A deviation from ADR-039 §3**: elapsed time is said in **hours** beyond two. The ADR stopped
+  at minutes; USGS's median delay is 4.8 h, and *≈ 288 min ago* is not how anybody reads a delay.
+- **The alert kept its form**: every alert-window test that existed passes unchanged.
+- **Observed** on the real client under Xvfb and on the packaged binary: `--simulate` presents the
+  alert and is acknowledged. The line itself was not *seen* on a screen — only asserted on the
+  controls.
 
-### [ ] T-179 · A drill says it is a drill **[P]**
+### [x] T-179 · A drill says it is a drill **[P]** — 2026-11-17
 - **What**: every alert whose source is `SIMULATED` carries the label, in both frontends and both
   languages; a test that a simulated event never reaches the history sink.
 - **REQ**: REQ-UX-008 · **CA**: CA-120.5, CA-120.6, CA-120.9 · **ADR**: ADR-040 · **X**: X-3
@@ -582,8 +599,13 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Done**: `vigia-eew --simulate` shows the label; after it, the history has no row with source
   `SIMULATED`.
 - **Hours**: 2–3
+- **As built**: `SeismicEvent.is_drill` is `source == "SIMULATED"`, and `AlertData.drill` follows
+  it. The label is the first thing on the alert — boxed in the alert's own ink in the window, the
+  first line in the terminal — and prefixes the toast's title. The history test goes through the
+  real wiring and the real file: after a simulated alert is shown and acknowledged the history
+  holds no row and no `SIMULATED` source.
 
-### [ ] T-180 · The schedule
+### [x] T-180 · The schedule — 2026-11-17
 - **What**: `[drill]` in the schema and the example file; `drill.py`; `last_drill` in `AppState` and
   `StateStore`; a supervised task that wakes hourly; the last drill on the About screen.
 - **REQ**: REQ-UX-007 · **CA**: CA-120.1, CA-120.2, CA-120.3, CA-120.10
@@ -595,8 +617,24 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   configuration none ever is; with notifications paused none is; after acknowledgement `state.json`
   holds both instants and the About screen shows them; an old `state.json` without the field loads.
 - **Hours**: 3–6
+- **As built**: `drill.py` holds `is_due` and `DrillScheduler`, and imports nothing of the
+  package. The task waits 60 s after the agent starts — a due drill should not be the first thing
+  a session shows — then wakes hourly and **offers**; the queue decides. With no drill ever, the
+  first is due. `supervisor.py` needed no change: the task is added in `wiring.py`, only when
+  `[drill] enabled` and a controller exists. On the desktop the offer crosses to the UI thread on
+  the shell's timer. `[drill]` reached the panel by itself (twelve sections).
+- **A design the plan did not have**: `last_drill` is **patched into the file as it is on disk**,
+  not saved with the rest of memory. `--simulate` runs as another process beside the agent, and
+  writing back the state it read when it started would undo an alerted id the agent saved since —
+  and with it "an earthquake alerts once". The agent's ordinary save adopts a later drill found
+  on disk, so it does not erase one either. `StateStore.save()` now takes a lock.
+- **Files beyond the task's list**: `notify/about_window.py`, `notify/config_panel.py` (the
+  section's title), `tests/test_app.py`, `tests/test_about.py`, `tests/test_config.py`,
+  `tests/conftest.py` (the default state path is now isolated in every test).
+- **Observed on the packaged binary**: after `--simulate` and ENTER, `state.json` holds both
+  instants. A *scheduled* drill firing by itself was only seen with an injected clock.
 
-### [ ] T-181 · A drill against a real alert
+### [x] T-181 · A drill against a real alert — 2026-11-17
 - **What**: `AlertQueue.idle`; a drill is enqueued only when the queue is idle; a real event arriving
   while a drill is on screen closes it unacknowledged and is shown.
 - **REQ**: REQ-UX-009 · **CA**: CA-120.4, CA-120.7, CA-120.8
@@ -609,6 +647,14 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Note**: this changes the component Art. 1 rests on. The existing tests are the specification of
   what must not change, and they are run before and after.
 - **Hours**: 2–4
+- **As built**: `AlertQueue.idle`, `offer_drill()` and a `dismiss` callback. A drill is
+  **refused, not queued**, while an alert is on screen or waiting and while notifications are
+  paused — a queued drill would be shown right behind a real earthquake, or the instant the user
+  resumed. A real alert arriving while a drill is on screen closes it without calling
+  `on_acknowledge` and goes to the front. Both alert windows gained `close()`, reachable only
+  through the queue and only for a drill.
+- **The existing tests**: the 17 of `test_alert_queue.py` and the 8 of `test_controller.py` that
+  existed pass unchanged; `test_presentation_guarantee.py` gained the two cases V-09 asked for.
 
 ### [ ] T-182 · The v1.1.0 cut
 - **What**: version `1.1.0`; the changelog; `README.md` and `CLAUDE.md` (the new options and
@@ -625,6 +671,26 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Note**: this task is not cut with EP-18. If F16's other tasks are dropped, it closes whichever
   phase is last.
 - **Hours**: 2–4
+- **Done in the repository, 2026-11-17**: version `1.1.0` in `pyproject.toml` and `uv.lock`; the
+  changelog; `README.md`, `CLAUDE.md`, `docs/IMPLEMENTATION-PLAN.md`, `docs/TECHNICAL-DESIGN.md`
+  (ADR-039, ADR-040), `docs/DATA-MODEL.md`; the roadmap and the backlog; the note in HU-112; this
+  kit's README. `tests/test_release_cut.py` reads the cut: the version, the lock, the notes, the
+  options, and every task done or owed. The gate and the GUI smokes are green.
+- **Observed on the packaged binary** (PyInstaller onefile, built from this tree, run under Xvfb
+  with its own data directories): `--version` says `1.1.0`; `--help` lists `--history` and
+  `--backfill`; `scripts/smoke_binary.sh --acknowledge` presents the simulated alert and exits
+  cleanly on ENTER, leaving `last_drill` with both instants; `--history` opens on an empty history
+  and stays up with nothing in its log; `--backfill 400` is refused with its reason;
+  `--check-config` passes.
+- **Owed by the maintainer** — why this task is not `[x]`:
+  - **The tag.** `v1.1.0` is what makes `build.yml` publish, and publishing is a decision, not a
+    commit. Nothing was pushed.
+  - **Seen on a screen, on the installed package**: the playback playing thirty days in under a
+    minute (F12); the system save dialog (F14, P-5); the summary and the export panels as drawn
+    (F14); `--tui` and `h` over a real SSH connection (F15); the line about the shaking and the
+    drill label as drawn (F16). All of these are asserted on the controls; none was looked at.
+  - **Under Wayland**: the map's markers (V-11), from F10.
+  - The `.deb`, `.rpm` and AppImage were not built; only the onefile binary was.
 
 ---
 

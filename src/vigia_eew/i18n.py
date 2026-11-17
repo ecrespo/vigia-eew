@@ -27,6 +27,40 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "coordinates_label": {"en": "Coordinates", "es": "Coordenadas"},
     "your_location": {"en": "Your location", "es": "Tu ubicación"},
     "toast_title": {"en": "Seismic alert {magnitude}", "es": "Alerta sísmica {magnitude}"},
+    # The estimate of the shaking (REQ-ALE-011..013). Every branch carries the
+    # approximation mark: it is one velocity over a preliminary location.
+    "shaking_remaining": {
+        "en": "Shaking expected in ≈ {seconds} s",
+        "es": "Sacudida estimada en ≈ {seconds} s",
+    },
+    "shaking_elapsed_seconds": {
+        "en": "The shaking should already have arrived ≈ {seconds} s ago",
+        "es": "La sacudida ya debió llegar hace ≈ {seconds} s",
+    },
+    "shaking_elapsed_minutes": {
+        "en": "The shaking should already have arrived ≈ {minutes} min ago",
+        "es": "La sacudida ya debió llegar hace ≈ {minutes} min",
+    },
+    "shaking_elapsed_hours": {
+        "en": "The shaking should already have arrived ≈ {hours} h ago",
+        "es": "La sacudida ya debió llegar hace ≈ {hours} h",
+    },
+    # A simulated alert says what it is, without reading its detail (REQ-UX-008).
+    "drill_label": {
+        "en": "DRILL — this is not a real earthquake",
+        "es": "SIMULACRO — no es un sismo real",
+    },
+    "drill_short": {"en": "DRILL", "es": "SIMULACRO"},
+    "about_last_drill": {"en": "Last drill", "es": "Último simulacro"},
+    "about_drill_never": {"en": "none yet", "es": "ninguno todavía"},
+    "about_drill_acknowledged": {
+        "en": "{when} · acknowledged",
+        "es": "{when} · reconocido",
+    },
+    "about_drill_unacknowledged": {
+        "en": "{when} · not acknowledged",
+        "es": "{when} · sin reconocer",
+    },
     "tray_ws_connected": {"en": "WS: connected", "es": "WS: conectado"},
     "tray_ws_reconnecting": {"en": "WS: reconnecting…", "es": "WS: reconectando…"},
     "tray_no_alerts_yet": {"en": "No alerts yet", "es": "Sin alertas todavía"},

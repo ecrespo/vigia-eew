@@ -440,6 +440,8 @@ documentadas que nunca se construyeron**, **huecos de gate**, **higiene de depen
 | **2** | 2026-09-06 | **+5 ítems** (B-35..B-39) · **B-34** reformulado y subido de P3 condicional a **P1** · **B-22** subido de P2 a **P1** por ser capacidad documentada · nueva columna **Doc** y nueva §1.1 con las 9 capacidades documentadas sin implementar · el devcontainer sale de "fuera del backlog" · B-39 se separa de B-34 · dos entradas nuevas en §7 sobre lo que la GUI **no** hace |
 | **3** | 2026-09-06 | **+4 ítems** (B-40..B-43): priorización de redes, histórico persistente, listado y mapa · **"base de datos" sale de §7** matizada, vía enmienda **E-05** · tres entradas nuevas en §7 sobre lo que el histórico y el mapa **no** hacen · nueva **Ola 6** · el corte de la v1.0 pasa a incluir las cuatro capacidades |
 
+| **4** | 2026-11-17 | **Corte de la v1.1.0**: los diez ítems **B-44..B-53** —puerta al histórico, consulta completa, lectura por sismo, timelapse, recuperación desde catálogos, cifras y exportación, cuenta atrás (F-03) y simulacro programado (F-13), histórico en el terminal— quedan **hechos** en la rama `feature/v1.1.0`. Se especificaron y siguieron en [`docs/v1.1/`](v1.1/README.md), no en esta tabla. **B-20** (Wayland) no se toca: sigue abierto |
+
 **Lo que la revisión 3 decide, y que no era obvio:**
 
 1. **La prioridad de red resuelve datos, no alertas.** Se evaluó usarla como umbral de confianza para

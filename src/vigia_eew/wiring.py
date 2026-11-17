@@ -19,12 +19,14 @@ import asyncio
 import logging
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from vigia_eew import backfill, geocode, geoloc, tray
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings
+from vigia_eew.drill import DrillScheduler
 from vigia_eew.history import HistoryStore, HistoryWriter
 from vigia_eew.i18n import resolve_locale, t
 from vigia_eew.ingest import RawMessage
@@ -46,6 +48,7 @@ from vigia_eew.pipeline.dedup import Deduplicator
 from vigia_eew.pipeline.filter import GeoFilter
 from vigia_eew.pipeline.normalize import Normalizer
 from vigia_eew.pipeline.processor import Processor
+from vigia_eew.simulation import simulated_event
 from vigia_eew.state import StateStore
 from vigia_eew.supervisor import Supervisor
 
@@ -100,6 +103,9 @@ class Wiring:
         ).start()
         self._history_store: HistoryStore | None = None
         self._history: HistoryWriter | None = None
+        #: Offers a drill to whichever controller was built, on its own
+        #: thread. None until one is: with no alert, there is nothing to test.
+        self._offer_drill: Callable[[], object] | None = None
 
     # --- Startup ---
 
@@ -261,7 +267,38 @@ class Wiring:
         writer = self.build_history()
         if writer is not None:
             sup.add("history", writer.run)
+        # The agent testing itself (REQ-UX-007). Off by default, and only
+        # where there is an alert to test: a supervised task like the others,
+        # so it is restarted if it fails and stopped with the rest.
+        if self.cfg.drill.enabled and self._offer_drill is not None:
+            sup.add("drill", self.build_drill_scheduler().run)
         return sup
+
+    # @lat: [[notification#The agent tests itself, and says that it is a test]]
+    def build_drill_scheduler(self, *, now: Callable[[], datetime] | None = None) -> DrillScheduler:
+        """The task that offers a drill when one is due (ADR-040).
+
+        It decides *when*; the alert queue decides *whether* -- it refuses a
+        drill while notifications are paused or a real alert is on screen or
+        waiting, and a refused drill is still due at the next wake.
+        """
+
+        def last() -> datetime | None:
+            drill = self.state.last_drill()
+            return drill.presented_at if drill is not None else None
+
+        offer = self._offer_drill or (lambda: None)
+        return DrillScheduler(
+            interval_days=self.cfg.drill.interval_days,
+            last_drill=last,
+            offer=offer,
+            now=now,
+            logger=self._log,
+        )
+
+    def _drill_event(self) -> SeismicEvent:
+        """The event a drill shows: the one `--simulate` shows."""
+        return simulated_event(self.cfg.reference, self.cfg.severity)
 
     # --- Notification ---
 
@@ -291,6 +328,10 @@ class Wiring:
             reference_point=(self.cfg.reference.lat, self.cfg.reference.lon),
             state=self.agent_state,
             locale_code=self.locale,
+            # Every simulated alert -- the scheduled drill and `--simulate`
+            # alike -- leaves its record in `state.json` (ADR-040).
+            on_drill_presented=self.state.drill_presented,
+            on_drill_acknowledged=self.state.drill_acknowledged,
         )
 
     def _sound_effect(self) -> Callable[[SeverityLevel], None] | None:
@@ -336,12 +377,16 @@ class Wiring:
                     target=lambda: asyncio.run(toaster.notify(ev)), daemon=True
                 ).start()
 
-        return self.build_controller(
+        ctrl = self.build_controller(
             create_window,
             on_acknowledge=on_acknowledge,
             play_sound=self._sound_effect(),
             publish_toast=publish_toast,
         )
+        # The scheduler runs on the worker loop and the controller belongs to
+        # the UI one (ADR-006): the offer crosses on the shell's timer.
+        self._offer_drill = lambda: shell.after(0, lambda: ctrl.offer_drill(self._drill_event()))
+        return ctrl
 
     def build_tui_controller(
         self, tui_app: Any, *, on_acknowledge: Callable[[SeismicEvent], None]
@@ -360,6 +405,8 @@ class Wiring:
             publish_toast=None,
         )
         tui_app.bind_controller(ctrl)
+        # One loop for everything in the terminal: no thread to cross.
+        self._offer_drill = lambda: ctrl.offer_drill(self._drill_event())
         return ctrl
 
     # --- Tray ---
@@ -630,6 +677,13 @@ class Wiring:
         """
         from vigia_eew.notify.about_window import about_view
 
-        view = about_view(locale_code=ui_scale.PANEL_LOCALE, on_close=back or shell.close_screen)
+        view = about_view(
+            locale_code=ui_scale.PANEL_LOCALE,
+            on_close=back or shell.close_screen,
+            # Read when the screen is opened: `--simulate` may have recorded
+            # one from another process since this one started.
+            last_drill=self.state.last_drill(),
+            zone=self.cfg.notification.timezone,
+        )
         self._show(shell, "about", t("about_title", ui_scale.PANEL_LOCALE), view)
         return view

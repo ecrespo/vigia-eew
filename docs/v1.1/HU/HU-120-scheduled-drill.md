@@ -85,9 +85,9 @@ Scenario: CA-120.10 · Paused notifications postpone the drill
 
 ## Definition of done
 
-- [ ] `[drill] enabled` (false) and `interval_days` in the schema, the example file and the panel
-- [ ] `drill.py`, pure: whether a drill is due, with the clock injected
-- [ ] `last_drill` in `state.json`, written atomically like the rest of it
-- [ ] The label on every simulated alert, graphical and terminal, in both languages
-- [ ] The queue postpones a drill behind a real alert and lets a real alert replace one
-- [ ] A test that a drill never reaches the history sink
+- [x] `[drill] enabled` (false) and `interval_days` in the schema, the example file and the panel
+- [x] `drill.py`, pure: whether a drill is due, with the clock injected
+- [x] `last_drill` in `state.json`, written atomically like the rest of it
+- [x] The label on every simulated alert, graphical and terminal, in both languages
+- [x] The queue postpones a drill behind a real alert and lets a real alert replace one
+- [x] A test that a drill never reaches the history sink

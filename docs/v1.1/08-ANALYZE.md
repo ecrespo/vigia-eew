@@ -326,7 +326,7 @@ None. T-182 cites Art. 9 rather than a requirement, as the cut task of v1.0 did.
 | **F13 · Depth** | ✅ **Done**, 2026-11-16 — V-06 measured and not material |
 | **F14 · Figures and export** | ✅ **Done**, 2026-11-17 — the dialog on the packaged binary (V-10) still owed; the export no longer depends on it |
 | **F15 · TUI** | ✅ **Done**, 2026-11-17 — observed headless; the run over a real SSH connection is owed |
-| **F16 · v1.0 promises and cut** | ✅ Ready, with V-09 in view |
+| **F16 · v1.0 promises and cut** | ✅ **Done**, 2026-11-17 — V-09: the existing queue tests pass unchanged. The tag and the on-screen observations are owed (T-182) |
 
 **Nothing found requires rewriting a requirement.** Two were reworded during this pass (V-13,
 V-14), both towards what the code can actually do.

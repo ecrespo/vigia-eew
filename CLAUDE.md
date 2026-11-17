@@ -171,6 +171,18 @@ imports no toolkit, because two frontends draw it: `notify/history_view.py` in F
 `tui.py`'s `HistoryScreen` in Textual (`h` on the `--tui` dashboard). Import contracts keep the
 list out of both toolkits and the dashboard out of Flet.
 
+The alert carries a line about the shaking: `shaking.py` (pure) estimates the S wave's arrival
+(3.5 km/s over the hypocentral distance), `notify/presentation.py::shaking_line` words it —
+remaining rounded down, elapsed as the ordinary case — and each alert recounts once a second.
+With no estimate the alert is whole and lacks the line.
+
+A **drill** is a simulated alert (`SeismicEvent.is_drill`, i.e. `source == "SIMULATED"`):
+`--simulate`, or the opt-in schedule (`[drill]`, `drill.py`'s `DrillScheduler`, one more
+supervised task). Every frontend labels it. `AlertQueue.offer_drill` takes one only when idle and
+not paused, and a real alert closes a drill unacknowledged — the windows' `close()` exists for
+that alone. `state.json`'s `last_drill` is **patched** into the file (`StateStore.drill_*`),
+because `--simulate` writes it from another process; About shows it.
+
 `autostart/` installs/uninstalls OS-native autostart (systemd `--user` on Linux,
 LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via
 `--install-autostart`/`--uninstall-autostart`.

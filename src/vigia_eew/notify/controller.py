@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
+from vigia_eew import shaking
 from vigia_eew.agent_state import AgentState
 from vigia_eew.i18n import DEFAULT_LOCALE
 from vigia_eew.models import SeismicEvent, SeverityLevel
@@ -45,7 +47,13 @@ class AlertController:
         state: AgentState | None = None,
         locale_code: str = DEFAULT_LOCALE,
         logger: logging.Logger | None = None,
+        now: Callable[[], datetime] | None = None,
+        on_drill_presented: Callable[[], None] | None = None,
+        on_drill_acknowledged: Callable[[], None] | None = None,
     ) -> None:
+        self._now = now or (lambda: datetime.now(UTC))
+        self._on_drill_presented = on_drill_presented
+        self._on_drill_acknowledged = on_drill_acknowledged
         self._create_window = create_window
         self._play_sound = play_sound
         self._toast = send_toast
@@ -61,6 +69,7 @@ class AlertController:
             show=self._show,
             update=self._update,
             on_acknowledge=self._acknowledged,
+            dismiss=self._dismissed,
         )
 
     @property
@@ -91,14 +100,36 @@ class AlertController:
         """Enqueues an event to show it (entry point from the asyncio<->UI bridge)."""
         self._alert_queue.enqueue(ev)
 
+    def offer_drill(self, ev: SeismicEvent) -> bool:
+        """Shows a drill unless something real could be delayed by it (REQ-UX-009)."""
+        return self._alert_queue.offer_drill(ev)
+
     def _data(self, ev: SeismicEvent) -> AlertData:
+        moment = self._now()
+        reason = shaking.unavailable_reason(ev, moment)
+        if reason is not None:
+            # The alert goes out whole, without the line; this is where the
+            # line's absence is explained (REQ-ALE-013).
+            self._log.info(
+                "shaking_estimate_unavailable trace=%s id=%s reason=%s", ev.trace_id, ev.id, reason
+            )
         return format_event(
             ev,
             zone=self._zone,
             reference_name=self._reference_name,
             locale_code=self._locale,
             reference=self._reference_point,
+            now=moment,
         )
+
+    def _record_drill(self, record: Callable[[], None] | None) -> None:
+        """Notes a drill, best-effort: the record never conditions the alert."""
+        if record is None:
+            return
+        try:
+            record()
+        except Exception as exc:  # noqa: BLE001 - the alert comes first
+            self._log.warning("drill_record_failed type=%s detail=%s", type(exc).__name__, exc)
 
     def _show(self, ev: SeismicEvent) -> None:
         data = self._data(ev)
@@ -122,12 +153,23 @@ class AlertController:
             self._toast(ev)
         if self._state is not None:
             self._state.mark_last_alert(f"{data.magnitude} · {data.place} · {data.local_time}")
+        if ev.is_drill:
+            self._record_drill(self._on_drill_presented)
 
     def _update(self, ev: SeismicEvent) -> None:
         if self._window is not None:
             self._window.refresh(self._data(ev))
 
+    def _dismissed(self, ev: SeismicEvent) -> None:
+        """A drill is being replaced by a real alert: close it, unacknowledged."""
+        window, self._window = self._window, None
+        close = getattr(window, "close", None)
+        if close is not None:
+            close()
+
     def _acknowledged(self, ev: SeismicEvent) -> None:
         self._window = None
+        if ev.is_drill:
+            self._record_drill(self._on_drill_acknowledged)
         if self._extra_on_acknowledge is not None:
             self._extra_on_acknowledge(ev)

@@ -264,3 +264,52 @@ def test_the_example_file_declares_the_four_keys() -> None:
         "recovery_min_magnitude",
     ):
         assert f"\n{key} = " in example, key
+
+
+# --- T-180 · [drill] (REQ-UX-007) --------------------------------------------------
+
+
+def test_the_scheduled_drill_is_off_by_default() -> None:
+    """CA-120.2: a window nobody asked for is not a good first contact."""
+    cfg = load_config()
+
+    assert cfg.drill.enabled is False
+    assert cfg.drill.interval_days == 30
+
+
+def test_the_drill_keys_are_read_from_the_file(tmp_path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[drill]\nenabled = true\ninterval_days = 7\n", encoding="utf-8")
+
+    cfg = load_config(path)
+
+    assert cfg.drill.enabled is True
+    assert cfg.drill.interval_days == 7
+
+
+def test_an_interval_of_no_days_is_refused(tmp_path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[drill]\ninterval_days = 0\n", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+def test_the_example_file_documents_the_drill_and_leaves_it_off(tmp_path) -> None:
+    text = bundled_example()
+    path = tmp_path / "config.toml"
+    path.write_text(text, encoding="utf-8")
+
+    assert "[drill]" in text
+    assert load_config(path).drill.enabled is False
+
+
+def test_the_drill_reaches_the_panel_like_any_other_section() -> None:
+    from vigia_eew.notify.config_panel import describe
+
+    sections = {section.key: section for section in describe()}
+
+    assert {field.path for field in sections["drill"].fields} == {
+        "drill.enabled",
+        "drill.interval_days",
+    }

@@ -16,6 +16,7 @@ list -- a map and a playback do not fit in a terminal -- and through the same
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from rich.text import Text
@@ -36,7 +37,7 @@ from vigia_eew.notify.history_list import (
     day_in,
     number_in,
 )
-from vigia_eew.notify.presentation import AlertData, severity_color
+from vigia_eew.notify.presentation import AlertData, severity_color, shaking_line
 
 _StatusSubscriber = Callable[[], None]
 
@@ -60,11 +61,15 @@ class AlertScreen(ModalScreen[None]):
         *,
         on_acknowledge: Callable[[], None],
         locale_code: str = DEFAULT_LOCALE,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         super().__init__()
         self._data = data
         self._on_acknowledge = on_acknowledge
         self._locale = locale_code
+        self._now = now or (lambda: datetime.now(UTC))
+        #: The interval that recounts the line about the shaking (ADR-039).
+        self.recount_timer: Any = None
 
     def compose(self) -> ComposeResult:
         # `markup=False`: the place is whatever a network sent, and a string
@@ -74,6 +79,11 @@ class AlertScreen(ModalScreen[None]):
         yield Static(id="alert-body", markup=False)
 
     def on_mount(self) -> None:
+        self._paint()
+        self.recount_timer = self.set_interval(1.0, self.recount)
+
+    def recount(self) -> None:
+        """Says the line about the shaking again, as of now."""
         self._paint()
 
     def update_data(self, data: AlertData) -> None:
@@ -91,11 +101,16 @@ class AlertScreen(ModalScreen[None]):
     def _paint(self) -> None:
         data = self._data
         body = self.query_one("#alert-body", Static)
+        # A drill says so before anything else (REQ-UX-008).
+        drill = f"{t('drill_label', self._locale)}\n\n" if data.drill else ""
+        shaking = shaking_line(data.shaking_arrival, self._now(), self._locale)
         text = (
+            f"{drill}"
             f"{t('seismic_alert_title', self._locale)}\n\n"
             f"{data.magnitude}\n"
             f"{data.place}\n"
             f"{data.distance}\n"
+            f"{shaking + chr(10) if shaking else ''}"
             f"{t('depth_label', self._locale)}: {data.depth}\n"
             f"{t('local_time_label', self._locale)}: {data.local_time}\n"
             f"{t('source_label', self._locale)}: {data.source}\n\n"
@@ -120,6 +135,10 @@ class _AlertHandle:
 
     def refresh(self, data: AlertData) -> None:
         self._screen.update_data(data)
+
+    def close(self) -> None:
+        """Takes the alert off the terminal without acknowledging it (REQ-UX-009)."""
+        self._screen.dismiss()
 
 
 class HistoryScreen(Screen[None]):
@@ -359,8 +378,10 @@ class VigiaTuiApp(App[None]):
         on_start: Callable[[], None] | None = None,
         open_history: OpenHistory | None = None,
         close_history: Callable[[], None] | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         super().__init__()
+        self._now = now
         self._state = state
         self._locale = locale_code
         self._on_start = on_start
@@ -447,7 +468,9 @@ class VigiaTuiApp(App[None]):
         on_acknowledge: Callable[[], None],
     ) -> _AlertHandle:
         """Shows the modal alert and logs it; matches `_WindowFactory` (RF-19, RF-20)."""
-        screen = AlertScreen(data, on_acknowledge=on_acknowledge, locale_code=self._locale)
+        screen = AlertScreen(
+            data, on_acknowledge=on_acknowledge, locale_code=self._locale, now=self._now
+        )
         self.push_screen(screen)
         log = self._dashboard.query_one("#alerts-log", RichLog)
         log.write(f"{data.magnitude} · {data.place} · {data.local_time}")

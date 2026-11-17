@@ -33,6 +33,16 @@ def _isolate_user_config(monkeypatch, tmp_path):
         lambda: tmp_path / "vigia-eew" / "history.sqlite3",
     )
 
+    # A simulated alert records itself as the last drill in `state.json`
+    # (ADR-040). A test that shows one must never write to the user's.
+    from vigia_eew import state as state_module
+
+    monkeypatch.setattr(
+        state_module,
+        "default_state_path",
+        lambda: tmp_path / "vigia-eew" / "state.json",
+    )
+
 
 @pytest.fixture(autouse=True)
 def _no_desktop_client(monkeypatch):

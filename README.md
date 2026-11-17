@@ -27,7 +27,10 @@ It was born in the aftermath of the June 2026 Venezuela earthquake, with a clear
 - 🌎 **Optional country filter**: only notify earthquakes in your own country (offshore/coastal quakes kept), determined offline — opt-in, off by default.
 - 🟢 **Cross-platform**: Linux, Windows, and macOS, with autostart on login.
 - 📦 **Full distribution**: PyPI, `.exe`, `.dmg`, AppImage, `.deb`, `.rpm`.
-- 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake.
+- 🧪 **`--simulate` mode** to test the alert without waiting for a real earthquake — labelled as a drill, so it cannot be mistaken for one.
+- ⏱️ **When the shaking arrives — or when it did**: the alert estimates the S wave's arrival at your reference point and says how long is left or, far more often, how long ago it should have arrived. An estimate, marked as one.
+- 🔔 **Scheduled drill (opt-in)**: the agent tests itself every so many days, like a smoke detector. A drill never delays a real alert and is never recorded as an earthquake.
+- 🗂️ **Earthquake history**: every earthquake the agent evaluated and why it discarded each one, as a filterable table and a map, with a playback, a summary in figures (including each network's delivery delay) and export to CSV or GeoJSON. Local only: it never leaves the machine unless you save a file yourself.
 - 🖥️ **System tray icon**: connection status, last alert, pause/resume notifications, edit config, quit — best-effort, never blocks startup if unavailable on your desktop.
 - ⌨️ **Headless TUI dashboard (`--tui`)**: run the agent on a server over SSH with no display — a terminal dashboard with live status, an alerts log, the earthquake history as a filterable list (`h`), and a non-dismissable modal alert (ENTER acknowledges). Combine with `--simulate` to test it.
 
@@ -245,6 +248,19 @@ Guaira):
 ```bash
 vigia-eew --simulate
 ```
+
+The simulated alert says **DRILL** above everything else. To have the agent run one by itself
+every so often, switch it on in `config.toml` (or in the settings panel):
+
+```toml
+[drill]
+enabled = true
+interval_days = 30
+```
+
+A scheduled drill waits while a real alert is on screen or notifications are paused, a real alert
+replaces a drill without waiting for it, and the last drill — and whether anybody acknowledged it
+— is shown under *About*.
 
 ### From the console (CLI)
 

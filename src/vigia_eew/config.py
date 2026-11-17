@@ -189,6 +189,19 @@ class History(BaseModel):
     recovery_min_magnitude: float = Field(default=2.5, ge=0)
 
 
+class Drill(BaseModel):
+    """The scheduled drill (REQ-UX-007, ADR-040).
+
+    Off by default: a product that opens a window that cannot be ignored,
+    without anyone having asked, is not a good first contact. Switched on, the
+    agent shows a simulated alert -- labelled as one -- every `interval_days`,
+    so that a machine that has not alerted in months still proves it can.
+    """
+
+    enabled: bool = False
+    interval_days: int = Field(default=30, ge=1)
+
+
 class Settings(BaseModel):
     """Full agent configuration (RF-24)."""
 
@@ -203,6 +216,7 @@ class Settings(BaseModel):
     notification: Notification = Field(default_factory=Notification)
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
     history: History = Field(default_factory=History)
+    drill: Drill = Field(default_factory=Drill)
 
 
 #: The four seismic sources, in the order they are declared. Declaration
@@ -311,6 +325,7 @@ SECTION_PATHS: dict[str, tuple[str, ...]] = {
         "notification",
         "logging",
         "history",
+        "drill",
     )
 }
 

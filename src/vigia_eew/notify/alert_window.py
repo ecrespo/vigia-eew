@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
@@ -33,13 +34,16 @@ import flet as ft
 from vigia_eew.i18n import DEFAULT_LOCALE, t
 from vigia_eew.notify import ui_scale
 from vigia_eew.notify.map_view import build_alert_map
-from vigia_eew.notify.presentation import AlertData, severity_color
+from vigia_eew.notify.presentation import AlertData, severity_color, shaking_line
 
 #: Text colour over each severity's background. White on amber does not read.
 _ON_SEVERITY = {"info": "#FFFFFF", "warning": "#1B2028", "critical": "#FFFFFF"}
 
 #: Height of the map when it sits beside the text or under it.
 MAP_HEIGHT = 560
+
+#: How often the line about the shaking is recounted while the alert is up.
+SHAKING_TICK_MS = 1000
 
 
 def take_focus(window: Any, call_async: Callable[[Callable[[], Any]], None]) -> None:
@@ -85,7 +89,15 @@ class AlertWindow:
         locale: str = DEFAULT_LOCALE,
         build: bool = True,
         logger: logging.Logger | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
+        self._now = now or (lambda: datetime.now(UTC))
+        self._closed = False
+        #: The line about the shaking. One control for the life of the alert,
+        #: so the timer changes a value instead of rebuilding the window.
+        self.shaking = ft.Text(
+            "", size=22, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER, visible=False
+        )
         self._data = data
         self._on_acknowledge = on_acknowledge
         self._shell = host  # the FletShell that draws it
@@ -105,6 +117,40 @@ class AlertWindow:
                     on_enter=self.acknowledge,
                     bgcolor=severity_color(data.severity),
                 )
+                host.after(SHAKING_TICK_MS, self._tick)
+
+    def _recount(self) -> bool:
+        """Says the line about the shaking as of now; True if it changed."""
+        line = shaking_line(self._data.shaking_arrival, self._now(), self._locale)
+        changed = line != self.shaking.value
+        self.shaking.value = line
+        self.shaking.visible = bool(line)
+        return changed
+
+    def _tick(self) -> None:
+        """Recounts once a second while the alert is on screen (ADR-039).
+
+        It asks for its own next turn, and stops asking once the alert is
+        gone -- the only way a timer that cannot be cancelled ends.
+        """
+        if self._acknowledged or self._closed or self._shell is None:
+            return
+        if self._recount():
+            self._shell.update()
+        self._shell.after(SHAKING_TICK_MS, self._tick)
+
+    def close(self) -> None:
+        """Takes the alert off the screen **without** acknowledging it.
+
+        Only a drill is ever closed this way, and only by a real alert
+        arriving (REQ-UX-009): nobody saw it out, so nobody is told it was
+        acknowledged.
+        """
+        if self._acknowledged or self._closed:
+            return
+        self._closed = True
+        if self._shell is not None:
+            self._shell.clear_alert(self.view)
 
     @property
     def data(self) -> AlertData:
@@ -116,7 +162,7 @@ class AlertWindow:
 
     def acknowledge(self) -> None:
         """Acknowledges the alert (the only valid close) and gives the window back (CU-5)."""
-        if self._acknowledged:
+        if self._acknowledged or self._closed:
             return
         self._acknowledged = True
         self._on_acknowledge()
@@ -126,7 +172,7 @@ class AlertWindow:
     def refresh(self, data: AlertData) -> None:
         """Refreshes the displayed data without recreating the window (RF-11)."""
         self._data = data
-        if self._acknowledged:
+        if self._acknowledged or self._closed:
             return
         self._build()
         if self._shell is not None:
@@ -139,6 +185,8 @@ class AlertWindow:
         data = self._data
         color = severity_color(data.severity)
         ink = _ON_SEVERITY.get(data.severity, "#FFFFFF")
+        self.shaking.color = ink
+        self._recount()
         self.view.bgcolor = color
         self.view.content = ft.Column(
             expand=True,
@@ -178,11 +226,30 @@ class AlertWindow:
                 selectable=True,
             )
 
+        heading: list[Any] = []
+        if data.drill:
+            # First, and boxed in the alert's own ink: it has to be read
+            # before the magnitude, by somebody who reads nothing else.
+            heading.append(
+                ft.Container(
+                    bgcolor=ink,
+                    border_radius=8,
+                    padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+                    content=ft.Text(
+                        t("drill_label", loc),
+                        size=22,
+                        weight=ft.FontWeight.BOLD,
+                        color=color,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                )
+            )
         return ft.Column(
             col=ui_scale.ALERT_TEXT_COLUMNS,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=8,
             controls=[
+                *heading,
                 ft.Text(
                     t("seismic_alert_title", loc),
                     size=30,
@@ -205,6 +272,7 @@ class AlertWindow:
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Text(data.distance, size=20, color=ink, text_align=ft.TextAlign.CENTER),
+                self.shaking,
                 ft.Container(height=8),
                 line(t("coordinates_label", loc), data.coordinates),
                 line(t("depth_label", loc), data.depth),

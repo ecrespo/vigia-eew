@@ -280,3 +280,165 @@ def test_an_alert_without_a_reference_still_draws_the_epicentre():
     markers = next(layer for layer in the_map.layers if isinstance(layer, fm.MarkerLayer))
 
     assert len(markers.markers) == 1
+
+
+# --- T-178 · the alert says when the shaking arrives, or when it did ---------------
+
+from dataclasses import replace  # noqa: E402
+from datetime import timedelta  # noqa: E402
+
+_ARRIVES = datetime(2026, 6, 28, 13, 40, tzinfo=UTC)
+
+
+class _Clock:
+    def __init__(self, moment: datetime) -> None:
+        self.moment = moment
+
+    def __call__(self) -> datetime:
+        return self.moment
+
+    def advance(self, seconds: float) -> None:
+        self.moment += timedelta(seconds=seconds)
+
+
+def _all_text(control) -> list[str]:
+    found: list[str] = []
+    value = getattr(control, "value", None)
+    if isinstance(value, str) and value and getattr(control, "visible", True):
+        found.append(value)
+    for span in getattr(control, "spans", None) or []:
+        if getattr(span, "text", None):
+            found.append(span.text)
+    for child in getattr(control, "controls", None) or []:
+        found.extend(_all_text(child))
+    content = getattr(control, "content", None)
+    if content is not None and not isinstance(content, str):
+        found.extend(_all_text(content))
+    return found
+
+
+def _shaking(**changes) -> AlertData:
+    return replace(_data(), shaking_arrival=_ARRIVES, **changes)
+
+
+def test_the_alert_shows_the_line_about_the_shaking():
+    clock = _Clock(_ARRIVES + timedelta(minutes=20))
+
+    window = AlertWindow(_shaking(), on_acknowledge=lambda: None, now=clock)
+
+    assert "The shaking should already have arrived ≈ 20 min ago" in _all_text(window.view)
+
+
+def test_the_count_decreases_while_the_alert_is_on_screen(fake_shell):
+    """CA-119.1: recounted once a second, on the shell's timer."""
+    clock = _Clock(_ARRIVES - timedelta(seconds=30))
+    window = AlertWindow(_shaking(), on_acknowledge=lambda: None, host=fake_shell, now=clock)
+    assert window.shaking.value == "Shaking expected in ≈ 30 s"
+    assert [ms for ms, _ in fake_shell.after_calls] == [1000]
+
+    clock.advance(1)
+    fake_shell.run_pending()
+
+    assert window.shaking.value == "Shaking expected in ≈ 29 s"
+    assert [ms for ms, _ in fake_shell.after_calls] == [1000]  # and it asks for the next
+    assert fake_shell.updates >= 1
+
+
+def test_a_count_that_runs_out_becomes_the_elapsed_sentence_on_screen(fake_shell):
+    """CA-119.3."""
+    clock = _Clock(_ARRIVES - timedelta(seconds=1))
+    window = AlertWindow(_shaking(), on_acknowledge=lambda: None, host=fake_shell, now=clock)
+    assert window.shaking.value == "Shaking expected in ≈ 1 s"
+
+    for _ in range(3):
+        clock.advance(1)
+        fake_shell.run_pending()
+        assert "-" not in window.shaking.value
+
+    assert window.shaking.value == "The shaking should already have arrived ≈ 2 s ago"
+
+
+def test_once_acknowledged_the_alert_stops_counting(fake_shell):
+    clock = _Clock(_ARRIVES)
+    window = AlertWindow(_shaking(), on_acknowledge=lambda: None, host=fake_shell, now=clock)
+
+    window.acknowledge()
+    fake_shell.run_pending()
+
+    assert fake_shell.after_calls == []
+
+
+def test_without_an_estimate_the_alert_is_whole_and_has_no_line(fake_shell):
+    """CA-119.7: every other guarantee unchanged."""
+    acknowledged = []
+    without = replace(_data(), shaking_arrival=None)
+    window = AlertWindow(without, on_acknowledge=lambda: acknowledged.append(1), host=fake_shell)
+
+    said = _all_text(window.view)
+    assert window.shaking.visible is False
+    assert not any("haking" in text for text in said)
+    assert "M 6.1" in said and "NEAR COAST OF VENEZUELA" in said
+    assert len(fake_shell.alerts) == 1
+    fake_shell.on_enter()
+    assert acknowledged == [1] and fake_shell.alerts == []
+
+
+def test_a_revision_recomputes_the_line(fake_shell):
+    """CA-119.8: a revised origin time or location moves the arrival."""
+    clock = _Clock(_ARRIVES + timedelta(minutes=5))
+    window = AlertWindow(_shaking(), on_acknowledge=lambda: None, host=fake_shell, now=clock)
+    assert "≈ 5 min ago" in window.shaking.value
+
+    window.refresh(replace(_shaking(), shaking_arrival=_ARRIVES + timedelta(minutes=3)))
+
+    assert "≈ 2 min ago" in window.shaking.value
+    assert sum(1 for ms, _ in fake_shell.after_calls if ms == 1000) == 1  # still one timer
+
+
+def test_a_revision_that_brings_an_estimate_starts_showing_it(fake_shell):
+    clock = _Clock(_ARRIVES + timedelta(seconds=10))
+    without = replace(_data(), shaking_arrival=None)
+    window = AlertWindow(without, on_acknowledge=lambda: None, host=fake_shell, now=clock)
+    assert window.shaking.visible is False
+
+    window.refresh(_shaking())
+    clock.advance(1)
+    fake_shell.run_pending()
+
+    assert window.shaking.visible is True
+    assert window.shaking.value == "The shaking should already have arrived ≈ 11 s ago"
+
+
+# --- T-179 · a drill says it is a drill (REQ-UX-008) -------------------------------
+
+
+def test_a_drill_is_labelled_above_everything_else():
+    window = AlertWindow(replace(_data(), drill=True), on_acknowledge=lambda: None)
+
+    said = _all_text(window.view)
+    assert said[0] == "DRILL — this is not a real earthquake"
+
+
+def test_a_drill_is_labelled_in_spanish_too():
+    window = AlertWindow(replace(_data(), drill=True), on_acknowledge=lambda: None, locale="es")
+
+    assert "SIMULACRO — no es un sismo real" in _all_text(window.view)
+
+
+def test_a_real_alert_carries_no_drill_label():
+    window = AlertWindow(_data(), on_acknowledge=lambda: None)
+
+    assert not any("DRILL" in text for text in _all_text(window.view))
+
+
+def test_an_alert_can_be_closed_without_being_acknowledged(fake_shell):
+    """What a real alert does to a drill on screen (REQ-UX-009)."""
+    acknowledged = []
+    window = AlertWindow(_data(), on_acknowledge=lambda: acknowledged.append(1), host=fake_shell)
+
+    window.close()
+    fake_shell.run_pending()
+
+    assert acknowledged == []
+    assert fake_shell.alerts == []
+    assert fake_shell.after_calls == []  # and it stopped counting
