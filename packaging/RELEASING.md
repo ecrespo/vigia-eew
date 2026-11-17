@@ -27,6 +27,17 @@ gitleaks/trivy) en verde. Por eso el release se corta **en `develop` y se promue
    publicar manualmente con `uv publish` o `twine upload`.
 6. Actualizar el repo apt (F8-6, ver `packaging/apt-r2/README.md`) con el nuevo `.deb`.
 
+## Probar el empaquetado sin publicar
+
+`build.yml` también se lanza a mano sobre cualquier rama
+(`gh workflow run build.yml --ref <rama>`): construye y prueba los binarios de las tres
+plataformas y **no publica nada**, porque los jobs de PyPI y del Release solo corren sobre un
+tag. Es la forma de comprobar un arreglo de empaquetado antes de etiquetar.
+
+Si el build de un tag falla en una plataforma, **no se publica nada** — los jobs de publicación
+esperan a todas — y el tag puede recrearse sobre el commit corregido. Así se hizo en la v1.1.0,
+cuyo primer tag falló al crear el `.dmg`.
+
 ## Verificación local antes de taguear
 
 ```bash
