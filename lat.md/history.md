@@ -45,6 +45,31 @@ networks, and this one prevailed*.
 A revision from the same network replaces its row rather than adding one, which is the rule
 [[lat.md/pipeline#Deduplication]] already applies upstream.
 
+## Which arrival stands for an earthquake
+
+Read per earthquake, one arrival of each `correlation_id` is kept, chosen by a fixed order in
+[[src/vigia_eew/history.py#HistoryQuery]]'s statements (ADR-034, REQ-HIS-009).
+
+The order: the arrival that alerted; else one nothing superseded; else the best-ranked network
+(the user's own order, the one [[lat.md/pipeline#Deduplication]] obeys); else the lowest row id.
+What the user was told is what the earthquake was, for them — so the alerted row wins even when
+a better-ranked network also reported it.
+
+It is a reading, not a table. A materialised `earthquakes` table would be a second source of
+truth to keep in step with every write. Grouping in Python would page and count rows that had
+not been grouped yet, so the window function does it inside the statement, one per ordering.
+
+The filters apply to arrivals **first**, and what matches is grouped after. Filtered to USGS, an
+earthquake EMSC alerted appears once, as USGS saw it: the filter still means what it means per
+arrival. An arrival with no correlation id is tied to nothing and stands alone, rather than
+merging with every other arrival that has none.
+
+The rank travels as one bound, delimited string — a network's position in it is its rank — for
+the reason the source filter does: nothing is interpolated. The screen's switch only sets the
+reading on the query, so the pager, the total and the map follow without knowing about it;
+[[src/vigia_eew/notify/history_view.py#HistoryList]]`.arrivals_of()` gives back the arrivals the
+reading folded away.
+
 ## Times are text, and that is deliberate
 
 SQLite has no date type. Stored as ISO-8601 with an offset, lexical order is chronological, so

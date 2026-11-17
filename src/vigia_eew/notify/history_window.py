@@ -18,7 +18,7 @@ table below it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import flet as ft
@@ -55,8 +55,9 @@ class HistoryWindow:
         zoom: int = DEFAULT_ZOOM,
         with_map: bool = True,
         on_close: Callable[[], None] | None = None,
+        rank: Sequence[str] = (),
     ) -> None:
-        self.listing = HistoryList(store, locale_code=locale_code, zone=zone)
+        self.listing = HistoryList(store, locale_code=locale_code, zone=zone, rank=rank)
         # The map opens on the user's reference point when there is one: the
         # history is worldwide, and the midpoint of earthquakes in Alaska and
         # Georgia is the Atlantic. Without one it falls back to the midpoint

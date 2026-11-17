@@ -31,6 +31,7 @@ from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.registry import (
     SOURCE_REGISTRY,
     IngestContext,
+    ordered_sources,
     priority_rank,
     validate_registry,
 )
@@ -468,6 +469,9 @@ class Wiring:
             zone=self.cfg.notification.timezone,
             reference=(self.cfg.reference.lat, self.cfg.reference.lon),
             on_close=lambda: self._close_history(shell),
+            # The same order the deduplicator obeys: read per earthquake, a tie
+            # between two arrivals goes to the network the user ranked first.
+            rank=tuple(spec.source for spec in ordered_sources(self.cfg)),
         )
         self._history_window = window
         self._show(shell, "history", title, window.view)

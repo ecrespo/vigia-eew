@@ -116,6 +116,14 @@ _CATALOG: dict[str, dict[Locale, str]] = {
         "en": "The period ends before it starts.",
         "es": "El período termina antes de empezar.",
     },
+    "history_reading_earthquake": {
+        "en": "One line per earthquake",
+        "es": "Una línea por sismo",
+    },
+    "history_arrivals": {
+        "en": "Arrivals of this earthquake: {count}",
+        "es": "Llegadas de este sismo: {count}",
+    },
     "history_page_previous": {"en": "Previous page", "es": "Página anterior"},
     "history_page_next": {"en": "Next page", "es": "Página siguiente"},
     "history_filter_clear": {"en": "Clear filters", "es": "Limpiar filtros"},

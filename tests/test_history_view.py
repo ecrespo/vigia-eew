@@ -863,3 +863,164 @@ def test_a_calendar_with_no_page_to_open_on_does_nothing(store: HistoryStore) ->
 
     assert view._since.value in (None, "")
     assert len(view.table.rows) == 3
+
+
+# --- T-162 · the switch between readings, and an earthquake's arrivals (HU-115) ---
+
+
+@pytest.fixture
+def twice(tmp_path: Path) -> HistoryStore:
+    """One earthquake from two networks, and another from one."""
+    store = HistoryStore(tmp_path / "twice.sqlite3")
+    store.open()
+    store.record(_record(source="EMSC", source_event_id="e1", correlation_id="q1"))
+    store.record(
+        _record(
+            source="USGS",
+            source_event_id="u1",
+            correlation_id="q1",
+            verdict="discarded",
+            reason="duplicate",
+        )
+    )
+    store.record(
+        _record(
+            source="EMSC",
+            source_event_id="e2",
+            correlation_id="q2",
+            occurred_at=_WHEN - timedelta(hours=1),
+        )
+    )
+    yield store
+    store.close()
+
+
+def test_the_list_reads_per_arrival_until_told_otherwise(twice: HistoryStore) -> None:
+    listing = HistoryList(twice)
+
+    assert listing.reading == "arrival"
+    assert len(listing.rows) == 3
+
+
+def test_the_list_can_be_read_per_earthquake(twice: HistoryStore) -> None:
+    """CA-115.1: the rows, the total and the whole set all follow the reading."""
+    listing = HistoryList(twice)
+
+    listing.set_reading("earthquake")
+
+    assert [row.record.correlation_id for row in listing.rows] == ["q1", "q2"]
+    assert listing.stretch == (1, 2, 2)
+    assert len(listing.everything(100).records) == 2
+
+
+def test_switching_the_reading_returns_to_the_first_page(twice: HistoryStore) -> None:
+    listing = HistoryList(twice, page_size=2)
+    listing.next_page()
+    assert listing.query.offset == 2
+
+    listing.set_reading("earthquake")
+
+    assert listing.query.offset == 0
+
+
+def test_clearing_the_filters_keeps_the_reading(twice: HistoryStore) -> None:
+    """The reading is how the set is looked at, not a filter on it."""
+    listing = HistoryList(twice, rank=("USGS", "EMSC"))
+    listing.set_reading("earthquake")
+    listing.set_min_magnitude(9.0)
+
+    listing.clear_filters()
+
+    assert listing.reading == "earthquake"
+    assert listing.query.rank == ("USGS", "EMSC")
+    assert len(listing.rows) == 2
+
+
+def test_the_list_words_the_arrivals_of_an_earthquake(twice: HistoryStore) -> None:
+    """CA-115.5: each with its network, its verdict and its reason."""
+    listing = HistoryList(twice, locale_code="en")
+    listing.set_reading("earthquake")
+
+    arrivals = listing.arrivals_of(listing.rows[0].record)
+
+    assert [(a.source, a.verdict, a.reason) for a in arrivals] == [
+        ("EMSC", "Alerted", ""),
+        ("USGS", "Discarded", "Already reported by another network"),
+    ]
+
+
+def test_an_arrival_tied_to_nothing_is_its_own_only_arrival(tmp_path: Path) -> None:
+    store = HistoryStore(tmp_path / "loose.sqlite3").open()
+    store.record(_record(correlation_id=""))
+    listing = HistoryList(store)
+
+    assert [a.source for a in listing.arrivals_of(listing.rows[0].record)] == ["GEOFON"]
+    store.close()
+
+
+def test_the_screen_has_a_switch_between_the_readings(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(twice))
+    assert view.reading.value is False
+    assert len(view.table.rows) == 3
+
+    view.reading.value = True
+    view.reading.on_change(None)
+
+    assert view.listing.reading == "earthquake"
+    assert len(view.table.rows) == 2
+    assert view.status.value == view.listing.stretch_text
+
+    view.reading.value = False
+    view.reading.on_change(None)
+
+    assert len(view.table.rows) == 3
+
+
+def _arrival_lines(view) -> list[str]:
+    return [text.value for text in view.arrivals.controls[1:]]
+
+
+def test_choosing_an_earthquake_lists_its_arrivals(twice: HistoryStore) -> None:
+    """CA-115.5, from the screen."""
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(twice, locale_code="en"), locale_code="en")
+    view.reading.value = True
+    view.reading.on_change(None)
+    assert view.arrivals.visible is False
+
+    view.choose(view.listing.rows[0].record.id)
+
+    assert view.arrivals.visible is True
+    lines = _arrival_lines(view)
+    assert len(lines) == 2
+    assert "EMSC" in lines[0] and "Alerted" in lines[0]
+    assert "USGS" in lines[1] and "Discarded" in lines[1]
+    assert "Already reported by another network" in lines[1]
+
+
+def test_letting_go_of_the_earthquake_puts_its_arrivals_away(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(twice))
+    view.reading.value = True
+    view.reading.on_change(None)
+    chosen = view.listing.rows[0].record.id
+    view.choose(chosen)
+
+    view.choose(chosen)
+
+    assert view.arrivals.visible is False
+
+
+def test_per_arrival_a_chosen_row_lists_no_arrivals(twice: HistoryStore) -> None:
+    """Every arrival is already a row there; the list would repeat the table."""
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(twice))
+
+    view.choose(view.listing.rows[0].record.id)
+
+    assert view.arrivals.visible is False

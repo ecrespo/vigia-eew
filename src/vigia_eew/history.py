@@ -204,6 +204,63 @@ _PAGES: dict[tuple[str, bool], str] = {
 }
 
 
+#: The two ways of reading the same rows (ADR-034). Per arrival is what is
+#: stored; per earthquake keeps one arrival for each `correlation_id`.
+READINGS = ("arrival", "earthquake")
+
+#: The head of the per-earthquake statement; `_SELECT`'s own conditions follow
+#: it, so the arrivals are filtered first and grouped after (CA-115.6).
+#:
+#: The partition is what makes two arrivals one earthquake. An arrival with no
+#: correlation id is tied to nothing, so it stands alone rather than merging
+#: with every other arrival that has none.
+#:
+#: The window's order is which arrival stands for its earthquake, best first:
+#: the one that alerted; one nothing superseded; the best-ranked network; the
+#: earliest recorded. The rank is one bound, delimited string -- a network's
+#: position in it is its rank, and one that is not in it goes after those
+#: that are.
+#:
+#: Whole literals, here and in the count below, rather than fragments joined
+#: together: the price is the partition written twice, and what it buys is
+#: statements a reader -- and a SAST tool -- can believe without tracing them.
+# @lat: [[history#Which arrival stands for an earthquake]]
+_EARTHQUAKES_HEAD = """
+SELECT * FROM (SELECT events.*, ROW_NUMBER() OVER (
+    PARTITION BY CASE WHEN correlation_id = '' THEN 'row:' || id ELSE correlation_id END
+    ORDER BY
+        (verdict = 'alerted') DESC,
+        (superseded_by IS NULL) DESC,
+        COALESCE(NULLIF(instr(:rank, '|' || source || '|'), 0), 1000000000),
+        id
+) AS standing FROM events"""
+
+_EARTHQUAKES_COUNT_HEAD = """
+SELECT COUNT(DISTINCT
+    CASE WHEN correlation_id = '' THEN 'row:' || id ELSE correlation_id END
+) FROM events"""
+
+_ONE_OF_EACH = ") WHERE standing = 1"
+
+_SELECT_EARTHQUAKES = _SELECT.replace("SELECT * FROM events", _EARTHQUAKES_HEAD) + _ONE_OF_EACH
+
+_COUNT_EARTHQUAKES = _SELECT.replace("SELECT * FROM events", _EARTHQUAKES_COUNT_HEAD)
+
+_EARTHQUAKE_PAGES: dict[tuple[str, bool], str] = {
+    (column, descending): (
+        _SELECT_EARTHQUAKES
+        + " ORDER BY "
+        + column
+        + (" DESC" if descending else " ASC")
+        + ", id DESC LIMIT :limit OFFSET :offset"
+    )
+    for column in ORDERABLE
+    for descending in (True, False)
+}
+
+_ARRIVALS = "SELECT * FROM events WHERE correlation_id = :correlation_id ORDER BY id"
+
+
 @dataclass(frozen=True, slots=True)
 class HistoryQuery:
     """What to look for (REQ-HIS-005, CA-111.8).
@@ -226,6 +283,11 @@ class HistoryQuery:
     descending: bool = True
     limit: int = 500
     offset: int = 0
+    #: One of `READINGS`: a row per arrival, or a row per earthquake (ADR-034).
+    reading: str = "arrival"
+    #: The networks in the user's order of trust, best first (REQ-ING-011).
+    #: Only the earthquake reading looks at it, and only to break a tie.
+    rank: tuple[str, ...] = ()
 
     def parameters(self) -> dict[str, Any]:
         """The query as bound values -- nothing here is ever interpolated."""
@@ -240,14 +302,30 @@ class HistoryQuery:
             # built at call time. The delimiters are what keep it a membership
             # test: "MSC" does not match "|EMSC|".
             "sources": (_SEP + _SEP.join(self.sources) + _SEP if self.sources else None),
+            # Delimited like `sources`, and read only by the earthquake reading.
+            "rank": (_SEP + _SEP.join(self.rank) + _SEP if self.rank else None),
             "limit": self.limit,
             "offset": self.offset,
         }
 
+    def _earthquakes(self) -> bool:
+        """Whether this is the per-earthquake reading; refuses one that is neither."""
+        if self.reading not in READINGS:
+            raise ValueError(
+                f"cannot read the history per {self.reading!r}; "
+                f"the reading is one of {', '.join(READINGS)}"
+            )
+        return self.reading == "earthquake"
+
+    def count_statement(self) -> str:
+        """The prepared statement that counts this reading's entries."""
+        return _COUNT_EARTHQUAKES if self._earthquakes() else _COUNT
+
     def statement(self) -> str:
-        """The prepared statement for this ordering, or a refusal naming it."""
+        """The prepared statement for this reading and ordering, or a refusal."""
+        pages = _EARTHQUAKE_PAGES if self._earthquakes() else _PAGES
         try:
-            return _PAGES[(self.order_by, self.descending)]
+            return pages[(self.order_by, self.descending)]
         except KeyError:
             raise ValueError(
                 f"cannot order the history by {self.order_by!r}; "
@@ -421,8 +499,9 @@ class HistoryStore:
 
         The single place a query reaches SQLite, and the reason it is worth
         having on its own: `statement` is not a string anybody assembled. It is
-        `_COUNT`, or one entry of `_PAGES` -- a table built once at import from
-        `ORDERABLE`, a tuple of column names written in this file. A key that
+        one of the counts, `_ARRIVALS`, or one entry of `_PAGES` or
+        `_EARTHQUAKE_PAGES` -- tables built once at import from `ORDERABLE`, a
+        tuple of column names written in this file. A key that
         is not in it raises in Python before getting here, which
         `test_an_order_the_schema_does_not_offer_is_refused` holds to.
 
@@ -442,8 +521,19 @@ class HistoryStore:
     def count(self, query: HistoryQuery | None = None) -> int:
         """How many rows match; a page of fifty still has to say "of nine hundred"."""
         request = query or HistoryQuery()
-        row = self._select(_COUNT, request.parameters()).fetchone()
+        row = self._select(request.count_statement(), request.parameters()).fetchone()
         return int(row[0])
+
+    def arrivals(self, correlation_id: str) -> list[EventRecord]:
+        """Every arrival of one earthquake, in the order they were recorded.
+
+        The per-earthquake reading shows one of them; this is the rest of the
+        answer (CA-115.5). An empty id ties nothing together, so it has none.
+        """
+        if not correlation_id:
+            return []
+        cursor = self._select(_ARRIVALS, {"correlation_id": correlation_id})
+        return [_from_row(row) for row in cursor]
 
     def query(self, request: HistoryQuery | None = None) -> list[EventRecord]:
         """The rows that match, ordered and paginated (REQ-HIS-005)."""

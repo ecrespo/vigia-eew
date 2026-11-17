@@ -262,3 +262,17 @@ def test_after_the_alert_the_screen_is_back_as_it_was(wiring) -> None:
     assert page.controls == [shown]
     assert navigation.screen_of(page.controls[0]) is window.view
     assert window.listing.query.min_magnitude == 5.0
+
+
+# --- T-162 · the history is grouped by the user's own order of networks ----------
+
+
+def test_the_history_is_handed_the_configured_order_of_networks(wiring, fake_shell) -> None:
+    """ADR-034, step 3: the rank that breaks a tie is REQ-ING-011's."""
+    from vigia_eew.ingest.registry import ordered_sources
+
+    window = wiring.open_history(fake_shell)
+
+    expected = tuple(spec.source for spec in ordered_sources(wiring.cfg))
+    assert expected  # the registry is not empty
+    assert window.listing.query.rank == expected

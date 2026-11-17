@@ -451,3 +451,91 @@ def test_turning_the_page_keeps_the_symbol_highlighted(long_store: HistoryStore)
 
     assert _selected_on_map(window) == chosen
     assert _selected_in_table(window) == []
+
+
+# --- T-162 · one earthquake, one symbol (REQ-HIS-009, CA-115.7) --------------------
+
+
+@pytest.fixture
+def twice(tmp_path: Path) -> HistoryStore:
+    """One earthquake that came from two networks, and one that came from one."""
+    from dataclasses import replace
+
+    store = HistoryStore(tmp_path / "twice.sqlite3")
+    store.open()
+    first = replace(_record(magnitude=5.0, event_id="e1"), source="EMSC", correlation_id="q1")
+    store.record(first)
+    store.record(
+        replace(first, source="USGS", source_event_id="u1", verdict="discarded", reason="duplicate")
+    )
+    store.record(replace(_record(magnitude=4.0, event_id="e2"), correlation_id="q2"))
+    yield store
+    store.close()
+
+
+def _earthquakes_on_map(window) -> list[str]:
+    return sorted(m.record.correlation_id for m in window.map.markers)
+
+
+def _read_per_earthquake(window, on: bool = True) -> None:
+    window.table.reading.value = on
+    window.table.reading.on_change(None)
+
+
+def test_per_earthquake_the_map_has_one_symbol_for_each(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice)
+    assert _earthquakes_on_map(window) == ["q1", "q1", "q2"]
+
+    _read_per_earthquake(window)
+
+    assert _earthquakes_on_map(window) == ["q1", "q2"]
+    assert _table_rows(window) == 2
+
+
+def test_switching_back_shows_every_arrival_again(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice)
+    _read_per_earthquake(window)
+
+    _read_per_earthquake(window, on=False)
+
+    assert _earthquakes_on_map(window) == ["q1", "q1", "q2"]
+
+
+def test_an_arrival_the_earthquake_reading_hides_stops_being_the_chosen_one(
+    twice: HistoryStore,
+) -> None:
+    """Chosen per arrival, then folded into its earthquake: nothing left to point at."""
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice)
+    window.table.choose(_row_id(window, "u1"))
+
+    _read_per_earthquake(window)
+
+    assert window.table.selected is None
+    assert _selected_on_map(window) == []
+    assert window.table.arrivals.visible is False
+
+
+def test_a_symbol_pressed_per_earthquake_lists_its_arrivals(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice)
+    _read_per_earthquake(window)
+
+    window.map.press(_row_id(window, "e1"))
+
+    assert window.table.arrivals.visible is True
+    assert len(window.table.arrivals.controls) == 1 + 2
+
+
+def test_the_window_hands_the_list_the_order_of_trust(twice: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    window = HistoryWindow(twice, rank=("USGS", "EMSC"))
+
+    assert window.listing.query.rank == ("USGS", "EMSC")

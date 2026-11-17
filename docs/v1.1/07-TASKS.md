@@ -23,8 +23,8 @@
 > **First batch: T-152 to T-155.** Run, review, adjust, and only then go on. F9 does not touch the
 > schema, the configuration or the pipeline, and it is verified with one command.
 >
-> **F9 and F10 are done** (2026-11-16): 848 tests, gate green. Next batch: **F11, T-161 and
-> T-162**.
+> **F9, F10 and F11 are done** (2026-11-16): gate green. Next batch: **F12**, which starts with
+> the spike **T-163** — its verdict can stop the phase.
 
 ## A constraint on every task
 
@@ -191,7 +191,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F11 · One earthquake, one point
 
-### [ ] T-161 · The per-earthquake reading in the store
+### [x] T-161 · The per-earthquake reading in the store — 2026-11-16
 - **What**: `HistoryQuery.reading` and the network rank; prepared statements for the earthquake
   reading in each ordering, its count, and `HistoryStore.arrivals()`.
 - **REQ**: REQ-HIS-009 · **CA**: CA-115.1, CA-115.2, CA-115.3, CA-115.4, CA-115.6 · **ADR**: ADR-034
@@ -202,8 +202,14 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   count is equal before and after; a test asserts `sqlite3.sqlite_version_info >= (3, 25)`.
 - **lat.md**: `history.md` — which arrival stands for an earthquake.
 - **Hours**: 3–6
+- **As built**: `HistoryQuery.reading` and `.rank`; `_EARTHQUAKE_PAGES`, one window-function
+  statement per ordering, and `_COUNT_EARTHQUAKES`. An arrival with an empty `correlation_id` is
+  its own earthquake — the design did not say, and grouping them all into one would be wrong. A
+  reading that is neither of the two is refused in Python, like an unknown ordering.
+- **Measured** on a copy of the maintainer's history (14 376 arrivals, 14 329 earthquakes): a page
+  per earthquake takes ~30 ms against ~1 ms per arrival; the count, ~7 ms. No index was added.
 
-### [ ] T-162 · The switch, and the arrivals of an earthquake
+### [x] T-162 · The switch, and the arrivals of an earthquake — 2026-11-16
 - **What**: a control to switch readings; the pager, the map and the status follow it; from an
   earthquake, its arrivals with network, verdict and reason.
 - **REQ**: REQ-HIS-009 · **CA**: CA-115.5, CA-115.7
@@ -213,6 +219,12 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Done**: in the earthquake reading the map has one marker per `correlation_id`; the arrivals of a
   two-network earthquake list both.
 - **Hours**: 3–5
+- **As built**: a switch above the table, **off by default** — the screen opens per arrival, as it
+  did. `HistoryList.set_reading` puts the reading in the query, so the pager, the total and the map
+  follow with no code of their own. Choosing an earthquake (a row, or its symbol) lists its
+  arrivals under the table; per arrival nothing is listed, since each is already a row. Clearing
+  the filters keeps the reading. The network rank comes from the wiring (`ordered_sources`), also
+  touching `wiring.py`, which the task did not list.
 
 ---
 

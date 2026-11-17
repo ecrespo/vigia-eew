@@ -515,3 +515,209 @@ def test_the_store_lists_the_verdicts_it_holds(tmp_path: Path) -> None:
 
     assert store.verdicts() == ["alerted", "discarded"]
     store.close()
+
+
+# --- T-161 · one earthquake, one row (REQ-HIS-009, ADR-034, HU-115) -------------
+
+_PER_EARTHQUAKE = HistoryQuery(reading="earthquake")
+
+
+def _two_networks(store: HistoryStore) -> None:
+    """One earthquake that alerted from EMSC and came again from USGS."""
+    store.record(_record(source="EMSC", source_event_id="e1", correlation_id="q1"))
+    store.record(
+        _record(
+            source="USGS",
+            source_event_id="u1",
+            correlation_id="q1",
+            magnitude=5.4,
+            verdict="discarded",
+            reason="duplicate",
+        )
+    )
+
+
+def test_the_engine_has_the_window_functions_the_reading_needs() -> None:
+    """ADR-034's statement uses `ROW_NUMBER() OVER`, which SQLite has from 3.25."""
+    assert sqlite3.sqlite_version_info >= (3, 25)
+
+
+def test_an_earthquake_from_two_networks_is_one_row_per_earthquake(store: HistoryStore) -> None:
+    """CA-115.1: once per earthquake, twice per arrival."""
+    _two_networks(store)
+
+    assert len(store.query(_PER_EARTHQUAKE)) == 1
+    assert store.count(_PER_EARTHQUAKE) == 1
+    assert len(store.query(HistoryQuery())) == 2
+    assert store.count(HistoryQuery()) == 2
+
+
+def test_reading_per_earthquake_changes_nothing_in_the_file(store: HistoryStore) -> None:
+    """CA-115.2: a reading, not a merge."""
+    _two_networks(store)
+
+    def rows_in_the_file() -> int:
+        return int(store._connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
+    before = rows_in_the_file()
+    for _ in range(3):
+        store.query(_PER_EARTHQUAKE)
+        store.count(_PER_EARTHQUAKE)
+        store.query(HistoryQuery())
+
+    assert rows_in_the_file() == before == 2
+
+
+def test_the_alerted_arrival_stands_for_the_earthquake(store: HistoryStore) -> None:
+    """CA-115.3, step 1 -- even when the alerted arrival was recorded last."""
+    store.record(
+        _record(
+            source="USGS",
+            source_event_id="u1",
+            correlation_id="q1",
+            verdict="discarded",
+            reason="radius",
+        )
+    )
+    store.record(_record(source="EMSC", source_event_id="e1", correlation_id="q1", magnitude=6.0))
+
+    (row,) = store.query(_PER_EARTHQUAKE)
+
+    assert (row.source, row.verdict, row.magnitude) == ("EMSC", "alerted", 6.0)
+
+
+def test_with_no_alert_the_arrival_that_prevailed_stands_for_it(store: HistoryStore) -> None:
+    """CA-115.4, step 2: the row nothing superseded, though it is not the first."""
+    first = store.record(
+        _record(
+            source="USGS",
+            source_event_id="u1",
+            correlation_id="q1",
+            verdict="discarded",
+            reason="radius",
+        )
+    )
+    store.record(
+        _record(
+            source="EMSC",
+            source_event_id="e1",
+            correlation_id="q1",
+            verdict="discarded",
+            reason="radius",
+        )
+    )
+    with store._connection as db:
+        db.execute("UPDATE events SET superseded_by = id + 1 WHERE id = ?", (first,))
+
+    (row,) = store.query(_PER_EARTHQUAKE)
+
+    assert row.source == "EMSC"
+
+
+def test_among_those_that_prevailed_the_best_ranked_network_stands_for_it(
+    store: HistoryStore,
+) -> None:
+    """CA-115.4, step 3: the user's own order of trust (REQ-ING-011)."""
+    for source in ("EMSC", "USGS", "GEOFON"):
+        store.record(
+            _record(
+                source=source,
+                source_event_id=source.lower(),
+                correlation_id="q1",
+                verdict="discarded",
+                reason="radius",
+            )
+        )
+
+    (row,) = store.query(HistoryQuery(reading="earthquake", rank=("GEOFON", "USGS", "EMSC")))
+    assert row.source == "GEOFON"
+
+    (row,) = store.query(HistoryQuery(reading="earthquake", rank=("USGS", "EMSC")))
+    assert row.source == "USGS"  # an unranked network goes after the ranked ones
+
+
+def test_with_nothing_else_to_tell_them_apart_the_earliest_recorded_stands_for_it(
+    store: HistoryStore,
+) -> None:
+    """Step 4: deterministic, whatever the ordering of the page."""
+    for source in ("USGS", "EMSC"):
+        store.record(
+            _record(
+                source=source,
+                source_event_id=source.lower(),
+                correlation_id="q1",
+                verdict="discarded",
+                reason="radius",
+            )
+        )
+
+    for descending in (True, False):
+        (row,) = store.query(HistoryQuery(reading="earthquake", descending=descending))
+        assert row.source == "USGS"
+
+
+def test_filters_apply_to_arrivals_before_they_are_grouped(store: HistoryStore) -> None:
+    """CA-115.6: filtered to USGS, the earthquake is there once, as USGS saw it."""
+    _two_networks(store)
+    store.record(_record(source="EMSC", source_event_id="e2", correlation_id="q2"))
+    only_usgs = HistoryQuery(reading="earthquake", sources=("USGS",))
+
+    (row,) = store.query(only_usgs)
+
+    assert (row.source, row.magnitude) == ("USGS", 5.4)
+    assert store.count(only_usgs) == 1
+
+
+def test_the_earthquake_reading_orders_and_pages_earthquakes(store: HistoryStore) -> None:
+    """The page is cut after grouping: three earthquakes are three entries."""
+    _two_networks(store)
+    for index, magnitude in enumerate((4.0, 6.5), start=2):
+        store.record(
+            _record(
+                source="EMSC",
+                source_event_id=f"e{index}",
+                correlation_id=f"q{index}",
+                magnitude=magnitude,
+            )
+        )
+    by_magnitude = HistoryQuery(reading="earthquake", order_by="magnitude", limit=2)
+
+    first = store.query(by_magnitude)
+    rest = store.query(HistoryQuery(reading="earthquake", order_by="magnitude", limit=2, offset=2))
+
+    assert [row.magnitude for row in first] == [6.5, 5.2]
+    assert [row.magnitude for row in rest] == [4.0]
+    assert store.count(by_magnitude) == 3
+
+
+def test_arrivals_with_no_correlation_id_are_each_their_own_earthquake(
+    store: HistoryStore,
+) -> None:
+    """Nothing ties them together, so nothing may merge them."""
+    store.record(_record(source="EMSC", source_event_id="e1", correlation_id=""))
+    store.record(_record(source="USGS", source_event_id="u1", correlation_id=""))
+
+    assert len(store.query(_PER_EARTHQUAKE)) == 2
+    assert store.count(_PER_EARTHQUAKE) == 2
+
+
+def test_a_reading_the_store_does_not_offer_is_refused(store: HistoryStore) -> None:
+    with pytest.raises(ValueError, match="reading"):
+        store.query(HistoryQuery(reading="continent"))
+    with pytest.raises(ValueError, match="reading"):
+        store.count(HistoryQuery(reading="continent"))
+
+
+def test_the_arrivals_of_an_earthquake_are_all_of_them(store: HistoryStore) -> None:
+    """CA-115.5: the per-earthquake reading hides arrivals; it does not lose them."""
+    _two_networks(store)
+    store.record(_record(source="EMSC", source_event_id="e2", correlation_id="q2"))
+
+    arrivals = store.arrivals("q1")
+
+    assert [(a.source, a.verdict, a.reason) for a in arrivals] == [
+        ("EMSC", "alerted", None),
+        ("USGS", "discarded", "duplicate"),
+    ]
+    assert store.arrivals("nobody") == []
+    assert store.arrivals("") == []

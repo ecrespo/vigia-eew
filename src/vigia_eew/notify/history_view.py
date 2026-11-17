@@ -135,12 +135,17 @@ class HistoryList:
         locale_code: str = DEFAULT_LOCALE,
         zone: str = VENEZUELA_ZONE,
         page_size: int = TABLE_ROW_LIMIT,
+        rank: Sequence[str] = (),
     ) -> None:
         self._store = store
         self._locale = locale_code
         self._zone = zone
         self.page_size = page_size
-        self.query = HistoryQuery(limit=page_size)
+        #: `rank` is the networks in the user's order of trust, best first. It
+        #: decides nothing until two arrivals of one earthquake are otherwise
+        #: equal (ADR-034), and it is handed in so the list need not know
+        #: where that order is configured.
+        self.query = HistoryQuery(limit=page_size, rank=tuple(rank))
         self.rows: list[Row] = []
         self.total = 0
         self.available_sources: list[str] = []
@@ -212,12 +217,41 @@ class HistoryList:
         self.set_filter(sources=tuple(names))
 
     def clear_filters(self) -> None:
+        # The reading is not a filter: it is how the set is looked at, and
+        # clearing what narrows the set leaves it alone.
         self.query = HistoryQuery(
             order_by=self.query.order_by,
             descending=self.query.descending,
             limit=self.page_size,
+            reading=self.query.reading,
+            rank=self.query.rank,
         )
         self.refresh()
+
+    # --- One row per arrival, or one per earthquake (REQ-HIS-009) ---
+
+    @property
+    def reading(self) -> str:
+        return self.query.reading
+
+    def set_reading(self, reading: str) -> None:
+        """Reads the same rows per arrival or per earthquake (ADR-034).
+
+        Everything that reads the query follows -- the rows, the total, the
+        whole set the map draws -- because the reading travels in it. It
+        returns to the first page for the reason a filter does.
+        """
+        self.set_filter(reading=reading)
+
+    def arrivals_of(self, record: EventRecord) -> list[Row]:
+        """Every arrival of that record's earthquake, worded as the table words them.
+
+        The per-earthquake reading shows one arrival and this is the rest
+        (CA-115.5): *it came by two networks and this one prevailed* is still
+        there to be read. An arrival tied to nothing is its own only arrival.
+        """
+        arrivals = self._store.arrivals(record.correlation_id) or [record]
+        return [self._format(arrival) for arrival in arrivals]
 
     def sort_by(self, column_key: str) -> None:
         """Sorts by a column, reversing it when it is already the one in use.
@@ -351,6 +385,8 @@ class HistoryView:
         #: The id of the row the user chose, or None. Kept by id rather than by
         #: position: the row may leave the page and still be the one chosen.
         self.selected: int | None = None
+        #: The record behind `selected`, kept from when it was last on the page.
+        self._chosen: EventRecord | None = None
         self._chosen_sources: list[str] = []
         filters = self._build_filters()
         self.table = self._build_table()
@@ -368,6 +404,7 @@ class HistoryView:
                         controls=[ft.Row(scroll=ft.ScrollMode.AUTO, controls=[self.table])],
                     ),
                 ),
+                self.arrivals,
                 self._build_pager(),
             ],
         )
@@ -404,6 +441,15 @@ class HistoryView:
             on_select=lambda _e: self._apply_verdict(),
         )
         self._source_chips = ft.Row(wrap=True, spacing=6, run_spacing=4, controls=[])
+        #: Off is one row per arrival, as stored; on is one per earthquake.
+        self.reading = ft.Switch(
+            label=t("history_reading_earthquake", loc),
+            value=self.listing.reading == "earthquake",
+            on_change=lambda _e: self._apply_reading(),
+        )
+        #: The arrivals of the chosen earthquake, under the table. A heading
+        #: and then one line each; hidden until there is one to describe.
+        self.arrivals = ft.Column(spacing=2, visible=False, controls=[])
         #: Which criterion each control sets, by the names REQ-HIS-005 uses.
         self.filters: dict[str, Any] = {
             "period": (self._since, self._until),
@@ -428,6 +474,7 @@ class HistoryView:
                     ],
                 ),
                 self._period_error,
+                self.reading,
                 ft.ResponsiveRow(
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     run_spacing=8,
@@ -535,6 +582,41 @@ class HistoryView:
         self._offer_what_is_there()
         if self._on_changed is not None:
             self._on_changed()
+        # After the listener: it may have let go of a row the set no longer holds.
+        self._show_arrivals()
+
+    def _show_arrivals(self) -> None:
+        """Lists the arrivals of the chosen earthquake, in the earthquake reading.
+
+        Per arrival every one of them is already a row, and the list would
+        only repeat the table. The record is remembered from when its row was
+        last on the page, so turning the page does not put the list away.
+        """
+        on_page = next(
+            (row.record for row in self.listing.rows if row.record.id == self.selected), None
+        )
+        if on_page is not None:
+            self._chosen = on_page
+        chosen = self._chosen
+        if (
+            self.selected is None
+            or chosen is None
+            or chosen.id != self.selected
+            or self.listing.reading != "earthquake"
+        ):
+            self.arrivals.visible = False
+            self.arrivals.controls = []
+            return
+        rows = self.listing.arrivals_of(chosen)
+        self.arrivals.controls = [
+            ft.Text(
+                t("history_arrivals", self._locale, count=len(rows)),
+                size=12,
+                weight=ft.FontWeight.BOLD,
+            ),
+            *(ft.Text(_arrival_line(row), size=12, selectable=True) for row in rows),
+        ]
+        self.arrivals.visible = True
 
     def _offer_what_is_there(self) -> None:
         """Lists the verdicts and networks the history holds (CA-114.3).
@@ -586,6 +668,10 @@ class HistoryView:
             self.listing.next_page()
         else:
             self.listing.previous_page()
+        self.refresh()
+
+    def _apply_reading(self) -> None:
+        self.listing.set_reading("earthquake" if self.reading.value else "arrival")
         self.refresh()
 
     def _apply_magnitude(self) -> None:
@@ -691,6 +777,12 @@ def _day(raw: str | None) -> Any:
         return date.fromisoformat(text)
     except ValueError:
         return _NOT_YET
+
+
+def _arrival_line(row: Row) -> str:
+    """One arrival of an earthquake: its network, what it said, and its verdict."""
+    verdict = f"{row.verdict} — {row.reason}" if row.reason else row.verdict
+    return f"{row.source} · {row.magnitude} · {verdict}"
 
 
 def _verdict_label(verdict: str, locale_code: str) -> str:
