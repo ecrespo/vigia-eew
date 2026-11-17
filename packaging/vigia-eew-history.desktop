@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Vigía-eew — History
+Name[es]=Vigía-eew — Histórico
+GenericName=Earthquake history
+GenericName[es]=Histórico de sismos
+Comment=Browse the earthquakes the agent evaluated, without starting it
+Comment[es]=Consultar los sismos que el agente evaluó, sin arrancarlo
+Exec=vigia-eew --history
+TryExec=vigia-eew
+Icon=vigia-eew
+Terminal=false
+Categories=System;Monitor;
+Keywords=vigia;history;histórico;historico;historial;sismo;earthquake;map;mapa;
+StartupNotify=false
+StartupWMClass=vigia-eew

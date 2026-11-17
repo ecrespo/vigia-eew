@@ -96,3 +96,23 @@ def test_macos_command_uses_afplay():
 
 def test_command_without_player_is_none():
     assert player_command("/a.wav", "linux", set()) is None
+
+
+# --- The suite is silent ------------------------------------------------------------
+
+
+def test_a_player_built_with_defaults_does_not_reach_the_machines_audio(capsys, monkeypatch):
+    """What `conftest.py` guarantees for every test that builds the real wiring.
+
+    Without it this plays the alarm on a developer's machine and, on a runner
+    with no audio, prints the terminal bell from a thread into another test.
+    """
+    import subprocess
+
+    ran: list[object] = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: ran.append(a))
+
+    SoundPlayer(sleep=lambda _s: None).play("critical")
+
+    assert ran == []
+    assert "\a" not in capsys.readouterr().out

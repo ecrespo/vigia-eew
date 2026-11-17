@@ -31,8 +31,13 @@ vigia-eew/
 │   ├── __init__.py
 │   ├── cli.py                  # entry point, flags, --simulate, --tui (dispatches to Application)
 │   ├── app.py                  # Application: run()/simulate()/run_tui() wiring (ADR-006/ADR-013)
-│   ├── tui.py                  # headless Textual dashboard + modal alert (--tui, RF-36)
+│   ├── tui.py                  # headless Textual dashboard, modal alert, history list (--tui, RF-36, ADR-041)
 │   ├── simulation.py           # simulated_event (M6.1 La Guaira)
+│   ├── backfill.py             # recovery of a period into the history; cannot alert (ADR-036)
+│   ├── shaking.py              # S-wave arrival at the reference point: pure (ADR-039)
+│   ├── drill.py                # is_due + DrillScheduler: the scheduled drill (ADR-040)
+│   ├── history_stats.py        # the figures of a filtered set: pure, two bases (ADR-038)
+│   ├── history_export.py       # the filtered set as CSV or GeoJSON: pure, no network (ADR-038)
 │   ├── config.py               # Settings (pydantic) + config.toml loading + first-run seeding
 │   ├── config.toml.example     # bundled template; seeded to the OS config path on first run (RF-24)
 │   ├── models.py                # SeismicEvent, AppState, signatures
@@ -45,6 +50,7 @@ vigia-eew/
 │   │   ├── __init__.py         # RawMessage (raw wrapper, source→pipeline)
 │   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconnection)
 │   │   ├── rest_usgs.py        # RESTReconciler (60 s poll, cursor)
+│   │   ├── catalogue.py        # reads a period from an FDSN catalogue, for the recovery (ADR-036)
 │   │   ├── rest_funvisis.py    # FUNVISISPoller (Venezuela-only local coverage, RF-38)
 │   │   └── rest_geofon.py      # GEOFONPoller (GFZ Potsdam fdsnws-event, text format, cursor, RF-39)
 │   ├── pipeline/
@@ -60,6 +66,11 @@ vigia-eew/
 │   │   ├── alert_window.py     # undismissable Flet alert + policy (ADR-030)
 │   │   ├── map_view.py         # flet-map builders: epicentre pin/caption, camera (ADR-030)
 │   │   ├── flet_shell.py       # FletShell: the one window, alert > screen > hidden (ADR-030)
+│   │   ├── navigation.py       # the bar between history, settings and About (ADR-031)
+│   │   ├── timelapse.py        # the playback's timeline: pure, steps by earthquake (ADR-035)
+│   │   ├── timelapse_view.py   # the playback's controls: play, pause, seek, speed, trail
+│   │   ├── history_stats_view.py # the summary: figures and bars built from containers (D-6)
+│   │   ├── history_list.py     # HistoryList: filters, paging, wording; no toolkit (ADR-041)
 │   │   ├── queue.py            # AlertQueue + asyncio↔UI bridge
 │   │   ├── controller.py       # AlertController (queue + window + sound + toast)
 │   │   └── sound.py            # audio layer by severity
@@ -310,6 +321,15 @@ unaffected).
 | RF-14 | `notify/toast.py`, `notify/presentation.py` | F4 |
 | RF-15..RF-19 | `notify/alert_window.py`, `notify/flet_shell.py`, `notify/map_view.py` (ADR-030) | F4 |
 | RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
+| REQ-HIS-005, 007, 008 · REQ-MAP-006, 007 | `notify/history_view.py` (`HistoryList` owns filters and paging), `notify/history_map.py` (markers, selection), `notify/history_window.py`, `timeutil.py` (`local_day_bounds`), `history.py` (`verdicts`) (v1.1, ADR-032, ADR-033) | F10 |
+| REQ-HIS-010..013 | `backfill.py` (the recovery; joins by `pipeline/dedup.py::same_earthquake`), `ingest/catalogue.py` (windows, pages, one retry), `ingest/registry.py` (`SourceSpec.recovery`), `history.py` (`record_recovered`, `near`, two retentions), `config.py` (four keys), `cli.py` (`--backfill`), `wiring.py` and `notify/history_window.py` (the *Recover* action), `notify/history_map.py` (third style) (v1.1, ADR-036, ADR-037) | F13 |
+| REQ-TLP-001..008 | `notify/timelapse.py` (pure `Timeline`: steps, frames, dwell), `notify/timelapse_view.py` (play, pause, seek, speed, trail), `notify/history_window.py` (feeds and paints it), `notify/history_map.py` (`strengths`), `wiring.py` (timer, pause on an alert) (v1.1, ADR-035) | F12 |
+| REQ-EST-001..003 · REQ-HIS-014 | `history_stats.py` (`summarise`: splits over earthquakes and arrivals, median latency over live arrivals), `notify/history_stats_view.py` (`describe`, `StatsView`), `history_export.py` (`write_csv`, `write_geojson`), `notify/history_window.py` (the *Summary* and *Export…* panels, `write_export`), `notify/history_view.py` (`HistoryList.whole`) |
+| REQ-HIS-015 | `tui.py` (`HistoryScreen`, `HistoryUnavailableScreen`, the `h` binding), `notify/history_list.py` (`HistoryList`, toolkit-free, shared with the window), `wiring.py` (`open_tui_history`, `close_tui_history`, `tui_history`), `app.py` (`run_tui`) |
+| REQ-ALE-011..013 | `shaking.py` (`estimate`, `unavailable_reason`), `notify/presentation.py` (`AlertData.shaking_arrival`, `shaking_line`), `notify/alert_window.py` and `tui.py` (`AlertScreen`) — the line, recounted once a second —, `notify/controller.py` (the clock, and the log when there is no estimate) |
+| REQ-UX-007..009 | `drill.py` (`is_due`, `DrillScheduler`), `config.py` (`[drill]`), `models.py` (`SeismicEvent.is_drill`, `LastDrill`), `state.py` (`drill_presented`, `drill_acknowledged`, `last_drill`), `notify/queue.py` (`idle`, `offer_drill`, a real alert displaces a drill), `notify/controller.py`, `notify/alert_window.py` and `tui.py` (the label, `close()`), `notify/about.py`, `wiring.py` (`build_drill_scheduler`) |
+| REQ-HIS-009 | `history.py` (`HistoryQuery.reading`/`rank`, the per-earthquake statements, `arrivals`), `notify/history_view.py` (the switch, `arrivals_of`), `wiring.py` (hands over the network order) (v1.1, ADR-034) | F11 |
+| REQ-GUI-011..013 | `cli.py` (`--history`), `app.py`, `wiring.py`, `notify/navigation.py`, `notify/flet_shell.py`, `packaging/` (v1.1, ADR-031) | F9 |
 | RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |
 | RF-21 | `simulation.py`, `cli.py` (`--simulate`), `app.py` | F5 |
 | RF-22, RF-23 | `autostart/*` | F6 |

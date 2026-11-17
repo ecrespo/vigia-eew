@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vigia-eew"
-version = "1.0.0"                       # semantic versioning (RF-27)
+version = "1.1.0"                       # semantic versioning (RF-27)
 description = "Real-time desktop seismic alert agent, impossible to ignore (EMSC push + USGS backup)."
 readme = "README.md"
 requires-python = ">=3.13"             # amendment E-01: 3.12 is security-only (RNF-11)
@@ -54,8 +54,10 @@ dependencies = [
     # API -- its major is the publication year, so a
     # ceiling would freeze the timezone rules themselves
     "pystray>=0.19.5,<0.20",      # system tray icon (RF-34/ADR-012)
-    "Pillow>=12.3.0,<13",         # tray icon image, pystray requirement (RF-34). Floor
-    # is the security floor: >=10.0 admitted 34 advisories
+    "Pillow>=13.0.0,<14",         # tray icon image, pystray requirement (RF-34). Floor
+    # is the security floor: >=10.0 admitted 34 advisories,
+    # and 12.x has four more (two code-execution) that are
+    # only fixed in 13.0.0 -- so the floor moved a major
     "textual>=8.2,<9",            # headless TUI dashboard (RF-36/ADR-013)
     "tomlkit>=0.13.3,<0.14",      # config writing that preserves the file's 46 comment
     # lines (REQ-CFG-009/ADR-019). `tomllib` stays the
@@ -142,6 +144,8 @@ ignore_missing_imports = true  # no published stubs/py.typed (RF-34)
 
 [tool.importlinter]
 root_package = "vigia_eew"
+# Needed to forbid a third-party import by name (the toolkit, below).
+include_external_packages = true
 
 # Capas, de arriba abajo. Una capa solo puede importar las que tiene debajo, y los
 # módulos separados por "|" están en la misma capa: tampoco pueden importarse entre
@@ -155,12 +159,13 @@ layers = [
     "vigia_eew.app",
     "vigia_eew.wiring",
     "vigia_eew.tui | vigia_eew.tray",
-    "vigia_eew.notify | vigia_eew.autostart",
+    "vigia_eew.notify | vigia_eew.autostart | vigia_eew.backfill",
+    "vigia_eew.history_stats | vigia_eew.history_export | vigia_eew.shaking",
     "vigia_eew.pipeline",
     "vigia_eew.ingest",
     "vigia_eew.simulation",
     "vigia_eew.supervisor | vigia_eew.state | vigia_eew.geoloc | vigia_eew.logging_conf | vigia_eew.config_writer | vigia_eew.history",
-    "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env",
+    "vigia_eew.models | vigia_eew.config | vigia_eew.geo | vigia_eew.geocode | vigia_eew.timeutil | vigia_eew.backoff | vigia_eew.i18n | vigia_eew.agent_state | vigia_eew.subprocess_env | vigia_eew.drill",
 ]
 
 # Lo que el pipeline decide no puede depender de cómo se presenta. Redundante con
@@ -195,6 +200,79 @@ modules = [
     "vigia_eew.notify",
     "vigia_eew.autostart",
 ]
+
+# The recovery of the history reads catalogues and writes to the history file.
+# It must not be able to alert: an earthquake from a month ago cannot open a
+# window (REQ-HIS-011, ADR-036). So it may import none of what alerts, supervises
+# or remembers what was alerted. Direct imports only: it shares the normaliser
+# and the deduplicator's predicate, and those modules have imports of their own.
+[[tool.importlinter.contracts]]
+name = "The recovery of the history cannot alert"
+type = "forbidden"
+source_modules = ["vigia_eew.backfill"]
+forbidden_modules = [
+    "vigia_eew.notify",
+    "vigia_eew.supervisor",
+    "vigia_eew.state",
+    "vigia_eew.pipeline.processor",
+    "vigia_eew.pipeline.filter",
+    "vigia_eew.tray",
+    "vigia_eew.tui",
+]
+allow_indirect_imports = true
+
+# The timeline decides what a playback shows and is checked with no screen and no
+# clock (ADR-035). It stays that way only while it imports neither the toolkit nor
+# anything that draws: this is the contract that fails if it does.
+[[tool.importlinter.contracts]]
+name = "The playback's timeline is pure"
+type = "forbidden"
+source_modules = ["vigia_eew.notify.timelapse"]
+forbidden_modules = [
+    "flet",
+    "flet_map",
+    "vigia_eew.notify.timelapse_view",
+    "vigia_eew.notify.history_map",
+    "vigia_eew.notify.history_view",
+    "vigia_eew.notify.history_window",
+    "vigia_eew.notify.flet_shell",
+]
+
+# The figures and the export read records and return a value or write to a file
+# somebody else opened (ADR-038). The export is the reading of REQ-HIS-006 made
+# checkable: a module that can reach no network library cannot transmit the
+# history. Neither draws. (The database is not listed: the record type lives in
+# `history`, which opens it; the tests on each module's own imports cover that.)
+[[tool.importlinter.contracts]]
+name = "The figures and the export are pure"
+type = "forbidden"
+source_modules = ["vigia_eew.history_stats", "vigia_eew.history_export"]
+forbidden_modules = [
+    "flet",
+    "flet_map",
+    "httpx",
+    "websockets",
+    "vigia_eew.notify",
+    "vigia_eew.ingest",
+    "vigia_eew.backfill",
+]
+
+# The terminal dashboard runs on machines with no display, and reads the history
+# through the list the window draws (ADR-041). That only holds while the list has
+# no toolkit in it, and while the dashboard reaches nothing that draws in Flet:
+# a terminal that loaded the graphical toolkit to list a history would fail where
+# it is needed most.
+[[tool.importlinter.contracts]]
+name = "The terminal frontend loads no graphical toolkit"
+type = "forbidden"
+source_modules = ["vigia_eew.tui", "vigia_eew.notify.history_list"]
+forbidden_modules = ["flet", "flet_map"]
+
+[[tool.importlinter.contracts]]
+name = "The history list belongs to no frontend"
+type = "forbidden"
+source_modules = ["vigia_eew.notify.history_list"]
+forbidden_modules = ["textual", "vigia_eew.notify.history_view", "vigia_eew.notify.history_map"]
 
 [tool.bandit]
 # SAST gate (security.yml). Only the shipped source is scanned (`-r src`); tests are

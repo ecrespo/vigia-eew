@@ -46,3 +46,49 @@ def test_the_fields_are_ordered_for_display():
     assert rows[0][1] == "Vigía-eew"
     assert rows[-1][1] == PROJECT_URL
     assert all(isinstance(label, str) and isinstance(value, str) for label, value in rows)
+
+
+# --- T-180 · the last drill on the About screen (CA-120.3, CA-120.4) ---------------
+
+
+def _drill_row(**kwargs) -> str:
+    rows = dict(about_info(locale_code="en", zone="UTC", **kwargs).rows())
+    return rows["Last drill"]
+
+
+def test_with_no_drill_yet_it_says_so():
+    assert _drill_row() == "none yet"
+
+
+def test_a_drill_that_was_acknowledged_says_when_and_that_it_was():
+    from datetime import UTC, datetime
+
+    from vigia_eew.models import LastDrill
+
+    drill = LastDrill(
+        presented_at=datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC),
+        acknowledged_at=datetime(2026, 12, 1, 14, 0, 41, tzinfo=UTC),
+    )
+
+    assert _drill_row(last_drill=drill) == "2026-12-01 14:00:03 · acknowledged"
+
+
+def test_a_drill_nobody_acknowledged_says_so():
+    from datetime import UTC, datetime
+
+    from vigia_eew.models import LastDrill
+
+    drill = LastDrill(presented_at=datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC))
+
+    assert _drill_row(last_drill=drill) == "2026-12-01 14:00:03 · not acknowledged"
+
+
+def test_the_drill_is_dated_in_the_users_zone_and_language():
+    from datetime import UTC, datetime
+
+    from vigia_eew.models import LastDrill
+
+    drill = LastDrill(presented_at=datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC))
+    rows = dict(about_info(locale_code="es", zone="America/Caracas", last_drill=drill).rows())
+
+    assert rows["Último simulacro"] == "2026-12-01 10:00:03 · sin reconocer"

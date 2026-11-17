@@ -68,6 +68,9 @@ mypy src                                # type check (strict = true)
 
 vigia-eew --help
 vigia-eew --simulate                    # injects a simulated earthquake (M6.1 La Guaira), no network
+vigia-eew --settings                    # the configuration panel alone, no agent and no tray
+vigia-eew --history                     # the earthquake history alone, no agent and no tray
+vigia-eew --backfill 90                 # recovers 90 days into the history from the catalogues, exits
 vigia-eew --check-config                # validates config.toml and exits
 vigia-eew --install-autostart           # installs autostart (systemd/LaunchAgent/task) and exits
 ```
@@ -135,7 +138,10 @@ UI loop runs on the main thread, ingestion lives in asyncio on a separate worker
 `AsyncioUiBridge` (in `notify/queue.py`) crosses events between both via a thread-safe
 queue + `FletShell.after()`. Flet drives **one window per process**, so `notify/flet_shell.py`
 (`FletShell`) decides what it shows: an alert > the open screen (responsive config panel,
-history, About) > hidden (agent) / quit (`--simulate`, `--settings`). `Application` (`app.py`) wires all of this together; it exposes
+history — with its map and a playback of it, `notify/timelapse.py` pure and
+`notify/timelapse_view.py` the control — and About, each carrying the navigation to the other
+two, `notify/navigation.py`) >
+hidden (agent) / quit (`--simulate`, `--settings`, `--history`). `Application` (`app.py`) wires all of this together; it exposes
 `execute()` (the full agent) and `simulate()` (injects the event from `simulation.py`
 without network, for `--simulate`).
 
@@ -147,6 +153,35 @@ User-facing text (alert window, toast, tray menu) is internationalized via `i18n
 (RF-35): the language is auto-detected from the OS locale by default, overridable with
 `[notification] language` in `config.toml` (`"auto"`/`"en"`/`"es"`), falling back to
 English for unsupported locales.
+
+`backfill.py` completes the history from the networks' FDSN catalogues (`--backfill DAYS`, or
+the history screen's *Recover* action): a path **separate from ingestion** that writes only to
+the history file, as a third verdict `recovered`. It reads periods through
+`ingest/catalogue.py`, shares the deduplicator's predicate (`same_earthquake`) to join an
+earthquake already known, and an import contract forbids it everything that can alert.
+
+The history screen also counts and writes out the filtered set: `history_stats.py` (pure) turns
+its two readings into figures — earthquakes for the splits per day, by magnitude and by verdict,
+arrivals for the split by network and each network's median latency over live arrivals — drawn
+by `notify/history_stats_view.py`; `history_export.py` (pure, no network library) writes it as
+CSV or GeoJSON to a path the user chose. An import contract keeps both pure.
+
+The list behind that screen, `notify/history_list.py` (`HistoryList`: filters, paging, wording),
+imports no toolkit, because two frontends draw it: `notify/history_view.py` in Flet and
+`tui.py`'s `HistoryScreen` in Textual (`h` on the `--tui` dashboard). Import contracts keep the
+list out of both toolkits and the dashboard out of Flet.
+
+The alert carries a line about the shaking: `shaking.py` (pure) estimates the S wave's arrival
+(3.5 km/s over the hypocentral distance), `notify/presentation.py::shaking_line` words it —
+remaining rounded down, elapsed as the ordinary case — and each alert recounts once a second.
+With no estimate the alert is whole and lacks the line.
+
+A **drill** is a simulated alert (`SeismicEvent.is_drill`, i.e. `source == "SIMULATED"`):
+`--simulate`, or the opt-in schedule (`[drill]`, `drill.py`'s `DrillScheduler`, one more
+supervised task). Every frontend labels it. `AlertQueue.offer_drill` takes one only when idle and
+not paused, and a real alert closes a drill unacknowledged — the windows' `close()` exists for
+that alone. `state.json`'s `last_drill` is **patched** into the file (`StateStore.drill_*`),
+because `--simulate` writes it from another process; About shows it.
 
 `autostart/` installs/uninstalls OS-native autostart (systemd `--user` on Linux,
 LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via

@@ -29,6 +29,7 @@ The HTTP client (`httpx`) and `sleep` are injected so it's testable without netw
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -111,7 +112,7 @@ class GEOFONPoller(FDSNPoller[GEOFONSource]):
             return None
 
         max_time: int | None = None
-        for feature in self._rows(text):
+        for feature in parse_rows(text, self._log):
             if not _is_earthquake(feature):
                 continue
             await self._output.put(RawMessage(source="GEOFON", action="create", feature=feature))
@@ -121,34 +122,53 @@ class GEOFONPoller(FDSNPoller[GEOFONSource]):
         return max_time
 
     def _rows(self, text: str) -> Iterator[dict[str, str]]:
-        """Yields one `{column: value}` dict per data row (API-SPEC §4.3).
+        """The rows of a body, logged under this poller's name."""
+        return parse_rows(text, self._log)
 
-        Split out from the enqueueing loop because they answer different
-        questions: this one is "what does the body say", the other is "what do
-        we do about it". Parsing a corrupt row is also far easier to test
-        without an event loop and a queue standing in the way.
-        """
-        columns: list[str] | None = None
-        for line in text.splitlines():
-            row = line.strip()
-            if not row:
-                continue
-            if row.startswith("#"):
-                # The (single) header names the columns for every following row.
-                columns = [c.strip() for c in row.lstrip("#").split("|")]
-                continue
-            if columns is None:
-                # A data row before any header: the shape is unknown, so the
-                # rest of the batch cannot be trusted either.
-                self._log.warning("geofon_no_header")
-                return
-            values = row.split("|")
-            if len(values) != len(columns):
-                self._log.warning(
-                    "geofon_malformed_row expected=%d got=%d", len(columns), len(values)
-                )
-                continue
-            yield {col: val.strip() for col, val in zip(columns, values, strict=True)}
+
+def parse_rows(text: str, log: logging.Logger) -> Iterator[dict[str, str]]:
+    """Yields one `{column: value}` dict per data row (API-SPEC §4.3).
+
+    Split out from the enqueueing loop because they answer different
+    questions: this one is "what does the body say", the other is "what do
+    we do about it". Parsing a corrupt row is also far easier to test
+    without an event loop and a queue standing in the way.
+
+    A module-level function because two readers need it: the live poller, and
+    the recovery of a period from the same catalogue (`ingest/catalogue.py`).
+    """
+    columns: list[str] | None = None
+    for line in text.splitlines():
+        row = line.strip()
+        if not row:
+            continue
+        if row.startswith("#"):
+            # The (single) header names the columns for every following row.
+            columns = [c.strip() for c in row.lstrip("#").split("|")]
+            continue
+        if columns is None:
+            # A data row before any header: the shape is unknown, so the
+            # rest of the batch cannot be trusted either.
+            log.warning("geofon_no_header")
+            return
+        values = row.split("|")
+        if len(values) != len(columns):
+            log.warning("geofon_malformed_row expected=%d got=%d", len(columns), len(values))
+            continue
+        yield {col: val.strip() for col, val in zip(columns, values, strict=True)}
+
+
+def rows_of(response: Any) -> list[dict[str, Any]]:
+    """Every row of a `format=text` answer, for the recovery of a period."""
+    body = response.text
+    if not isinstance(body, str):
+        raise ValueError("the catalogue's answer is not text")
+    return list(parse_rows(body, logging.getLogger(GEOFONPoller.LOGGER_NAME)))
+
+
+def is_earthquake(feature: dict[str, Any]) -> bool:
+    """Public name of the earthquake test, for the recovery."""
+    return _is_earthquake(feature)
 
 
 def _is_earthquake(feature: dict[str, str]) -> bool:

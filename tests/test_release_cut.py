@@ -115,3 +115,68 @@ def test_the_task_count_still_matches_what_the_plan_promised() -> None:
 
     listed = re.findall(r"^### \[[x ~!]\]", text, re.M)
     assert len(listed) == int(declared.group(1))
+
+
+# --- The v1.1.0 cut (T-182) ---------------------------------------------------------
+#
+# The same idea, for the next kit: what the cut claims is read by a gate. The
+# v1.1 plan's condition is a table rather than a numbered list, so what is
+# checked is what a repository can know -- the version, the notes, the options
+# a user is told about, and every task accounted for.
+
+V11_TASKS = REPO_ROOT / "docs" / "v1.1" / "07-TASKS.md"
+
+#: The v1.1 tasks that are not `[x]`, and the words each entry must carry for
+#: that to be a decision. T-182 is the cut itself: everything the repository
+#: controls is done, and what is left -- the tag, and the phases' exit criteria
+#: observed on the installed packages -- is the maintainer's to do.
+V11_OPEN: dict[str, tuple[str, ...]] = {
+    "T-182": ("tag", "Owed by the maintainer"),
+}
+
+
+def test_the_package_declares_the_v1_1_0_cut() -> None:
+    assert _declared_version() == "1.1.0"
+    assert _released_sections()[:2] == ["1.1.0", "1.0.0"]
+
+
+def test_the_lock_file_agrees_with_the_package() -> None:
+    """A lock that still says the old number is a build that ships it."""
+    lock = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8")
+    block = lock.split('name = "vigia-eew"', 1)[1].split("\n", 2)[1]
+
+    assert block == f'version = "{_declared_version()}"'
+
+
+def test_the_notes_of_the_release_name_what_it_ships() -> None:
+    text = CHANGELOG.read_text(encoding="utf-8")
+    notes = text.split("## [1.1.0]", 1)[1].split("## [1.0.0]", 1)[0]
+
+    for word in ("--history", "--backfill", "CSV", "GeoJSON", "drill", "shaking", "--tui"):
+        assert word in notes, f"the 1.1.0 notes do not mention {word}"
+
+
+def test_the_options_the_release_adds_are_offered_and_documented() -> None:
+    """`vigia-eew --help` lists them, and so does the README a user reads."""
+    from vigia_eew.cli import _build_parser
+
+    offered = _build_parser().format_help()
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    for option in ("--history", "--backfill"):
+        assert option in offered
+        assert option in readme
+    assert "[drill]" in readme
+
+
+def test_every_v1_1_task_is_done_or_openly_owed() -> None:
+    text = V11_TASKS.read_text(encoding="utf-8")
+    states = dict(
+        (task, state) for state, task in re.findall(r"^### \[([x ~!])\].*?(T-\d+)", text, re.M)
+    )
+
+    assert len(states) == 31, f"the kit planned 31 tasks; the register lists {len(states)}"
+    assert {task for task, state in states.items() if state != "x"} == set(V11_OPEN)
+    for task, words in V11_OPEN.items():
+        section = text.split(f"{task} ·", 1)[1].split("\n### ", 1)[0]
+        for word in words:
+            assert word in section, f"{task} does not say {word!r}"

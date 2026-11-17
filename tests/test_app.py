@@ -496,6 +496,74 @@ def test_closing_the_panel_ends_the_process(tmp_path):
     assert page.window.prevent_close is False  # the window is being destroyed
 
 
+# --- `--history` · the history with no agent behind it (REQ-GUI-011) ---
+
+
+def test_open_history_runs_the_history_on_its_own_window(monkeypatch, tmp_path):
+    """CA-113.1: no ingestion, no tray, no bridge: one window showing the history."""
+    import vigia_eew.wiring as wiring_mod
+
+    opened = []
+    monkeypatch.setattr(wiring_mod.Wiring, "open_history", lambda self, shell: opened.append(shell))
+    page = _Page()
+    run_ui, ran = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+
+    app.open_history()
+
+    assert len(ran) == 1
+    assert opened == [app._shell]
+    assert app._shell.standalone is True  # closing the history ends the run
+    assert app._tray_icon is None
+
+
+def test_a_history_that_cannot_be_opened_says_so(monkeypatch, tmp_path):
+    """CA-113.3: a window with a notice and its reason, not an empty window."""
+    import vigia_eew.wiring as wiring_mod
+    from vigia_eew.history import HistoryTooNew
+
+    def refuse(self):
+        raise HistoryTooNew("written by a newer version")
+
+    monkeypatch.setattr(wiring_mod.HistoryStore, "open", refuse)
+    page = _Page()
+    run_ui, _ = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+
+    app.open_history()
+
+    assert app._shell.screen_key == "history"
+    texts = _texts_of(page.controls[0])
+    assert any("history is not available" in text.lower() for text in texts)
+    assert any("written by a newer version" in text for text in texts)
+
+
+def _texts_of(control) -> list[str]:
+    """Every string a tree of Flet controls would put on screen."""
+    found: list[str] = []
+    seen: set[int] = set()
+
+    def walk(node) -> None:
+        if node is None or id(node) in seen or isinstance(node, (str, int, float, bool)):
+            return
+        seen.add(id(node))
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+            return
+        for name in ("value", "text", "label", "tooltip"):
+            value = getattr(node, name, None)
+            if isinstance(value, str):
+                found.append(value)
+            else:
+                walk(value)
+        for name in ("content", "controls", "title", "actions", "destinations"):
+            walk(getattr(node, name, None))
+
+    walk(control)
+    return found
+
+
 def test_simulate_shows_the_alert_and_ends_once_acknowledged(tmp_path):
     page = _Page()
     run_ui, _ = _run_with(page)
@@ -553,3 +621,404 @@ def test_the_tray_is_built_with_the_about_entry(tmp_path):
     app._build_tray()
 
     assert callable(captured["open_about"])
+
+
+def test_the_panel_reached_from_the_navigation_edits_the_file_of_this_run(tmp_path):
+    """`--history --config X`, then Settings on the bar: it has to be X's panel."""
+    path = tmp_path / "otro.toml"
+
+    app = Application(Settings(), config_path=path)
+
+    assert app.wiring.config_file == path
+
+
+# --- T-176 · the terminal reads the history through its own connection (ADR-041) ---
+
+
+def test_the_terminal_is_handed_the_same_list_the_window_reads(tmp_path, monkeypatch):
+    """Its own read connection, the user's zone and the user's order of trust."""
+    import vigia_eew.history as history_mod
+    from vigia_eew.notify.history_list import HistoryList
+
+    monkeypatch.setattr(history_mod, "default_history_path", lambda: tmp_path / "history.sqlite3")
+    cfg = Settings(notification=Notification(timezone="America/Bogota", sound=False))
+    app = Application(cfg, config_path=tmp_path / "config.toml")
+
+    listing = app.wiring.open_tui_history()
+
+    assert isinstance(listing, HistoryList)
+    assert listing.total == 0
+    assert listing._zone == "America/Bogota"
+    assert listing.query.rank  # the networks, in the order the deduplicator obeys
+    store = app.wiring._history_store
+    assert store is not None and store._db is not None
+
+    app.wiring.close_tui_history()
+
+    assert app.wiring._history_store is None
+    assert store._db is None
+
+
+def test_opening_the_terminal_history_does_not_prune_it(tmp_path, monkeypatch):
+    """A reader that pruned would delete rows because somebody looked."""
+    import vigia_eew.history as history_mod
+    import vigia_eew.wiring as wiring_mod
+
+    monkeypatch.setattr(history_mod, "default_history_path", lambda: tmp_path / "history.sqlite3")
+    made = []
+    real = wiring_mod.HistoryStore
+
+    def recording(*args, **kwargs):
+        made.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(wiring_mod, "HistoryStore", recording)
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+
+    app.wiring.open_tui_history()
+    app.wiring.close_tui_history()
+
+    assert made == [{"prune_on_open": False}]
+
+
+def test_a_history_the_terminal_cannot_open_raises_for_the_dashboard_to_say(tmp_path, monkeypatch):
+    import pytest
+
+    import vigia_eew.wiring as wiring_mod
+    from vigia_eew.history import HistoryTooNew
+
+    def refuse(self):
+        raise HistoryTooNew("written by a newer version")
+
+    monkeypatch.setattr(wiring_mod.HistoryStore, "open", refuse)
+    app = Application(Settings(), config_path=tmp_path / "config.toml")
+
+    with pytest.raises(HistoryTooNew):
+        app.wiring.open_tui_history()
+
+    assert app.wiring._history_store is None
+
+
+def test_run_tui_gives_the_dashboard_the_way_to_the_history(tmp_path, monkeypatch):
+    import vigia_eew.tui as tui_mod
+
+    built = []
+
+    class _Dashboard:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+
+        def bind_controller(self, controller):
+            pass
+
+        def bind_supervisor(self, supervisor):
+            pass
+
+        def push_alert(self, *args):
+            pass
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(tui_mod, "VigiaTuiApp", _Dashboard)
+    for simulate in (True, False):
+        app = Application(
+            Settings(notification=Notification(sound=False)),
+            config_path=tmp_path / "config.toml",
+        )
+        monkeypatch.setattr(app, "_prepare", lambda **_kw: None)
+
+        app.run_tui(simulate=simulate)
+
+        assert built[-1]["open_history"] == app.wiring.open_tui_history
+        assert built[-1]["close_history"] == app.wiring.close_tui_history
+
+
+# --- T-180 · the scheduled drill, wired (REQ-UX-007, ADR-040) ----------------------
+
+from vigia_eew.config import Drill  # noqa: E402
+
+
+def _drilling_app(tmp_path, **cfg_kw) -> Application:
+    return Application(
+        Settings(notification=Notification(sound=False), **cfg_kw),
+        state=StateStore(tmp_path / "state.json"),
+    )
+
+
+def _window_factory(windows: list):
+    class _Window:
+        def __init__(self, data, on_acknowledge):
+            self.data, self.on_acknowledge, self.closed = data, on_acknowledge, False
+
+        def refresh(self, data):
+            self.data = data
+
+        def close(self):
+            self.closed = True
+
+    def create(data, severity, on_acknowledge):
+        windows.append(_Window(data, on_acknowledge))
+        return windows[-1]
+
+    return create
+
+
+def test_with_the_default_configuration_there_is_no_drill_task(tmp_path):
+    """CA-120.2: switched off, nothing ever wakes to ask."""
+    app = _drilling_app(tmp_path)
+    app.wiring.build_tui_controller(_FakeTuiApp(), on_acknowledge=lambda _ev: None)
+
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
+
+    assert "drill" not in sup.names
+
+
+def test_switched_on_the_drill_is_one_more_supervised_task(tmp_path):
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True, interval_days=7))
+    app.wiring.build_tui_controller(_FakeTuiApp(), on_acknowledge=lambda _ev: None)
+
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
+
+    assert sup.names[-1] == "drill"
+
+
+def test_with_nothing_to_show_a_drill_on_there_is_no_drill_task(tmp_path):
+    """No controller was built: there is no alert to test."""
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+
+    sup = app.wiring.build_supervisor(asyncio.Queue(), object())
+
+    assert "drill" not in sup.names
+
+
+def test_the_scheduler_reads_the_interval_and_the_last_drill_of_this_machine(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True, interval_days=7))
+    tui_app = _FakeTuiApp()
+    app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
+    now = datetime(2026, 12, 1, 14, 0, tzinfo=UTC)
+    app.state.drill_presented(now - timedelta(days=6))
+    scheduler = app.wiring.build_drill_scheduler(now=lambda: now)
+
+    assert scheduler.check() is False
+    assert tui_app.pushed == []
+
+    app.state.drill_presented(now - timedelta(days=8))
+    assert scheduler.check() is True
+    assert len(tui_app.pushed) == 1
+    assert tui_app.pushed[0][0].drill is True
+
+
+def test_a_drill_shown_by_the_agent_is_recorded_and_then_acknowledged(tmp_path):
+    """CA-120.3, through the real wiring and the real state file."""
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    assert ctrl.offer_drill(simulated_event(app.cfg.reference, app.cfg.severity)) is True
+    on_disk = StateStore(tmp_path / "state.json")
+    on_disk.load()
+    assert on_disk.state.last_drill is not None
+    assert on_disk.state.last_drill.acknowledged_at is None
+
+    windows[0].on_acknowledge()
+
+    on_disk.load()
+    assert on_disk.state.last_drill.acknowledged_at is not None
+
+
+def test_a_drill_a_real_alert_replaced_stays_unacknowledged_on_record(tmp_path):
+    """CA-120.4."""
+    app = _drilling_app(tmp_path)
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+    ctrl.offer_drill(simulated_event(app.cfg.reference, app.cfg.severity))
+
+    real = simulated_event(app.cfg.reference, app.cfg.severity).model_copy(
+        update={"id": "real", "source": "EMSC"}
+    )
+    ctrl.enqueue(real)
+    windows[1].on_acknowledge()
+
+    assert windows[0].closed is True
+    assert app.state.last_drill().acknowledged_at is None
+
+
+def test_on_the_desktop_the_offer_crosses_to_the_ui_thread(tmp_path, fake_shell):
+    """The scheduler runs on the worker loop; the controller lives on the UI one."""
+    from datetime import UTC, datetime
+
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+    ctrl = app.wiring.build_gui_controller(
+        fake_shell, on_acknowledge=lambda _ev: None, worker_loop=lambda: None
+    )
+    scheduler = app.wiring.build_drill_scheduler(now=lambda: datetime(2026, 12, 1, tzinfo=UTC))
+
+    assert scheduler.check() is True
+    assert ctrl.alert_queue.current is None  # nothing touched from this thread
+
+    fake_shell.run_pending()
+
+    assert ctrl.alert_queue.current is not None and ctrl.alert_queue.current.is_drill
+    assert len(fake_shell.alerts) == 1
+
+
+def test_paused_notifications_postpone_the_drill(tmp_path):
+    """CA-120.10."""
+    from datetime import UTC, datetime
+
+    app = _drilling_app(tmp_path, drill=Drill(enabled=True))
+    tui_app = _FakeTuiApp()
+    ctrl = app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
+    scheduler = app.wiring.build_drill_scheduler(now=lambda: datetime(2026, 12, 1, tzinfo=UTC))
+    ctrl.pause()
+
+    scheduler.check()
+    assert tui_app.pushed == [] and app.state.last_drill() is None
+
+    ctrl.resume()
+    assert tui_app.pushed == []  # it did not queue up to ambush the resume
+    scheduler.check()
+    assert len(tui_app.pushed) == 1
+
+
+def test_the_about_screen_is_given_the_last_drill(tmp_path, monkeypatch, fake_shell):
+    from datetime import UTC, datetime
+
+    import vigia_eew.notify.about_window as about_window
+
+    seen = {}
+    monkeypatch.setattr(
+        about_window, "about_view", lambda **kwargs: seen.update(kwargs) or object()
+    )
+    app = _drilling_app(tmp_path)
+    app.state.drill_presented(datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC))
+
+    app.wiring.open_about(fake_shell)
+
+    assert seen["last_drill"].presented_at == datetime(2026, 12, 1, 14, 0, 3, tzinfo=UTC)
+    assert seen["zone"] == app.cfg.notification.timezone
+
+
+# --- T-179 · a drill is not an earthquake (CA-120.6, X-3) --------------------------
+
+
+def test_a_simulated_alert_never_reaches_the_history(tmp_path):
+    """The history is written by the pipeline; a drill is injected past it."""
+    from vigia_eew.history import HistoryStore
+
+    app = _drilling_app(tmp_path)
+    writer = app.wiring.build_history()
+    assert writer is not None
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(simulated_event(app.cfg.reference, app.cfg.severity))
+    windows[0].on_acknowledge()
+
+    assert writer.pending == 0
+    app.wiring.close_history()
+    store = HistoryStore(prune_on_open=False).open()
+    try:
+        assert store.count() == 0
+        assert "SIMULATED" not in store.sources()
+    finally:
+        store.close()
+
+
+# --- The configured timezone reaches every notification (RNF-12) -------------------
+#
+# `[notification] timezone` already governed the freshness filter, the history
+# and the About screen. The alert and its toast were built without it and fell
+# back to Caracas, whatever the file said.
+
+
+def _event_at_noon_utc():
+    from datetime import UTC, datetime
+
+    return simulated_event(
+        ReferencePoint(), Settings().severity, now=datetime(2026, 6, 28, 12, 0, tzinfo=UTC)
+    )
+
+
+def _zoned_app(tmp_path, zone: str) -> Application:
+    return Application(
+        Settings(notification=Notification(sound=False, timezone=zone)),
+        state=StateStore(tmp_path / "state.json"),
+    )
+
+
+def test_the_alert_shows_the_time_in_the_configured_timezone(tmp_path):
+    app = _zoned_app(tmp_path, "Europe/Madrid")
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert windows[0].data.local_time == "2026-06-28 14:00:00"
+
+
+def test_the_default_timezone_is_still_caracas(tmp_path):
+    app = Application(
+        Settings(notification=Notification(sound=False)),
+        state=StateStore(tmp_path / "state.json"),
+    )
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert windows[0].data.local_time == "2026-06-28 08:00:00"
+
+
+def test_the_terminal_alert_shows_the_configured_timezone_too(tmp_path):
+    app = _zoned_app(tmp_path, "Asia/Tokyo")
+    tui_app = _FakeTuiApp()
+    ctrl = app.wiring.build_tui_controller(tui_app, on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert tui_app.pushed[0][0].local_time == "2026-06-28 21:00:00"
+
+
+def test_the_tray_remembers_the_last_alert_in_the_configured_timezone(tmp_path):
+    app = _zoned_app(tmp_path, "Europe/Madrid")
+    ctrl = app.wiring.build_controller(_window_factory([]), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert "2026-06-28 14:00:00" in app._agent_state.last_alert
+
+
+def test_the_desktop_toast_is_given_the_configured_timezone(tmp_path, fake_shell, monkeypatch):
+    import vigia_eew.wiring as wiring_mod
+
+    built = {}
+    real = wiring_mod.Toaster
+
+    def recording(**kwargs):
+        built.update(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(wiring_mod, "Toaster", recording)
+    app = _zoned_app(tmp_path, "Europe/Madrid")
+
+    app.wiring.build_gui_controller(
+        fake_shell, on_acknowledge=lambda _ev: None, worker_loop=lambda: None
+    )
+
+    assert built["zone"] == "Europe/Madrid"
+
+
+def test_a_timezone_nobody_knows_shows_utc_rather_than_no_alert(tmp_path):
+    """Fail-safe, like every other reader of this key: the alert still appears."""
+    app = _zoned_app(tmp_path, "Mars/Olympus_Mons")
+    windows: list = []
+    ctrl = app.wiring.build_controller(_window_factory(windows), on_acknowledge=lambda _ev: None)
+
+    ctrl.enqueue(_event_at_noon_utc())
+
+    assert len(windows) == 1
+    assert windows[0].data.local_time == "2026-06-28 12:00:00"

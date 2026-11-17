@@ -151,3 +151,16 @@ def test_a_disabled_source_produces_no_task(tmp_path) -> None:
     still_on = [s.task_name for s in SOURCE_REGISTRY if s.is_enabled(off)]
     assert "geofon" not in still_on
     assert still_on == [name for name in enabled if name != "geofon"]
+
+
+# --- T-169 · every source says whether it can be recovered (ADR-036 §2) -----------
+
+
+def test_a_source_that_says_nothing_about_recovery_fails_at_composition() -> None:
+    """A fifth network cannot be silently left out of what a recovery reports."""
+    from dataclasses import replace
+
+    silent = replace(SOURCE_REGISTRY[0], recovery=None)
+
+    with pytest.raises(UnknownSource, match="EMSC.*recover"):
+        validate_registry((silent, *SOURCE_REGISTRY[1:]))

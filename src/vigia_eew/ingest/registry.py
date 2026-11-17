@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from vigia_eew.config import by_priority
 from vigia_eew.ingest import RawMessage, rest_funvisis, rest_geofon, rest_usgs, ws_emsc
+from vigia_eew.ingest.catalogue import Catalogue, NotRecoverable, features_of
 
 if TYPE_CHECKING:
     from vigia_eew.agent_state import AgentState
@@ -74,6 +75,11 @@ class SourceSpec:
         make_task: builds the supervised coroutine factory from the context.
         to_fields: translates a raw payload into the internal contract's
             fields -- the anti-corruption layer for this source's format.
+        recovery: how to read a past period from this source's catalogue, or
+            the reason it cannot be read (ADR-036). Declared rather than
+            inferred: a source that says nothing fails `validate_registry`,
+            so a network added later cannot be silently missing from what a
+            recovery reports.
     """
 
     source: Source
@@ -81,6 +87,7 @@ class SourceSpec:
     settings_of: Callable[[Settings], SourceSettings]
     make_task: Callable[[IngestContext], TaskFactory]
     to_fields: Callable[[RawMessage], dict[str, Any]]
+    recovery: Catalogue | NotRecoverable | None = None
 
     def is_enabled(self, cfg: Settings) -> bool:
         """Whether this source runs at all (RF-12)."""
@@ -129,6 +136,11 @@ SOURCE_REGISTRY: tuple[SourceSpec, ...] = (
         settings_of=lambda cfg: cfg.sources_emsc,
         make_task=_emsc_task,
         to_fields=ws_emsc.to_fields,
+        # The catalogue's `properties` are the WebSocket's, so one translation
+        # reads both; it lives at a URL of its own on the same host.
+        recovery=Catalogue(
+            url_of=lambda cfg: cfg.sources_emsc.catalog_url, format="json", parse=features_of
+        ),
     ),
     SourceSpec(
         source="USGS",
@@ -136,6 +148,12 @@ SOURCE_REGISTRY: tuple[SourceSpec, ...] = (
         settings_of=lambda cfg: cfg.sources_usgs,
         make_task=_usgs_task,
         to_fields=rest_usgs.to_fields,
+        recovery=Catalogue(
+            url_of=lambda cfg: cfg.sources_usgs.url,
+            format="geojson",
+            parse=features_of,
+            extra={"eventtype": "earthquake"},  # as the live poller asks
+        ),
     ),
     SourceSpec(
         source="FUNVISIS",
@@ -143,6 +161,12 @@ SOURCE_REGISTRY: tuple[SourceSpec, ...] = (
         settings_of=lambda cfg: cfg.sources_funvisis,
         make_task=_funvisis_task,
         to_fields=rest_funvisis.to_fields,
+        # `maravilla.json` is the twenty most recent events and takes no
+        # parameters. Said here, so that a recovery can say it to the user.
+        recovery=NotRecoverable(
+            reason="the service offers no query by date",
+            reason_key="backfill_no_query_by_date",
+        ),
     ),
     SourceSpec(
         source="GEOFON",
@@ -150,6 +174,12 @@ SOURCE_REGISTRY: tuple[SourceSpec, ...] = (
         settings_of=lambda cfg: cfg.sources_geofon,
         make_task=_geofon_task,
         to_fields=rest_geofon.to_fields,
+        recovery=Catalogue(
+            url_of=lambda cfg: cfg.sources_geofon.url,
+            format="text",
+            parse=rest_geofon.rows_of,
+            keep=rest_geofon.is_earthquake,
+        ),
     ),
 )
 
@@ -177,6 +207,12 @@ def validate_registry(registry: tuple[SourceSpec, ...] = SOURCE_REGISTRY) -> Non
     missing = INGESTED_SOURCES - {spec.source for spec in registry}
     if missing:
         raise UnknownSource(f"source spec missing from the registry: {', '.join(sorted(missing))}")
+    silent = sorted(spec.source for spec in registry if spec.recovery is None)
+    if silent:
+        raise UnknownSource(
+            f"{', '.join(silent)}: the source says neither how to recover a past period "
+            "from its catalogue nor why it cannot be recovered"
+        )
 
 
 def ordered_sources(

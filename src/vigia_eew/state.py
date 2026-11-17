@@ -12,13 +12,14 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from platformdirs import user_data_dir
 
 from vigia_eew.config import APP_NAME, ReferencePoint
-from vigia_eew.models import AlertedId, AppState, DetectedLocation, EventSignature
+from vigia_eew.models import AlertedId, AppState, DetectedLocation, EventSignature, LastDrill
 
 STATE_FILE_NAME = "state.json"
 # Maximum age of ids/signatures before pruning them (DATA-MODEL §2.2).
@@ -36,6 +37,9 @@ class StateStore:
     def __init__(self, path: Path | str | None = None) -> None:
         self.path = Path(path) if path is not None else default_state_path()
         self._state: AppState = AppState()
+        # The pipeline saves from the worker thread and a drill is recorded
+        # from the UI one: one writer at a time.
+        self._lock = threading.RLock()
 
     @property
     def state(self) -> AppState:
@@ -60,9 +64,16 @@ class StateStore:
 
     def save(self) -> None:
         """Persists the state to disk atomically."""
+        with self._lock:
+            # `--simulate` may have recorded a drill from another process
+            # since this one last wrote: keep it rather than erase it.
+            self._adopt_newer_drill()
+            # pydantic v2: JSON serialization with ISO-8601 datetimes.
+            self._write(self._state.model_dump_json(indent=2))
+
+    def _write(self, content: str) -> None:
+        """Replaces the file with `content`, whole or not at all."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        # pydantic v2: JSON serialization with ISO-8601 datetimes.
-        content = self._state.model_dump_json(indent=2)
         # Atomic write: write to a temp file in the same directory and replace.
         fd, tmp = tempfile.mkstemp(dir=self.path.parent, suffix=".tmp")
         try:
@@ -74,6 +85,70 @@ class StateStore:
             if os.path.exists(tmp):
                 os.unlink(tmp)
             raise
+
+    # --- The last drill (ADR-040) ---
+    #
+    # Unlike every other field, this one is written by two processes: the
+    # agent, and `vigia-eew --simulate` run beside it. So a drill is recorded
+    # by **patching the file as it is on disk**, never by writing this
+    # process's memory over it -- `--simulate` read the state when it started,
+    # and writing that snapshot back minutes later would undo an alerted id
+    # the agent saved meanwhile, and with it "an earthquake alerts once".
+    # @lat: [[state#The last drill is patched into the file, not saved over it]]
+
+    def last_drill(self) -> LastDrill | None:
+        """The last drill this machine showed, whichever process recorded it."""
+        with self._lock:
+            self._adopt_newer_drill()
+            return self._state.last_drill
+
+    def drill_presented(self, when: datetime | None = None) -> None:
+        """Records that a drill was put on screen; nobody has acknowledged it yet."""
+        with self._lock:
+            self._state.last_drill = LastDrill(presented_at=when or datetime.now(UTC))
+            self._patch_drill()
+
+    def drill_acknowledged(self, when: datetime | None = None) -> None:
+        """Records that the drill on record was acknowledged. No drill, no record."""
+        with self._lock:
+            drill = self._state.last_drill
+            if drill is None:
+                return
+            drill.acknowledged_at = when or datetime.now(UTC)
+            self._patch_drill()
+
+    def _on_disk(self) -> dict[str, object] | None:
+        """The file as JSON, or None when there is none that can be read."""
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _patch_drill(self) -> None:
+        """Writes `last_drill`, and only it, into the file as it is on disk."""
+        drill = self._state.last_drill
+        data = self._on_disk()
+        if data is None:
+            # No file yet, or one nobody can read: this process's state is
+            # all there is.
+            self._write(self._state.model_dump_json(indent=2))
+            return
+        data["last_drill"] = None if drill is None else drill.model_dump(mode="json")
+        self._write(json.dumps(data, indent=2))
+
+    def _adopt_newer_drill(self) -> None:
+        """Takes the drill on disk when it is later than the one in memory."""
+        data = self._on_disk()
+        if data is None or not data.get("last_drill"):
+            return
+        try:
+            found = LastDrill.model_validate(data["last_drill"])
+        except ValueError:
+            return
+        mine = self._state.last_drill
+        if mine is None or found.presented_at > mine.presented_at:
+            self._state.last_drill = found
 
     # --- Domain operations ---
 

@@ -86,3 +86,28 @@ updates that do not persist on their own. Grouping them by subject would hide th
 
 So: a facade over one atomic document, on purpose. The rule that follows is that nothing outside
 `StateStore` writes `state.json`, and nothing inside it writes anything else.
+
+## The last drill is patched into the file, not saved over it
+
+`state.json` gained one optional field, `last_drill`: when a simulated alert was last put on
+screen, and when it was acknowledged — or null if it never was (ADR-040).
+
+It is operating state — *when did this machine last prove it can alert* — not an earthquake, so
+it lives here and not in the history. Only the last one is kept; a log of drills is what the
+application log already is. The schema version stays at 1: the field is optional, a file written
+before it loads, and an older agent ignores it.
+
+**It is the one field two processes write.** The agent records its scheduled drills, and
+`vigia-eew --simulate`, run beside it, records its own. `--simulate` read the state when it
+started; if it wrote that snapshot back when the user acknowledged the alert minutes later, it
+would undo whatever the agent had saved since — an alerted id among it, and with that the rule
+that an earthquake alerts once.
+
+So [[src/vigia_eew/state.py#StateStore#drill_presented]] and `drill_acknowledged` **patch the
+field into the file as it is on disk** and write nothing else of this process's memory. And
+[[src/vigia_eew/state.py#StateStore#save]], the agent's ordinary full write, first adopts a drill
+on disk that is later than the one it holds, so it does not erase what `--simulate` recorded. The
+About screen reads through the same adoption, so it shows a drill whichever process ran it.
+
+Saving now takes a lock: the pipeline saves from the worker thread and a drill is recorded from
+the UI one.

@@ -45,6 +45,31 @@ networks, and this one prevailed*.
 A revision from the same network replaces its row rather than adding one, which is the rule
 [[lat.md/pipeline#Deduplication]] already applies upstream.
 
+## Which arrival stands for an earthquake
+
+Read per earthquake, one arrival of each `correlation_id` is kept, chosen by a fixed order in
+[[src/vigia_eew/history.py#HistoryQuery]]'s statements (ADR-034, REQ-HIS-009).
+
+The order: the arrival that alerted; else one nothing superseded; else the best-ranked network
+(the user's own order, the one [[lat.md/pipeline#Deduplication]] obeys); else the lowest row id.
+What the user was told is what the earthquake was, for them — so the alerted row wins even when
+a better-ranked network also reported it.
+
+It is a reading, not a table. A materialised `earthquakes` table would be a second source of
+truth to keep in step with every write. Grouping in Python would page and count rows that had
+not been grouped yet, so the window function does it inside the statement, one per ordering.
+
+The filters apply to arrivals **first**, and what matches is grouped after. Filtered to USGS, an
+earthquake EMSC alerted appears once, as USGS saw it: the filter still means what it means per
+arrival. An arrival with no correlation id is tied to nothing and stands alone, rather than
+merging with every other arrival that has none.
+
+The rank travels as one bound, delimited string — a network's position in it is its rank — for
+the reason the source filter does: nothing is interpolated. The screen's switch only sets the
+reading on the query, so the pager, the total and the map follow without knowing about it;
+[[src/vigia_eew/notify/history_list.py#HistoryList]]`.arrivals_of()` gives back the arrivals the
+reading folded away.
+
 ## Times are text, and that is deliberate
 
 SQLite has no date type. Stored as ISO-8601 with an offset, lexical order is chronological, so
@@ -57,7 +82,8 @@ earthquake was then.
 
 ## Retention is where an admitted guess lives
 
-Entries older than the configured retention are removed when the agent opens the file.
+Entries older than the configured retention are removed when the agent opens the file. Recovered
+entries have a retention of their own: [[lat.md/history#Recovered is a verdict, not a column]].
 
 Ninety days is an **estimate, not a measurement**. Discards far outnumber alerts and the volume
 depends on global seismicity, so the figure is configurable from the start precisely because it is
@@ -68,12 +94,87 @@ the time and would still need supervising, restarting and shutting down; the his
 while the agent runs, so bounding it at each start is equivalent with far less machinery — the
 same argument [[lat.md/state#Pruning happens where the state grows]] settled.
 
+## Recovered is a verdict, not a column
+
+An arrival read from a catalogue afterwards is stored with the verdict `recovered`, beside
+`alerted` and `discarded`. No column was added and the schema is still version 1 (ADR-037).
+
+The verdict column already answers *"what did the agent do with this arrival?"*, and *"it was not
+watching"* is an answer to that question, not a second question. A `provenance` column would
+allow *alerted and recovered*, a state REQ-HIS-011 forbids, and would need the first migration
+of a user's own record just to make it representable.
+
+Who may overwrite whom is decided by two statements in
+[[src/vigia_eew/history.py#HistoryStore]]. The live `record()` replaces the row of the same
+arrival, as it always did, so an arrival the agent later evaluates takes the agent's verdict.
+`record_recovered()` inserts with `DO NOTHING`: it can never replace what the agent decided at
+the time, which is the most valuable datum in the file.
+
+Recovered rows have **their own retention**, 365 days against 90 (decision D-5): recovering a
+year and losing it at the next start would not be a feature. One `DELETE` applies both cut-offs,
+told apart by the verdict, so changing one figure cannot touch the other kind of row. It is also
+how far back a recovery may ask — recovering what the next start deletes is not a feature either.
+
+One consequence nobody chose: an earthquake the agent alerted on **and** that was also recovered
+from another network loses its evaluated row at 90 days and keeps the recovered one. From then
+it reads as *recovered*. That is what two retentions mean; the remedy is `retention_days`.
+
+A v1.0 agent pointed at this file draws `recovered` as a discard, because an unknown verdict is
+drawn rather than dropped. Degraded on a downgrade, not broken — and bumping the schema to
+prevent it would make a downgrade lose the whole history to protect a label.
+
+*Received live* is one predicate, `received_live()`, for everything that measures the agent.
+
+## Recovery is a separate path that writes only to the history
+
+[[src/vigia_eew/backfill.py#recover]] completes the history from the networks' catalogues. It is
+not an ingestor, and almost all of its design is what it cannot do (ADR-036).
+
+The ingestors exist to alert: they feed the raw queue, and everything downstream of it can open
+a window. Feeding recovered events into that queue with a flag was rejected — every stage would
+have to honour the flag, and the one that forgot would alert on a month-old earthquake. So the
+recovery has its own path, imports none of the processor, the filter's verdict, the supervisor,
+the alert controller or the operating state, and an import contract fails if it ever does.
+
+[[src/vigia_eew/ingest/catalogue.py#fetch]] asks the same FDSN services the pollers poll, for a
+**period** instead of *"since my cursor"*: windows of thirty days, pages of a thousand, one
+retry, and payloads in the dialect each network's own translation already reads. Every source
+declares in the registry how its past is read or why it cannot be; FUNVISIS takes no dates, so
+the small local earthquakes only it catalogues are not recovered, and the outcome says so
+instead of letting an incomplete history look complete.
+
+What is asked for is the recovery's own circle, `[history] recovery_radius_km` and
+`recovery_min_magnitude`, not the alert's: a map of a region is wider than an alarm. The request
+carries the reference point, as the live polls to those same hosts always have; nothing of the
+history is sent anywhere.
+
+**One earthquake stays one.** An arrival of an earthquake the history already holds from another
+network takes its correlation id and points at the row that prevails, decided by the
+deduplicator's own predicate ([[lat.md/pipeline#Deduplication]]) with the configured thresholds.
+Networks are read in the user's order of preference, so the better-ranked one's row is the one
+left standing.
+
+That predicate was tuned for preliminary solutions minutes apart, and a catalogue holds revised
+ones. Measured on 2026-11-16, recovering thirty days into a copy of a real history: 75 arrivals,
+52 joined to a known earthquake, **none** left apart by magnitude alone. If that changes, the
+recovery's thresholds become their own constants.
+
+One network failing is reported and the others carry on. From the screen it runs on a worker
+thread with a connection of its own, and reports back on the UI loop.
+
 ## It does not leave the machine
 
 No sync, no remote backup, no telemetry — amendment E-06 and REQ-HIS-006.
 
 There is no client in this module to point anywhere, and a test fails if the module so much as
 mentions a network library. It is a file on one computer, and that is the whole design.
+
+**What that forbids is the agent transmitting it** — not the user saving their own data to their
+own disk (REQ-HIS-014). The reading is written here rather than assumed, and it is kept checkable
+rather than trusted: [[src/vigia_eew/history_export.py#write]] writes records to a file somebody
+else opened, imports `csv` and `json` and nothing that could send, and both a test on its imports
+and an import contract fail if that changes. An export is an explicit action of the user, to a
+path they chose, and it opens no connection.
 
 ## The query is a finite set of statements, not a string that gets built
 
@@ -98,7 +199,7 @@ things in two views of one history.
 
 ## The map is a view on the list, never the other way round
 
-[[src/vigia_eew/notify/history_view.py#HistoryList]] depends on the local file and nothing else.
+[[src/vigia_eew/notify/history_list.py#HistoryList]] depends on the local file and nothing else.
 No network, no third party, no image decoding.
 
 That is Art. 3 applied to a feature rather than to a failure: the history answers "why was I not
@@ -111,6 +212,92 @@ them. Prose about the map is fine; an import of it is not.
 
 Both views read **one** query object. The list owns it and the map reads it, so a filter cannot
 come to mean two different things in two views of one history.
+
+## The list owns the filters and the paging
+
+[[src/vigia_eew/notify/history_list.py#HistoryList]] holds every filter and the page;
+[[src/vigia_eew/notify/history_view.py#HistoryView]] only sets them.
+
+v1.0 shipped with REQ-HIS-005 marked as met — *filter by date range, magnitude, distance, verdict
+and network* — and a screen that offered two of the five. The requirement says *"when the user
+queries"*; its criterion said *"a query"*, and a test on the store satisfied it. Nobody had asked
+the screen. `HistoryView.filters` now names the control behind each criterion so that a test can.
+
+The state is in the list, not in the Flet controls, because the list imports no toolkit. A second
+frontend — the terminal — can then offer the same filters by driving the same object, instead of
+implementing them again and drifting
+([[lat.md/history#The terminal reads the history through the same list]]).
+
+Dates are **local calendar days**, converted to UTC bounds by
+[[src/vigia_eew/timeutil.py#local_day_bounds]], next to the other local-day boundary (RF-40), so
+that "a day" means one thing in the filter that discards and in the filter that reads. A period
+that ends before it starts is refused by the list, which keeps its query: the screen says so and
+still shows the entries of the last period that made sense.
+
+The verdicts and networks offered are the ones the file holds. A filter that offers a network
+nobody has heard from can only return nothing — and a verdict added later is offered without
+anyone touching the control.
+
+Setting any filter, or sorting, returns to the first page: page three of the old set means nothing
+in the new one. The page is the table's limit, 150 rows, because a Flutter `DataTable` lays out
+every cell up front. v1.0 loaded 500 and drew 150 with no way to the rest; a history that hides
+rows without saying which does not answer "why was I not warned?" for those rows.
+
+## The table pages, the map does not
+
+[[src/vigia_eew/notify/history_list.py#HistoryList]]`.everything()` hands the whole filtered set
+to the views that draw it; [[src/vigia_eew/notify/history_window.py#HistoryWindow]] feeds the map
+from that, not from the page.
+
+If the map drew the table's page, turning the page would move the symbols, and "both views show
+the same set" would have quietly come to mean "the same 150 rows". The set is what the filter
+selects; the page is how much of it a table can lay out.
+
+The map draws up to `MAP_SYMBOL_LIMIT` and says how many of how many when the set is larger,
+for the reason an unknown verdict is still drawn: leaving earthquakes off in silence under-reports
+the history. **The limit is provisional** — 500 is what v1.0 happened to draw, not a measurement —
+and the spike that opens the timelapse replaces it.
+
+## A symbol can be pointed at
+
+[[src/vigia_eew/notify/history_map.py#HistoryMap]] draws each symbol as a `flet-map` `Marker`
+holding a round container, not as a `CircleMarker`.
+
+A `CircleMarker` is a painted shape: it has no tooltip and no events, so a circle could not say
+which earthquake it was. That was checked on the real client before designing around it — a
+marker's tooltip shows, pointing and pressing fire, and the press does not also reach the map. A
+view whose whole argument is *where* and that cannot answer *which one is that?* delivers half.
+
+The tooltip is the row the list already formatted for the table, joined into three lines. The map
+is handed the words; it does not word an earthquake itself, because a second wording is a second
+chance for a symbol and its row to disagree.
+
+The cost is real: a marker carries a control where a circle carried none. How many the map can
+redraw is unmeasured, which is why the limit above is provisional.
+
+**Nothing above the map may take the pointer from it.** The "map unavailable" notice is centred by
+a container that fills the whole stack, drawn over the map. With painted circles nobody noticed.
+With markers it swallowed every hover and press, so no symbol answered — and every test passed,
+because Flet controls are dataclasses here and a dataclass has no hit-testing. It was found by
+opening the real window, and is held by a test on the structure: whatever fills the stack above
+the map is a `TransparentPointer`. A feature whose point is "the user can point at it" is not
+verified until something has pointed at it.
+
+## The table and the map point at the same thing
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] wires the selection in both directions,
+keyed by the id of the row a symbol stands for.
+
+A row pressed in the table highlights its symbol. A symbol pressed on the map brings the table to
+the page that holds its row and highlights it. The list still imports no map and the map knows
+nothing about tables: each reports what was pressed, and the window decides what that means.
+
+`choose` and `select` are separate on purpose. `choose` is the user acting on a view, and tells
+the window; `select` is a view being told. With one method the two views would echo each other.
+
+The selected symbol is larger and its ring thicker — shape, not colour — following the rule the
+map already applies to alerts and discards. A filter that removes the chosen earthquake lets go
+of it; turning the page does not, because the earthquake is still in the set and on the map.
 
 ## Tiles are fetched only because somebody is looking at a map
 
@@ -181,7 +368,8 @@ it wherever a tile is, and the legend because a symbol nobody can read explains 
 [[src/vigia_eew/notify/history_window.py#HistoryWindow]] owns the wiring so that neither view has
 to know about the other.
 
-The direction is one-way: the list decides the set and the map is handed the records it produced.
+The direction is one-way for **the set**: the list decides it and the map is handed the records it
+produced. (Which one is highlighted travels both ways, and is a separate matter.)
 A map still showing symbols the table has filtered away would not be a second opinion — it would
 be the product contradicting itself on one screen (REQ-MAP-004).
 
@@ -191,3 +379,137 @@ way; putting the wiring inside it would have been the first step to losing that.
 
 Sorting is the exception that proves the direction: order is a property of a table and a map has
 no rows to reorder, so sorting changes the table and leaves the map showing the same earthquakes.
+
+## The playback steps by earthquake, and a frame depends only on its step
+
+[[src/vigia_eew/notify/timelapse.py#Timeline]] turns a set of earthquakes into steps, one per
+instant something happened, and says what each step shows. It is pure: no toolkit, no clock.
+
+**By earthquake, not by a clock** (decision D-8). The map is redrawn when the next earthquake of
+the set happens and not in between. A fixed frame rate would redraw at a pace unrelated to the
+data — most frames identical to the last — and continuous fading between steps is a clock again.
+So intensity comes in a few discrete levels, worked out at each step from the earthquake's age in
+the history's own time, and speed is only how long a step stays on screen.
+
+`frame(i)` is a function of *i* and nothing else. Seeking to an earthquake and reaching it by
+playing are the same call, so they cannot come to show different things, and changing the speed
+cannot change what is shown. That is why every promise about order, seeking and fading is tested
+with no screen: the three invariants run over generated sets.
+
+A step stays on screen for the real gap to the next earthquake divided by the speed, held between
+`MIN_DWELL` and `MAX_DWELL`: a burst a second apart must still be seen, and a silent week must
+not look like a playback that stopped.
+
+Those limits and `PLAYBACK_SYMBOL_LIMIT` are **measured**, in `docs/v1.1/10-SPIKE-TIMELAPSE.md`:
+400 markers redraw in about 86 ms, inside a shortest step of 150 ms. Their product is the longest
+a playback of clamped steps can last, and it must stay at or under a minute. If a slower machine
+needs relief, lower the limit; do not raise the minimum.
+
+Two parts, split like the list and its view.
+[[src/vigia_eew/notify/timelapse_view.py#TimelapseView]] holds the controls and asks the shell's
+timer for one step at a time. A timer cannot take a step back, so pausing makes it stale instead:
+every play, pause, seek and reload starts a new generation, and a step that comes due under an
+old one does nothing. An import contract fails if the timeline ever imports the toolkit.
+
+## The playback is a third reading of one query
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] hands the playback the set the filters
+select; the playback has no query of its own (REQ-TLP-004).
+
+It reads the set **per earthquake** whatever the table is reading, so that none plays twice
+([[lat.md/history#Which arrival stands for an earthquake]]), and the most recent ones when there
+are more than it holds — whatever the table is sorted by — saying how many of how many.
+
+A change of filter replaces the set, and the playback lets go of the map. A change that leaves
+the set alone — a page turned, a column sorted, a row chosen — leaves the frame where it is. The
+window tells the two apart by comparing what the filters select, not by who called.
+
+It paints through the same [[src/vigia_eew/notify/history_map.py#HistoryMap]] the static set
+uses, each symbol drawn weaker by its age. The spike found markers fast enough, so there is no
+second painter, and a paused frame answers the pointer like the static map. It also means the
+"map unavailable" notice is inherited rather than rebuilt.
+
+The control holds a painter, not the map, so it has no way to pan or zoom: a playback that
+wandered the map would fetch tiles nobody decided to fetch (REQ-TLP-008, E-06).
+
+An alert pauses it. The wiring registers the window's pause with the shell
+([[lat.md/notification#A screen is told when an alert covers it]]); after the alert the screen is
+back as it was, paused on the same step. Leaving or closing the history pauses it too, since the
+timer would otherwise keep a playback nobody sees alive.
+
+## Figures name their base, and the export writes what is on screen
+
+*"The filter's count"* has two readings since one earthquake stopped being one row, so every
+figure says which it counts (X-8).
+
+[[src/vigia_eew/history_stats.py#summarise]] takes both readings of one filter: what is said about earthquakes — per day, by magnitude, by verdict and
+reason — counts earthquakes; what is said about networks — the split by network, the latency —
+counts arrivals, because a network is measured by what it delivered. Each split adds up to its
+own sample, which is an arithmetic identity on purpose: it is what catches a split that counts
+twice or drops a category.
+
+The sample and the period are **fields of the result**, not text a view adds (REQ-EST-003):
+"a median of 40 minutes" over three arrivals and over three hundred are different claims, and a
+second frontend cannot forget to say which.
+
+**Latency is a median, over what was received live.** `recorded_at − occurred_at` per network. A
+median because about one arrival in ten reaches the agent days late and a mean would report those
+days as typical. Only live arrivals ([[src/vigia_eew/history.py#received_live]]) because a
+recovered row's "reception" is the moment somebody pressed a button. A network with none has no
+figure, which is not zero — and an empty set has no sections at all, for the same reason.
+
+Both are computed in Python over the whole filtered set rather than as SQL aggregates: five more
+prepared statements for sets the retentions already bound. So
+[[src/vigia_eew/notify/history_list.py#HistoryList#whole]] reads the set with no limit, where the
+map and the playback each have one.
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] computes the summary only while it is
+open, and once per set: it compares what the filters select, as the playback does, so a page
+turned or a column sorted reads nothing again. The summary reads both readings whatever the table
+shows; the **export writes the reading on screen**, whole, so the file has as many entries as the
+table says there are.
+
+The export's destination is a path field, always; the system's dialog only fills it in. Nothing
+has to detect whether a dialog exists (P-5): where there is none the field still works. The file
+is written beside its destination and renamed over it
+([[src/vigia_eew/notify/history_window.py#write_export]]), so a failure leaves the earlier export
+or nothing, never half a file.
+
+The place and the identifiers in a row are text the networks sent, and the CSV is made to be
+opened in a spreadsheet, where a cell opening with `=`, `+`, `-` or `@` is a formula. Such text is
+written with a leading apostrophe; numbers are left alone, and so is the GeoJSON, which nothing
+runs.
+
+Bars are containers sized by their value — no charting library
+(decision D-6).
+
+## The terminal reads the history through the same list
+
+`--tui` runs where there is no display, which is where *"why did this machine not alert?"* is
+otherwise answered by reading a log (REQ-HIS-015, ADR-041).
+
+[[src/vigia_eew/tui.py#HistoryScreen]] draws the rows of a
+[[src/vigia_eew/notify/history_list.py#HistoryList]] in a table and sets its filters from fields:
+it decides nothing, so the same filter gives the same entries, in the same order, in the terminal
+and in the window. Only the list — a map and a playback do not fit in a terminal, and v1.0 had
+already settled which of the views is the feature.
+
+**The list moved to a module of its own for this.** It imported no toolkit, but it lived in
+`history_view.py`, which imports Flet at the top: importing the list loaded the graphical
+toolkit. On a server with no display that is the difference between a dashboard that starts and
+one that does not. `history_view` still hands the list out, so nothing that asked it there had to
+change; two import contracts keep the list free of both toolkits and the dashboard free of Flet,
+and a test imports the dashboard in a fresh interpreter and looks at what got loaded.
+
+The dashboard is handed **the way to the history, not the history**
+([[src/vigia_eew/wiring.py#Wiring#open_tui_history]]): a read connection of its own, opened when
+the screen is and closed on the way out, never pruning — as the window's is. A history that cannot
+be read is a screen that says so, with the store's reason; the dashboard under it keeps running.
+
+An alert is modal and is pushed over the list as it is over the dashboard. The history cannot be
+opened over an alert, and the status bar and the alerts log are reached through the dashboard's
+own screen rather than whichever is on top — `App.query_one` looks at the top, and with the
+history open that used to mean an alert could not be logged.
+
+Letters are keys only while the table has the focus, which it has when the screen opens; in a
+filter field a letter is a letter. `escape` leaves from either.

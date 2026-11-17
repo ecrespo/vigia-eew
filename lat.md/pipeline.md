@@ -62,6 +62,13 @@ intra-source id matching. Swarms can produce false merges or splits, which is wh
 are configurable. The heuristic was already source-count-agnostic, so adding GEOFON as a fourth
 source required no change to it. See ADR-004.
 
+The rule itself is one function, [[src/vigia_eew/pipeline/dedup.py#same_earthquake]], because it
+has two callers that share nothing else: the deduplicator, which decides whether to alert, and
+the recovery of the history, which decides whether a catalogue's earthquake is one already known
+([[lat.md/history#Recovery is a separate path that writes only to the history]]). The recovery
+shares the predicate and not the memory: it never builds a `Deduplicator`, whose state is what
+was alerted.
+
 ### EMSC `update` refreshes the alert instead of raising a new one
 
 An `update` for an event already on screen updates that alert in place.
