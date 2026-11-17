@@ -99,6 +99,35 @@ def test_a_place_with_a_comma_in_it_stays_one_cell() -> None:
     assert len(row) == len(header)
 
 
+@pytest.mark.parametrize("opening", ["=", "+", "-", "@", "\t", "\r"])
+def test_text_a_spreadsheet_would_run_as_a_formula_is_written_as_text(opening: str) -> None:
+    """The place and the ids come from the networks, not from the user.
+
+    A cell that opens with one of these is a formula to a spreadsheet, and
+    the file is made to be opened in one. A leading apostrophe makes it text.
+    """
+    hostile = opening + 'HYPERLINK("http://example.invalid","NEAR CARACAS")'
+
+    header, row = _csv([_record(region=hostile, source_event_id=hostile)])
+
+    assert row[header.index("region")] == "'" + hostile
+    assert row[header.index("source_event_id")] == "'" + hostile
+
+
+def test_a_negative_number_is_still_a_number() -> None:
+    header, row = _csv([_record(longitude=-66.9, latitude=-10.5)])
+
+    assert row[header.index("longitude")] == "-66.9"
+    assert row[header.index("latitude")] == "-10.5"
+
+
+def test_the_geographic_file_keeps_the_text_as_the_network_gave_it() -> None:
+    """Nothing runs a GeoJSON property: there it is data, and is left alone."""
+    properties = _geojson([_record(region="=SUM(A1)")])["features"][0]["properties"]
+
+    assert properties["region"] == "=SUM(A1)"
+
+
 def test_an_empty_set_is_a_header_and_nothing_else() -> None:
     assert _csv([]) == [list(COLUMNS)]
 

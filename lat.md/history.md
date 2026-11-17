@@ -472,5 +472,12 @@ The export's destination is a path field, always; the system's dialog only fills
 has to detect whether a dialog exists (P-5): where there is none the field still works. The file
 is written beside its destination and renamed over it
 ([[src/vigia_eew/notify/history_window.py#write_export]]), so a failure leaves the earlier export
-or nothing, never half a file. Bars are containers sized by their value — no charting library
+or nothing, never half a file.
+
+The place and the identifiers in a row are text the networks sent, and the CSV is made to be
+opened in a spreadsheet, where a cell opening with `=`, `+`, `-` or `@` is a formula. Such text is
+written with a leading apostrophe; numbers are left alone, and so is the GeoJSON, which nothing
+runs.
+
+Bars are containers sized by their value — no charting library
 (decision D-6).

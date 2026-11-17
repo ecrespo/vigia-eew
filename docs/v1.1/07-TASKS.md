@@ -470,6 +470,9 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   Fourteen columns named as the schema names them; what is unknown is an empty cell in CSV and
   `null` in GeoJSON. The `ast` test is an allow-list — `csv`, `json` and the language's own
   furniture — not only a list of what is forbidden.
+- **Found by the commit's security review**: text from the networks (the place, the ids) that
+  opens with `=`, `+`, `-`, `@`, a tab or a carriage return would be a formula in a spreadsheet.
+  The CSV writes it with a leading apostrophe; numbers and the GeoJSON are left as they are.
 
 ### [x] T-175 · *Export…* — 2026-11-17
 - **What**: the action on the history screen: format, destination by the system dialog or by a path

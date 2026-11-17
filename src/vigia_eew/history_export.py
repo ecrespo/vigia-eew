@@ -43,6 +43,9 @@ COLUMNS = (
     "correlation_id",
 )
 
+#: What a cell must not open with: a spreadsheet reads the rest as a formula.
+_FORMULA_OPENINGS = ("=", "+", "-", "@", "\t", "\r")
+
 _INSTANTS = ("occurred_at", "recorded_at")
 _COORDINATES = ("latitude", "longitude")
 
@@ -59,14 +62,31 @@ def _values(record: EventRecord) -> dict[str, Any]:
 def write_csv(records: Iterable[EventRecord], out: TextIO) -> None:
     """Writes those entries as CSV: a header naming the columns, then a row each.
 
-    What is not known is an empty cell. `out` should have been opened with
+    What is not known is an empty cell, and text that a spreadsheet would
+    take for a formula is marked as text (`_cell`). `out` should have been opened with
     `newline=""`, as the `csv` module asks, so a row ends once on every system.
     """
     writer = csv.writer(out)
     writer.writerow(COLUMNS)
     for record in records:
         values = _values(record)
-        writer.writerow(["" if values[column] is None else values[column] for column in COLUMNS])
+        writer.writerow([_cell(values[column]) for column in COLUMNS])
+
+
+def _cell(value: Any) -> Any:
+    """One value as a CSV cell, and never as something a spreadsheet would run.
+
+    The place and the identifiers are text the networks sent, and this file is
+    made to be opened in a spreadsheet, where a cell opening with `=`, `+`,
+    `-` or `@` is a formula. Such text gets a leading apostrophe, which a
+    spreadsheet reads as "this is text". Numbers are left alone: a negative
+    longitude is a number, not a string that begins with a minus.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str) and value.startswith(_FORMULA_OPENINGS):
+        return "'" + value
+    return value
 
 
 def write_geojson(records: Iterable[EventRecord], out: TextIO) -> None:
