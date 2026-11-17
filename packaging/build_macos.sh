@@ -42,6 +42,18 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 DMG="$DIST/vigia-eew-$VERSION.dmg"
 rm -f "$DMG"
-hdiutil create -volname "Vigía-eew" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+# The image's size is given, not left to `hdiutil`. Asked to size it from
+# `-srcfolder`, it measures the folder, makes an image that large, and then
+# fails copying into it -- "No space left on device", on a runner with tens of
+# gigabytes free -- because a filesystem needs room the files alone do not
+# account for. That is what stopped the v1.1.0 release, twice in a row, on a
+# bundle that had grown since v1.0.0. Twice the contents plus a margin; the
+# image is compressed (UDZO) afterwards, so the slack costs nothing in the
+# file that ships.
+CONTENIDO_MB="$(du -sm "$STAGE" | cut -f1)"
+IMAGEN_MB="$(( CONTENIDO_MB * 2 + 100 ))"
+echo "   contenido: ${CONTENIDO_MB} MB · imagen: ${IMAGEN_MB} MB"
+hdiutil create -volname "Vigía-eew" -srcfolder "$STAGE" -size "${IMAGEN_MB}m" \
+    -ov -format UDZO "$DMG"
 
 echo "== Listo: $DMG (sin firmar/notarizar — ver cabecera del script) =="
