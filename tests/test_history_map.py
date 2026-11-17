@@ -495,3 +495,50 @@ def test_selecting_keeps_the_strengths_of_the_frame_on_screen() -> None:
 
     (marker,) = map_view.markers
     assert (marker.selected, marker.strength) == (True, 0.45)
+
+
+# --- T-171 · a third style: recovered (REQ-HIS-011, ADR-037 §5) ----------------------
+
+
+def test_a_recovered_arrival_has_a_style_of_its_own() -> None:
+    from vigia_eew.notify.history_map import RECOVERED_STYLE
+
+    assert marker_style("recovered") is RECOVERED_STYLE
+    assert marker_style("something-else") is DISCARDED_STYLE  # unknown is still a discard
+
+
+def test_the_three_styles_differ_with_colours_ignored() -> None:
+    """Filled or hollow, round or square: none of it is a hue."""
+    from vigia_eew.notify.history_map import RECOVERED_STYLE
+
+    shapes = [(s.filled, s.round) for s in (ALERTED_STYLE, DISCARDED_STYLE, RECOVERED_STYLE)]
+
+    assert len(set(shapes)) == 3
+
+
+def test_a_recovered_symbol_is_drawn_square() -> None:
+    from dataclasses import replace
+
+    from vigia_eew.notify.history_map import HistoryMap
+
+    map_view = HistoryMap()
+    map_view.show(
+        [
+            replace(_numbered(1, magnitude=4.0), verdict="discarded"),
+            replace(_numbered(2, magnitude=4.0), verdict="recovered"),
+        ]
+    )
+
+    corner = {
+        m.record.id: s.content.border_radius
+        for m, s in zip(map_view.markers, _symbols(map_view), strict=True)
+    }
+    assert corner[1] == map_view.markers[0].radius  # round: the radius of the circle
+    assert corner[2] < corner[1]
+
+
+def test_the_legend_explains_the_three_styles() -> None:
+    from vigia_eew.notify.history_map import LEGEND, RECOVERED_STYLE
+
+    assert LEGEND == (ALERTED_STYLE, DISCARDED_STYLE, RECOVERED_STYLE)
+    assert RECOVERED_STYLE.legend_key == "map_legend_recovered"

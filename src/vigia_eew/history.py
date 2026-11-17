@@ -52,6 +52,23 @@ SCHEMA_VERSION = 1
 #: with the number, not with this guess (DATA-MODEL §3bis.4).
 DEFAULT_RETENTION_DAYS = 90
 
+#: Retention of the rows **recovered** from the networks' catalogues (decision
+#: D-5, REQ-HIS-013). Their own figure, because recovering a year and losing it
+#: at the next start would not be a feature -- and it is also how far back a
+#: recovery may ask.
+DEFAULT_RECOVERED_RETENTION_DAYS = 365
+
+#: The verdict of an arrival nobody evaluated: it was read from a catalogue
+#: afterwards. A third value of the column that already answers "what did the
+#: agent do with this arrival?" -- not a second column
+#: ([[lat.md/history#Recovered is a verdict, not a column]]).
+RECOVERED = "recovered"
+
+#: The verdicts of an arrival the agent received while running and decided
+#: about. Anything that measures the agent -- how fast a network delivered,
+#: how often it alerted -- counts these and only these (X-2).
+LIVE_VERDICTS = ("alerted", "discarded")
+
 Clock = Callable[[], datetime]
 Migration = Callable[[sqlite3.Connection], None]
 
@@ -165,6 +182,47 @@ ON CONFLICT(source, source_event_id) DO UPDATE SET
     superseded_by  = excluded.superseded_by
 """
 
+
+#: A recovered arrival goes in only where nothing is. The same columns as
+#: `_UPSERT`, and the opposite answer to a conflict: the live path replaces the
+#: row of the same arrival, and the recovery never does, so a recovery cannot
+#: overwrite what the agent decided at the time (REQ-HIS-012) while a later
+#: live evaluation still overwrites a recovered row.
+_INSERT_RECOVERED = """
+INSERT INTO events (
+    correlation_id, source, source_event_id, occurred_at, recorded_at,
+    latitude, longitude, depth_km, magnitude, region, distance_km,
+    severity, verdict, reason, superseded_by
+) VALUES (
+    :correlation_id, :source, :source_event_id, :occurred_at, :recorded_at,
+    :latitude, :longitude, :depth_km, :magnitude, :region, :distance_km,
+    :severity, :verdict, :reason, :superseded_by
+)
+ON CONFLICT(source, source_event_id) DO NOTHING
+"""
+
+#: Two cut-offs in one statement: recovered rows by their own retention, the
+#: rest by the one the agent's own rows have always had (ADR-037).
+_PRUNE = """
+DELETE FROM events
+WHERE (verdict = 'recovered' AND occurred_at < :recovered_cutoff)
+   OR (verdict <> 'recovered' AND occurred_at < :cutoff)
+"""
+
+#: The rows `_PRUNE` is about to remove can no longer be pointed at.
+_UNLINK_PRUNED = """
+UPDATE events SET superseded_by = NULL WHERE superseded_by IN (
+    SELECT id FROM events
+    WHERE (verdict = 'recovered' AND occurred_at < :recovered_cutoff)
+       OR (verdict <> 'recovered' AND occurred_at < :cutoff)
+)
+"""
+
+_NEAR = """
+SELECT * FROM events
+WHERE occurred_at >= :earliest AND occurred_at <= :latest
+ORDER BY occurred_at, id
+"""
 
 #: Columns a result set may be ordered by. The ordering is the one part of a
 #: query that cannot be a bound value, so it is a lookup into statements built
@@ -333,6 +391,11 @@ class HistoryQuery:
             ) from None
 
 
+def received_live(record: EventRecord) -> bool:
+    """Whether the agent received that arrival while running, and decided about it."""
+    return record.verdict in LIVE_VERDICTS
+
+
 def _iso(moment: datetime | None) -> str | None:
     return None if moment is None else moment.astimezone(UTC).isoformat()
 
@@ -362,6 +425,7 @@ class HistoryStore:
         *,
         migrations: Sequence[Migration] | None = None,
         retention_days: int = DEFAULT_RETENTION_DAYS,
+        recovered_retention_days: int = DEFAULT_RECOVERED_RETENTION_DAYS,
         prune_on_open: bool = True,
         now: Clock | None = None,
         logger: logging.Logger | None = None,
@@ -369,6 +433,7 @@ class HistoryStore:
         self.path = Path(path) if path is not None else default_history_path()
         self._migrations = tuple(migrations if migrations is not None else self.MIGRATIONS)
         self._retention_days = retention_days
+        self._recovered_retention_days = recovered_retention_days
         self._prune_on_open = prune_on_open
         self._now = now or (lambda: datetime.now(UTC))
         self._log = logger or logging.getLogger("vigia_eew.history")
@@ -390,7 +455,7 @@ class HistoryStore:
         self._db.execute("PRAGMA foreign_keys = ON")
         self._migrate()
         if self._prune_on_open:
-            self.prune(retention_days=self._retention_days)
+            self.prune()
         return self
 
     def close(self) -> None:
@@ -442,6 +507,22 @@ class HistoryStore:
         with db:
             cursor = db.execute(_UPSERT, self._values(replace(event, superseded_by=linked)))
         return int(cursor.lastrowid or self._row_id_of(event))
+
+    def record_recovered(self, event: EventRecord) -> bool:
+        """Stores an arrival read from a catalogue; False if it was already there.
+
+        Always as `recovered`, with no reason and no severity, whatever the
+        caller left on it: nobody evaluated this arrival, and giving it a
+        verdict would falsify the question the history exists to answer.
+
+        It never replaces a row. `superseded_by` is kept as given -- the
+        recovery is what worked out which earthquake this arrival belongs to.
+        """
+        values = self._values(replace(event, verdict=RECOVERED, reason=None, severity=None))
+        db = self._connection
+        with db:
+            cursor = db.execute(_INSERT_RECOVERED, values)
+        return cursor.rowcount == 1
 
     def _prevailing_row(self, event: EventRecord) -> int | None:
         """The row this one was discarded in favour of, when there is one.
@@ -541,6 +622,16 @@ class HistoryStore:
         statement = request.statement()  # refuses an ordering the schema does not offer
         return [_from_row(row) for row in self._select(statement, request.parameters())]
 
+    def near(self, occurred_at: datetime, window_s: float) -> list[EventRecord]:
+        """The arrivals that happened within `window_s` seconds of an instant.
+
+        What the recovery compares a catalogue's earthquake against, to tell
+        whether it is one the history already holds from another network.
+        """
+        window = timedelta(seconds=window_s)
+        bounds = {"earliest": _iso(occurred_at - window), "latest": _iso(occurred_at + window)}
+        return [_from_row(row) for row in self._select(_NEAR, bounds)]
+
     def sources(self) -> list[str]:
         """The networks actually present in this history, for the filter to offer.
 
@@ -567,8 +658,18 @@ class HistoryStore:
 
     # --- Retention (REQ-HIS-004) ---
 
-    def prune(self, *, retention_days: int | None = None, now: datetime | None = None) -> int:
-        """Removes arrivals older than the retention; returns how many.
+    def prune(
+        self,
+        *,
+        retention_days: int | None = None,
+        recovered_retention_days: int | None = None,
+        now: datetime | None = None,
+    ) -> int:
+        """Removes arrivals older than their retention; returns how many.
+
+        Two retentions, told apart by the verdict: what the agent evaluated,
+        and what was recovered from a catalogue afterwards (REQ-HIS-013).
+        Changing one does not touch the rows of the other.
 
         Pruning happens when the file is opened rather than on a timer. A
         periodic task would have nothing to do most of the time and would still
@@ -578,19 +679,29 @@ class HistoryStore:
         prune-on-register.
         """
         days = self._retention_days if retention_days is None else retention_days
-        cutoff = (now or self._now()).astimezone(UTC) - timedelta(days=days)
+        recovered_days = (
+            self._recovered_retention_days
+            if recovered_retention_days is None
+            else recovered_retention_days
+        )
+        moment = (now or self._now()).astimezone(UTC)
+        cutoffs = {
+            "cutoff": (moment - timedelta(days=days)).isoformat(),
+            "recovered_cutoff": (moment - timedelta(days=recovered_days)).isoformat(),
+        }
         db = self._connection
         with db:
             # The children first: a row kept cannot point at a row removed.
-            db.execute(
-                "UPDATE events SET superseded_by = NULL WHERE superseded_by IN "
-                "(SELECT id FROM events WHERE occurred_at < ?)",
-                (cutoff.isoformat(),),
-            )
-            cursor = db.execute("DELETE FROM events WHERE occurred_at < ?", (cutoff.isoformat(),))
+            db.execute(_UNLINK_PRUNED, cutoffs)
+            cursor = db.execute(_PRUNE, cutoffs)
         removed = int(cursor.rowcount or 0)
         if removed:
-            self._log.info("history_pruned removed=%d retention_days=%d", removed, days)
+            self._log.info(
+                "history_pruned removed=%d retention_days=%d recovered_retention_days=%d",
+                removed,
+                days,
+                recovered_days,
+            )
         return removed
 
 

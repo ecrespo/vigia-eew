@@ -71,6 +71,11 @@ class EMSCSource(SourceSettings):
     """EMSC WebSocket parameters (RF-01, RF-02, RF-03)."""
 
     url: str = "wss://www.seismicportal.eu/standing_order/websocket"
+    #: EMSC's FDSN catalogue, which takes a date range. Used only to recover a
+    #: period into the history (REQ-HIS-010) -- never to alert. A key of its
+    #: own because it is another URL on the host, not a variant of the
+    #: WebSocket's.
+    catalog_url: str = "https://www.seismicportal.eu/fdsnws/event/1/query"
     ping_interval_s: int = Field(default=15, gt=0)
     ping_timeout_s: int = Field(default=20, gt=0)
     backoff_max_s: int = Field(default=60, gt=0)
@@ -167,10 +172,21 @@ class History(BaseModel):
     `0` keeps nothing older than the moment of the prune; the history can be
     turned off entirely with `enabled = false`, and the agent alerts exactly
     the same either way.
+
+    Entries **recovered** from the networks' catalogues have a retention of
+    their own (REQ-HIS-013, decision D-5): recovering a year and losing it at
+    the next start would not be a feature. It is also how far back a recovery
+    may ask. `recovery_radius_km` and `recovery_min_magnitude` say what "my
+    region" means for a recovery (decision D-10) -- separate from the alert's
+    radius on purpose: what is worth seeing on a map is wider than what is
+    worth being woken for.
     """
 
     enabled: bool = True
     retention_days: int = Field(default=90, ge=0)
+    recovered_retention_days: int = Field(default=365, ge=0)
+    recovery_radius_km: float = Field(default=1000.0, gt=0)
+    recovery_min_magnitude: float = Field(default=2.5, ge=0)
 
 
 class Settings(BaseModel):

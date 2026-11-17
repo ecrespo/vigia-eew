@@ -574,3 +574,17 @@ def _find_button(control, label: str):
             elif child is not None:
                 stack.append(child)
     raise AssertionError(f"no {label!r} button")
+
+
+# --- T-167 · the recovery's keys reach the panel on their own (ADR-020) -----------
+
+
+def test_the_recovery_keys_are_in_the_panel_without_panel_code() -> None:
+    described = {field.path for section in describe() for field in section.fields}
+
+    assert {
+        "sources.emsc.catalog_url",
+        "history.recovered_retention_days",
+        "history.recovery_radius_km",
+        "history.recovery_min_magnitude",
+    } <= described

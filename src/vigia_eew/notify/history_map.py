@@ -48,8 +48,10 @@ __all__ = [
     "ATTRIBUTION",
     "DEFAULT_ZOOM",
     "DISCARDED_STYLE",
+    "LEGEND",
     "MAX_RADIUS",
     "MIN_RADIUS",
+    "RECOVERED_STYLE",
     "HistoryMap",
     "Marker",
     "MarkerStyle",
@@ -78,13 +80,16 @@ class MarkerStyle:
 
     Colour is not the only difference, deliberately. An alert is filled and a
     discard is an outline, so the distinction survives a screenshot, a
-    printout, and a reader who cannot tell the two colours apart.
+    printout, and a reader who cannot tell the two colours apart. A recovered
+    arrival is an outline too, and square: three verdicts, three shapes.
     """
 
     fill: str
     outline: str
     filled: bool
     legend_key: str
+    #: A circle, or a square with barely rounded corners.
+    round: bool = True
 
 
 ALERTED_STYLE = MarkerStyle(
@@ -93,6 +98,20 @@ ALERTED_STYLE = MarkerStyle(
 DISCARDED_STYLE = MarkerStyle(
     fill="", outline="#5A6472", filled=False, legend_key="map_legend_discarded"
 )
+
+
+#: An arrival nobody evaluated: read from a catalogue afterwards (REQ-HIS-011).
+#: Hollow like a discard -- it did not alert either -- and square, because it
+#: is not a discard: the agent did not decide against it, it was not watching.
+RECOVERED_STYLE = MarkerStyle(
+    fill="", outline="#1565C0", filled=False, legend_key="map_legend_recovered", round=False
+)
+
+#: What the legend explains, in the order it lists them.
+LEGEND: tuple[MarkerStyle, ...] = (ALERTED_STYLE, DISCARDED_STYLE, RECOVERED_STYLE)
+
+#: The corner radius of a square symbol, in pixels.
+SQUARE_CORNER = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,7 +137,11 @@ def marker_style(verdict: str) -> MarkerStyle:
     history, which is worse than drawing it in the more modest of the two
     styles.
     """
-    return ALERTED_STYLE if verdict == "alerted" else DISCARDED_STYLE
+    if verdict == "alerted":
+        return ALERTED_STYLE
+    if verdict == "recovered":
+        return RECOVERED_STYLE
+    return DISCARDED_STYLE
 
 
 def centre_of(
@@ -306,7 +329,7 @@ class HistoryMap:
             height=diameter,
             content=ft.Container(
                 opacity=marker.strength,
-                border_radius=marker.radius,
+                border_radius=marker.radius if marker.style.round else SQUARE_CORNER,
                 bgcolor=(
                     ft.Colors.with_opacity(0.75, marker.style.fill) if marker.style.filled else None
                 ),
@@ -338,7 +361,7 @@ class HistoryMap:
                     ft.Container(
                         width=12,
                         height=12,
-                        border_radius=6,
+                        border_radius=6 if style.round else SQUARE_CORNER,
                         bgcolor=style.fill or None,
                         border=ft.Border.all(2, style.outline),
                     ),
@@ -353,8 +376,7 @@ class HistoryMap:
             content=ft.Column(
                 spacing=4,
                 controls=[
-                    entry(ALERTED_STYLE),
-                    entry(DISCARDED_STYLE),
+                    *(entry(style) for style in LEGEND),
                     ft.Text(t("map_legend_size", self._locale), size=11, color="#5A6472"),
                     self.truncation,
                 ],

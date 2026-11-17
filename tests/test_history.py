@@ -721,3 +721,164 @@ def test_the_arrivals_of_an_earthquake_are_all_of_them(store: HistoryStore) -> N
     ]
     assert store.arrivals("nobody") == []
     assert store.arrivals("") == []
+
+
+# --- T-168 · recovered rows: their own verdict, their own retention (ADR-037) ------
+
+
+def _recovered(**overrides: object) -> EventRecord:
+    """An arrival as the recovery hands it over: never evaluated, so no verdict of its own."""
+    fields: dict = {"verdict": "recovered", "severity": None, "reason": None}
+    fields.update(overrides)
+    return _record(**fields)
+
+
+def test_recovering_adds_no_migration() -> None:
+    """ADR-037: recovered is a verdict, not a column. The schema is the one of v1.0."""
+    assert SCHEMA_VERSION == 1
+    assert len(HistoryStore.MIGRATIONS) == 1
+
+
+def test_a_recovered_arrival_is_stored_as_recovered(store: HistoryStore) -> None:
+    """Whatever verdict the caller left on it: nobody evaluated this arrival."""
+    added = store.record_recovered(_record(verdict="alerted", reason="radius"))
+
+    (row,) = store.rows()
+    assert added is True
+    assert (row.verdict, row.reason) == ("recovered", None)
+
+
+def test_recovering_an_arrival_already_there_changes_nothing(store: HistoryStore) -> None:
+    """CA-117.8: what the agent decided at the time is the most valuable datum here."""
+    store.record(_record(magnitude=5.2, verdict="alerted"))
+
+    added = store.record_recovered(_recovered(magnitude=6.6, region="REVISED"))
+
+    (row,) = store.rows()
+    assert added is False
+    assert (row.verdict, row.magnitude, row.region) == (
+        "alerted",
+        5.2,
+        "NEAR THE COAST OF VENEZUELA",
+    )
+
+
+def test_recovering_twice_adds_one_row(store: HistoryStore) -> None:
+    """CA-117.5."""
+    assert store.record_recovered(_recovered()) is True
+    assert store.record_recovered(_recovered()) is False
+
+    assert store.count() == 1
+
+
+def test_a_live_evaluation_outranks_a_recovered_row(store: HistoryStore) -> None:
+    """CA-117.12: the same arrival, evaluated later by the agent, takes the agent's verdict."""
+    store.record_recovered(_recovered())
+
+    store.record(_record(verdict="discarded", reason="magnitude"))
+
+    (row,) = store.rows()
+    assert (row.verdict, row.reason) == ("discarded", "magnitude")
+
+
+def test_a_recovered_arrival_can_join_an_earthquake_already_known(store: HistoryStore) -> None:
+    """The recovery says which row prevailed; the store keeps the link as given."""
+    prevailing = store.record(_record(source="EMSC", source_event_id="e1", correlation_id="q1"))
+
+    store.record_recovered(
+        _recovered(
+            source="USGS", source_event_id="u1", correlation_id="q1", superseded_by=prevailing
+        )
+    )
+
+    assert [a.source for a in store.arrivals("q1")] == ["EMSC", "USGS"]
+    assert store.arrivals("q1")[1].superseded_by == prevailing
+
+
+def test_the_rows_near_an_instant_are_those_inside_the_window(store: HistoryStore) -> None:
+    for name, seconds in (("before", -91), ("edge", -90), ("at", 0), ("late", 90), ("after", 91)):
+        store.record(_record(source_event_id=name, occurred_at=_WHEN + timedelta(seconds=seconds)))
+
+    near = store.near(_WHEN, 90)
+
+    assert [row.source_event_id for row in near] == ["edge", "at", "late"]
+
+
+def test_each_kind_of_row_has_its_own_retention(tmp_path: Path) -> None:
+    """CA-117.10, at the defaults: 90 days for what was evaluated, 365 for what was recovered."""
+    store = HistoryStore(tmp_path / "h.sqlite3", prune_on_open=False).open()
+    store.record_recovered(
+        _recovered(source_event_id="rec-200", occurred_at=_WHEN - timedelta(days=200))
+    )
+    store.record_recovered(
+        _recovered(source_event_id="rec-400", occurred_at=_WHEN - timedelta(days=400))
+    )
+    store.record(_record(source_event_id="eval-100", occurred_at=_WHEN - timedelta(days=100)))
+    store.record(_record(source_event_id="eval-10", occurred_at=_WHEN - timedelta(days=10)))
+
+    removed = store.prune(now=_WHEN)
+
+    assert removed == 2
+    assert [row.source_event_id for row in store.rows()] == ["rec-200", "eval-10"]
+    store.close()
+
+
+def test_changing_one_retention_leaves_the_other_kind_untouched(store: HistoryStore) -> None:
+    """CA-117.10."""
+    store.record_recovered(
+        _recovered(source_event_id="rec", occurred_at=_WHEN - timedelta(days=50))
+    )
+    store.record(_record(source_event_id="eval", occurred_at=_WHEN - timedelta(days=50)))
+
+    store.prune(retention_days=30, recovered_retention_days=365, now=_WHEN)
+    assert [row.source_event_id for row in store.rows()] == ["rec"]
+
+    store.record(_record(source_event_id="eval", occurred_at=_WHEN - timedelta(days=50)))
+    store.prune(retention_days=90, recovered_retention_days=30, now=_WHEN)
+    assert [row.source_event_id for row in store.rows()] == ["eval"]
+
+
+def test_opening_prunes_recovered_rows_to_their_own_retention(tmp_path: Path) -> None:
+    path = tmp_path / "h.sqlite3"
+    seeded = HistoryStore(path, prune_on_open=False).open()
+    seeded.record_recovered(_recovered(occurred_at=_WHEN - timedelta(days=200)))
+    seeded.close()
+
+    kept = HistoryStore(path, now=lambda: _WHEN).open()
+    assert kept.count() == 1
+    kept.close()
+
+    shortened = HistoryStore(path, recovered_retention_days=100, now=lambda: _WHEN).open()
+    assert shortened.count() == 0
+    shortened.close()
+
+
+def test_pruning_a_recovered_row_unlinks_what_pointed_at_it(store: HistoryStore) -> None:
+    """The step that clears `superseded_by` covers both cut-offs."""
+    store.record_recovered(_recovered(source_event_id="old", correlation_id="q1"))
+    old = store.arrivals("q1")[0].id
+    store.record(
+        _record(
+            source="USGS",
+            source_event_id="kept",
+            correlation_id="q1",
+            verdict="discarded",
+            reason="radius",
+            superseded_by=old,
+        )
+    )
+
+    store.prune(retention_days=9999, recovered_retention_days=0, now=_WHEN + timedelta(days=1))
+
+    (row,) = store.rows()
+    assert (row.source_event_id, row.superseded_by) == ("kept", None)
+
+
+def test_received_live_is_what_the_agent_evaluated() -> None:
+    """One predicate, beside the query, for everything that measures the agent (X-2)."""
+    from vigia_eew.history import LIVE_VERDICTS, received_live
+
+    assert LIVE_VERDICTS == ("alerted", "discarded")
+    assert received_live(_record(verdict="alerted")) is True
+    assert received_live(_record(verdict="discarded", reason="radius")) is True
+    assert received_live(_recovered()) is False

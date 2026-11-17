@@ -47,6 +47,9 @@ today_only = true
 # priority = 2
 enabled = true
 url = "wss://www.seismicportal.eu/standing_order/websocket"
+# EMSC's catalogue, which can be asked for a period. Used only by
+# `vigia-eew --backfill` and the history's "Recover" action -- never to alert.
+catalog_url = "https://www.seismicportal.eu/fdsnws/event/1/query"
 ping_interval_s = 15      # mandatory keepalive (RF-02)
 ping_timeout_s = 20
 backoff_max_s = 60        # cap of the exponential reconnection backoff (RF-03)
@@ -123,3 +126,12 @@ enabled = true
 # alerts and the volume depends on global seismicity. Measure yours and adjust.
 # 0 keeps nothing; `enabled = false` records nothing at all.
 retention_days = 90
+# Entries RECOVERED from the networks' catalogues (`vigia-eew --backfill DAYS`)
+# were never evaluated by the agent, and are kept by their own count of days.
+# It is also how far back a recovery may ask.
+recovered_retention_days = 365
+# What a recovery asks the catalogues for: earthquakes within this many
+# kilometres of the reference point, from this magnitude up. Separate from the
+# [filter] that decides alerts -- a map of the region is wider than an alarm.
+recovery_radius_km = 1000
+recovery_min_magnitude = 2.5

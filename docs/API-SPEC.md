@@ -90,6 +90,26 @@ Each message is **JSON text**. Confirmed structure:
 - May emit several `update`s for the same `unid` (magnitude/location refinement).
 - There is no history *replay* on reconnect: anything lost during an outage is recovered via USGS.
 
+### 1.5 The EMSC catalogue — asked for a period, never to alert (v1.1)
+
+EMSC also serves an FDSN `fdsnws-event` catalogue on the same host, which takes a date range.
+The agent uses it **only** to recover a period into the history (`vigia-eew --backfill DAYS`,
+REQ-HIS-010); nothing read from it reaches the pipeline or can raise an alert.
+
+- **URL**: `https://www.seismicportal.eu/fdsnws/event/1/query` — configured in
+  `[sources.emsc] catalog_url`, a key of its own because it is another URL, not a variant of the
+  WebSocket's.
+- **Format asked**: `format=json`, a GeoJSON `FeatureCollection`. Each feature's `properties`
+  carries the fields of the WebSocket's `data.properties` (§1.3) — `unid`, `time`, `lat`, `lon`,
+  `depth`, `mag`, `magtype`, `flynn_region`, `lastupdate` — so the same translation reads both,
+  and `unid` is the id already stored for a live arrival.
+- **Quirk**: the third GeoJSON coordinate is the depth as a **negative** number; `properties.depth`
+  is positive and is the one read.
+- **Request, paging and errors**: the same for the three recoverable networks (EMSC, USGS,
+  GEOFON), in `docs/v1.1/03-API-SPEC-DELTA.md` §3. FUNVISIS cannot be recovered: its endpoint
+  takes no dates.
+- **Verified** against the live service on 2026-11-16.
+
 ---
 
 ## 2. FALLBACK source — USGS FDSN (low-frequency polling)

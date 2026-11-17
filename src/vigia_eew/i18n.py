@@ -93,6 +93,22 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "history_column_reason": {"en": "Reason", "es": "Motivo"},
     "history_verdict_alerted": {"en": "Alerted", "es": "Alertado"},
     "history_verdict_discarded": {"en": "Discarded", "es": "Descartado"},
+    "history_verdict_recovered": {"en": "Recovered", "es": "Recuperado"},
+    "history_reason_recovered": {
+        "en": "Not evaluated: the agent was not watching",
+        "es": "No evaluado: el agente no estaba vigilando",
+    },
+    "history_recover": {"en": "Recover", "es": "Recuperar"},
+    "history_recover_days": {"en": "Days back", "es": "Días atrás"},
+    "history_recover_hint": {
+        "en": "Complete the history from the networks' catalogues. It never alerts.",
+        "es": "Completar el histórico desde los catálogos de las redes. Nunca alerta.",
+    },
+    "history_recover_running": {"en": "Recovering…", "es": "Recuperando…"},
+    "history_recover_invalid": {
+        "en": "Type a number of days",
+        "es": "Escribe un número de días",
+    },
     "history_reason_radius": {"en": "Outside the radius", "es": "Fuera del radio"},
     "history_reason_magnitude": {
         "en": "Below the minimum magnitude",
@@ -123,6 +139,30 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     "history_arrivals": {
         "en": "Arrivals of this earthquake: {count}",
         "es": "Llegadas de este sismo: {count}",
+    },
+    "backfill_recovered": {
+        "en": "recovered {recovered} · already present {present}",
+        "es": "recuperados {recovered} · ya presentes {present}",
+    },
+    "backfill_skipped": {"en": " · unreadable {skipped}", "es": " · ilegibles {skipped}"},
+    "backfill_failed": {"en": "failed: {detail}", "es": "falló: {detail}"},
+    "backfill_not_recoverable": {
+        "en": "not recoverable: {reason}",
+        "es": "no recuperable: {reason}",
+    },
+    "backfill_no_query_by_date": {
+        "en": "the service offers no query by date",
+        "es": "el servicio no ofrece consulta por fecha",
+    },
+    "backfill_refused": {
+        "en": "cannot recover {days} days: recovered entries are kept for {limit} "
+        "([history] recovered_retention_days)",
+        "es": "no se pueden recuperar {days} días: las entradas recuperadas se conservan "
+        "{limit} ([history] recovered_retention_days)",
+    },
+    "backfill_refused_empty": {
+        "en": "cannot recover {days} days: the period must be at least one day",
+        "es": "no se pueden recuperar {days} días: el periodo debe ser de al menos un día",
     },
     "timelapse_play": {"en": "Play the history", "es": "Reproducir el histórico"},
     "timelapse_pause": {"en": "Pause", "es": "Pausar"},
@@ -158,6 +198,7 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     },
     "map_legend_alerted": {"en": "Alerted", "es": "Alertado"},
     "map_legend_discarded": {"en": "Discarded", "es": "Descartado"},
+    "map_legend_recovered": {"en": "Recovered", "es": "Recuperado"},
     "map_legend_size": {"en": "Size = magnitude", "es": "Tamaño = magnitud"},
 }
 

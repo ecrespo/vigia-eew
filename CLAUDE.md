@@ -70,6 +70,7 @@ vigia-eew --help
 vigia-eew --simulate                    # injects a simulated earthquake (M6.1 La Guaira), no network
 vigia-eew --settings                    # the configuration panel alone, no agent and no tray
 vigia-eew --history                     # the earthquake history alone, no agent and no tray
+vigia-eew --backfill 90                 # recovers 90 days into the history from the catalogues, exits
 vigia-eew --check-config                # validates config.toml and exits
 vigia-eew --install-autostart           # installs autostart (systemd/LaunchAgent/task) and exits
 ```
@@ -152,6 +153,12 @@ User-facing text (alert window, toast, tray menu) is internationalized via `i18n
 (RF-35): the language is auto-detected from the OS locale by default, overridable with
 `[notification] language` in `config.toml` (`"auto"`/`"en"`/`"es"`), falling back to
 English for unsupported locales.
+
+`backfill.py` completes the history from the networks' FDSN catalogues (`--backfill DAYS`, or
+the history screen's *Recover* action): a path **separate from ingestion** that writes only to
+the history file, as a third verdict `recovered`. It reads periods through
+`ingest/catalogue.py`, shares the deduplicator's predicate (`same_earthquake`) to join an
+earthquake already known, and an import contract forbids it everything that can alert.
 
 `autostart/` installs/uninstalls OS-native autostart (systemd `--user` on Linux,
 LaunchAgent on macOS, scheduled task on Windows), invoked from `cli.py` via

@@ -95,7 +95,7 @@ The full matrix is in [07-TASKS](07-TASKS.md). Summary by area:
 | V-03 | A requirement worded for the user was verified on a module | 🟡 | process |
 | V-04 | A v1.0 agent reads a recovered row as a discard | 🟡 | F13 |
 | V-05 | After 90 days an earthquake the agent evaluated reads as *recovered* | 🟡 | F13 |
-| V-06 | Joining recovered arrivals reuses a heuristic tuned for a live stream | 🟡 | F13 |
+| V-06 | Joining recovered arrivals reuses a heuristic tuned for a live stream — **measured: not material** | 🟢 | F13 |
 | V-07 | The per-earthquake reading changes little in today's data | 🟡 | F11 |
 | V-08 | The countdown branch has never occurred | 🟡 | F16 |
 | V-09 | T-181 changes the alert queue | 🟡 | F16 |
@@ -184,6 +184,13 @@ T-170's tests use synthetic data and cannot show how often this happens. Its `in
 should recover a week the local history already holds and report how many earthquakes ended up
 with two `correlation_id`s. If the rate is material, the thresholds for recovery become their own
 constants.
+
+> **Measured 2026-11-16 (T-170).** Thirty days recovered from the three live catalogues into a
+> **copy** of the maintainer's history: 75 arrivals written (EMSC 51, USGS 23, GEOFON 1), 52 of
+> them joined to an earthquake the history already held. Pairs from different networks within
+> 100 km and 90 s that were **not** joined — that is, left apart by magnitude alone: **0**. The
+> rate is not material on this data and the thresholds stay shared. It is one month of one
+> region; the check is a script, not a test, and is worth repeating after a strong sequence.
 
 ### V-07 · One earthquake, one point — for 47 earthquakes 🟡
 
@@ -311,7 +318,7 @@ None. T-182 cites Art. 9 rather than a requirement, as the cut task of v1.0 did.
 | **F10 · Full query** | ✅ **Done**, 2026-11-16 — `MAP_SYMBOL_LIMIT` confirmed by T-163; the Wayland smoke (V-11) still owed |
 | **F11 · One earthquake** | ✅ **Done**, 2026-11-16 |
 | **F12 · Timelapse** | ✅ **Done**, 2026-11-16 — spike verdict *viable with markers*; the observation on the packaged binary is owed |
-| **F13 · Depth** | ✅ Ready — V-02 resolved as D-10 |
+| **F13 · Depth** | ✅ **Done**, 2026-11-16 — V-06 measured and not material |
 | **F14 · Figures and export** | ✅ Ready |
 | **F15 · TUI** | ✅ Ready |
 | **F16 · v1.0 promises and cut** | ✅ Ready, with V-09 in view |

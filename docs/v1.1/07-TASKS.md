@@ -23,7 +23,7 @@
 > **First batch: T-152 to T-155.** Run, review, adjust, and only then go on. F9 does not touch the
 > schema, the configuration or the pipeline, and it is verified with one command.
 >
-> **F9, F10, F11 and F12 are done** (2026-11-16): gate green. Next batch: **F13, T-167..T-171**.
+> **F9 to F13 are done** (2026-11-16): gate green. Next batch: **F14, T-172..T-175**.
 
 ## A constraint on every task
 
@@ -311,7 +311,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F13 · A history with depth
 
-### [ ] T-167 · The four keys
+### [x] T-167 · The four keys — 2026-11-16
 - **What**: `[emsc] catalog_url`, `[history] recovered_retention_days`, `recovery_radius_km`,
   `recovery_min_magnitude` in the schema and the example file; the EMSC catalogue in
   `docs/API-SPEC.md`.
@@ -322,8 +322,11 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Done**: `vigia-eew --check-config` accepts the example file; the four keys appear in the panel
   without a line of panel code; an existing `config.toml` without them loads with the defaults.
 - **Hours**: 2–3
+- **As built**: the EMSC key is `[sources.emsc] catalog_url` — the kit wrote `[emsc]`, but every
+  source section lives under `[sources.*]`. `DATA-MODEL.md` had no `[history]` section at all; it
+  has one now. The template's pinned count of comment lines went from 66 to 74.
 
-### [ ] T-168 · Two retentions, and who may overwrite whom **[P]**
+### [x] T-168 · Two retentions, and who may overwrite whom **[P]** — 2026-11-16
 - **What**: `prune()` with two cut-offs; `record_recovered()` with `DO NOTHING`; `near()`; a test
   that the live `record()` overwrites a recovered row; the *received live* predicate.
 - **REQ**: REQ-HIS-011, REQ-HIS-012, REQ-HIS-013 · **CA**: CA-117.5, CA-117.8, CA-117.10, CA-117.12
@@ -335,8 +338,11 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   kind of row untouched; `SCHEMA_VERSION` is still 1.
 - **lat.md**: `history.md` — recovered is a verdict, not a column.
 - **Hours**: 2–4
+- **As built**: `record_recovered` forces the verdict to `recovered` and clears reason and severity
+  whatever the caller left; `_PRUNE` and `_UNLINK_PRUNED` are whole statements with both cut-offs;
+  `LIVE_VERDICTS` and `received_live()` are the predicate of X-2.
 
-### [ ] T-169 · Reading a period from a catalogue
+### [x] T-169 · Reading a period from a catalogue — 2026-11-16
 - **What**: `ingest/catalogue.py` — windows of 30 days, pages of 1 000, one retry — and
   `SourceSpec.recovery` for the four sources, FUNVISIS declaring why it has none.
 - **REQ**: REQ-HIS-010, REQ-HIS-012 · **CA**: CA-117.1, CA-117.2, CA-117.7 · **ADR**: ADR-036
@@ -348,8 +354,14 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   for a source that declares neither a reader nor a reason. One test marked `integration` reads a
   day from each live service.
 - **Hours**: 5–9
+- **As built**: `fetch` is an async generator of `RawMessage`; GEOFON's row parser became the
+  module-level `parse_rows`, shared with the live poller. The live test is opt-in
+  (`VIGIA_NETWORK_TESTS=1`) so that the default suite never touches the network, and reads a week,
+  not a day. Requests carry a User-Agent that names the product and nothing else.
+- **Observed live**, 2026-11-16: all three services answer the request as written — a week gave
+  EMSC 24, USGS 23, GEOFON 2 — and the registry's own translations read every record.
 
-### [ ] T-170 · `backfill.py`
+### [x] T-170 · `backfill.py` — 2026-11-16
 - **What**: the orchestration of ADR-036: priority order, normalise, join by the deduplicator's
   predicate (extracted to a function both use), `record_recovered`, the per-network outcome, the
   bound by retention, and the import contract.
@@ -365,8 +377,15 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   deduplicator's own tests pass unchanged.
 - **lat.md**: `history.md` — recovery is a separate path; `pipeline.md` — the shared predicate.
 - **Hours**: 5–9
+- **As built**: `recover` (async), `run` (opens its own client and its own, unpruned, store),
+  `Outcome`, `describe`, `exit_code`, `PeriodRefused`. The contract *The recovery of the history
+  cannot alert* forbids **direct** imports only (`allow_indirect_imports`): the normaliser and the
+  predicate it shares have imports of their own. It was seen to fail on an import of `state`.
+  `backfill` also joined the layered contract, beside `notify`, so neither can import the other.
+- **V-06, measured**: 30 days into a copy of the real history — 75 written, 52 joined, **0** left
+  apart by magnitude alone (08 §V-06).
 
-### [ ] T-171 · `--backfill`, *Recover…*, and a third style
+### [x] T-171 · `--backfill`, *Recover…*, and a third style — 2026-11-16
 - **What**: the command-line option with its outcome and exit codes; the action on the history
   screen, on a worker thread, refreshing the views; the *recovered* style on the table, the map and
   the playback, with its legend entry and its strings.
@@ -381,6 +400,15 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   filter offers *recovered* and isolates them; the three styles differ with colours ignored; the
   rows are still there after a restart.
 - **Hours**: 4–7
+- **As built**: recovered is a hollow **square**; alerted a filled circle, discarded a hollow one.
+  In the table a recovered row's reason reads *Not evaluated: the agent was not watching*. The
+  screen's action is a field and a button in the header; the wiring runs it on a daemon thread
+  with its own connection and reports through `shell.after`. `app.py` and `timelapse_view.py`
+  needed no change — the playback draws through the same map.
+- **Found on the way**: `HistoryWindow.refresh()` re-read the map and not the table. Fixed.
+- **Observed on the real commands**, against a **copy** of the history (`XDG_DATA_HOME`):
+  `--backfill 30` twice (75 recovered, then 0), `--backfill 400` refused with exit 2, and the
+  screen's *Recover* reporting its outcome. The maintainer's own history was not written to.
 
 ---
 

@@ -22,7 +22,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from vigia_eew import geocode, geoloc, tray
+from vigia_eew import backfill, geocode, geoloc, tray
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings
 from vigia_eew.history import HistoryStore, HistoryWriter
@@ -93,6 +93,11 @@ class Wiring:
         self.config_file: Path | None = None
         self._panel: Any = None
         self._history_window: Any = None
+        #: Runs a job off the UI thread. A daemon thread by default; replaced
+        #: in tests, which run the job when they choose to.
+        self.in_background: Callable[[Callable[[], None]], None] = lambda job: threading.Thread(
+            target=job, name="vigia-backfill", daemon=True
+        ).start()
         self._history_store: HistoryStore | None = None
         self._history: HistoryWriter | None = None
 
@@ -201,7 +206,10 @@ class Wiring:
         if self._history is not None:
             return self._history
         try:
-            store = HistoryStore(retention_days=self.cfg.history.retention_days).open()
+            store = HistoryStore(
+                retention_days=self.cfg.history.retention_days,
+                recovered_retention_days=self.cfg.history.recovered_retention_days,
+            ).open()
         except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
             self._log.warning("history_unavailable type=%s detail=%s", type(exc).__name__, exc)
             return None
@@ -497,10 +505,40 @@ class Wiring:
             # The playback steps on the shell's own timer and stops when an
             # alert covers the screen (REQ-TLP-006).
             after=shell.after,
+            on_recover=lambda days, report: self.recover_history(shell, days, report),
         )
         self._history_window = window
         self._show(shell, "history", title, window.view, on_covered=window.pause_playback)
         return window
+
+    def recover_history(
+        self, shell: Any, days: int, report: Callable[[list[str]], None]
+    ) -> str | None:
+        """Recovers `days` days for the history screen; returns a refusal, or None.
+
+        The catalogues are read on a worker thread -- a year is a few dozen
+        requests, and the window must keep answering -- with a history
+        connection of its own, and the outcome goes back to the screen on the
+        UI loop. Nothing on this path can alert (ADR-036): it does not go
+        through the queue, the pipeline or the controller.
+        """
+        try:
+            backfill.check_period(days, self.cfg)
+        except backfill.PeriodRefused as refusal:
+            return backfill.refusal_text(refusal, self.locale)
+
+        def job() -> None:
+            try:
+                lines = backfill.describe(backfill.run(self.cfg, days), self.locale)
+            except Exception as exc:  # noqa: BLE001 - said on the screen, never raised at it
+                self._log.warning(
+                    "history_recovery_failed type=%s detail=%s", type(exc).__name__, exc
+                )
+                lines = [t("backfill_failed", self.locale, detail=f"{type(exc).__name__}: {exc}")]
+            shell.after(0, lambda: report(lines))
+
+        self.in_background(job)
+        return None
 
     def _close_history(self, shell: Any) -> None:
         self._close_history_reader()

@@ -384,3 +384,67 @@ def test_closing_the_history_stops_the_playback(wiring, fake_shell) -> None:
 
     assert window.playback.playing is False
     assert window.playback.step == 0
+
+
+# --- T-171 · the screen's Recover action runs off the UI thread (ADR-036 §8) ------
+
+
+def _recover_from_the_screen(wiring, fake_shell, monkeypatch, *, days: str, outcome=None):
+    """Opens the history, presses Recover; returns the window and what the recovery was asked."""
+    import vigia_eew.wiring as wiring_module
+    from vigia_eew.backfill import Outcome
+
+    asked: list[int] = []
+
+    def run(cfg, asked_days):
+        asked.append(asked_days)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return [Outcome("EMSC", "recovered", recovered=2, present=1)]
+
+    monkeypatch.setattr(wiring_module.backfill, "run", run)
+    background: list = []
+    wiring.in_background = background.append
+    window = wiring.open_history(fake_shell)
+    window.recover_days.value = days
+    window.recover_button.on_click(None)
+    return window, asked, background
+
+
+def test_the_screen_recovers_in_the_background_and_reports_on_the_ui_loop(
+    wiring, fake_shell, monkeypatch
+) -> None:
+    window, asked, background = _recover_from_the_screen(wiring, fake_shell, monkeypatch, days="30")
+    assert asked == []  # nothing ran on the UI thread
+    assert len(background) == 1
+
+    background[0]()  # the worker thread gets to it
+    assert asked == [30]
+    assert window.recover_button.disabled is True  # not reported yet: that is the UI loop's
+
+    fake_shell.run_pending()
+    assert "EMSC" in window.recover_status.value
+    assert window.recover_button.disabled is False
+
+
+def test_the_screen_refuses_a_period_beyond_the_retention_without_starting(
+    wiring, fake_shell, monkeypatch
+) -> None:
+    window, asked, background = _recover_from_the_screen(
+        wiring, fake_shell, monkeypatch, days="400"
+    )
+
+    assert background == [] and asked == []
+    assert "400" in window.recover_status.value and "365" in window.recover_status.value
+
+
+def test_a_recovery_that_breaks_is_said_on_the_screen(wiring, fake_shell, monkeypatch) -> None:
+    window, _asked, background = _recover_from_the_screen(
+        wiring, fake_shell, monkeypatch, days="30", outcome=OSError("disk full")
+    )
+
+    background[0]()
+    fake_shell.run_pending()
+
+    assert "disk full" in window.recover_status.value
+    assert window.recover_button.disabled is False

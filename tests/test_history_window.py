@@ -798,3 +798,91 @@ def test_refreshing_the_screen_reads_the_set_to_play_again(month: HistoryStore) 
     window.refresh()
 
     assert len(window.playback.timeline) == 31
+
+
+# --- T-171 · the Recover action on the screen (REQ-HIS-010, ADR-036 §8) -------------
+
+
+class _Recovery:
+    """Stands in for the wiring: remembers what was asked and reports when told to."""
+
+    def __init__(self, refusal: str | None = None) -> None:
+        self.refusal = refusal
+        self.asked: list[int] = []
+        self.report = None
+
+    def __call__(self, days: int, report) -> str | None:
+        self.asked.append(days)
+        self.report = report
+        return self.refusal
+
+
+def _recovering_window(store: HistoryStore, recovery: _Recovery):
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    return HistoryWindow(store, on_recover=recovery, locale_code="en")
+
+
+def test_without_a_recovery_the_screen_offers_none(store: HistoryStore) -> None:
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    assert HistoryWindow(store).recover_button is None
+
+
+def test_the_recover_action_asks_for_the_days_typed(store: HistoryStore) -> None:
+    recovery = _Recovery()
+    window = _recovering_window(store, recovery)
+    window.recover_days.value = "45"
+
+    window.recover_button.on_click(None)
+
+    assert recovery.asked == [45]
+    assert window.recover_button.disabled is True  # one recovery at a time
+    assert window.recover_status.value == "Recovering…"
+
+
+def test_days_that_are_not_a_number_are_not_asked_for(store: HistoryStore) -> None:
+    recovery = _Recovery()
+    window = _recovering_window(store, recovery)
+    window.recover_days.value = "a while"
+
+    window.recover_button.on_click(None)
+
+    assert recovery.asked == []
+    assert window.recover_button.disabled is False
+    assert window.recover_status.value == "Type a number of days"
+
+
+def test_a_refusal_is_shown_and_the_action_stays_available(store: HistoryStore) -> None:
+    """CA-117.6, on the screen."""
+    refusal = "cannot recover 400 days: recovered entries are kept for 365"
+    window = _recovering_window(store, _Recovery(refusal=refusal))
+    window.recover_days.value = "400"
+
+    window.recover_button.on_click(None)
+
+    assert window.recover_status.value == refusal
+    assert window.recover_button.disabled is False
+
+
+def test_when_the_recovery_ends_the_outcome_is_shown_and_the_views_are_read_again(
+    store: HistoryStore,
+) -> None:
+    from dataclasses import replace
+
+    recovery = _Recovery()
+    window = _recovering_window(store, recovery)
+    window.recover_button.on_click(None)
+    assert len(window.map.markers) == 3
+    store.record_recovered(
+        replace(_record(magnitude=4.0, event_id="back"), occurred_at=_WHEN - timedelta(days=5))
+    )
+
+    recovery.report(["EMSC      recovered 1 · already present 0", "FUNVISIS  not recoverable"])
+
+    assert "EMSC      recovered 1" in window.recover_status.value
+    assert "FUNVISIS" in window.recover_status.value
+    assert window.recover_button.disabled is False
+    assert len(window.map.markers) == 4
+    assert _table_rows(window) == 4
+    assert "recovered" in window.listing.available_verdicts

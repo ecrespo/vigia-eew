@@ -33,6 +33,7 @@ vigia-eew/
 │   ├── app.py                  # Application: run()/simulate()/run_tui() wiring (ADR-006/ADR-013)
 │   ├── tui.py                  # headless Textual dashboard + modal alert (--tui, RF-36)
 │   ├── simulation.py           # simulated_event (M6.1 La Guaira)
+│   ├── backfill.py             # recovery of a period into the history; cannot alert (ADR-036)
 │   ├── config.py               # Settings (pydantic) + config.toml loading + first-run seeding
 │   ├── config.toml.example     # bundled template; seeded to the OS config path on first run (RF-24)
 │   ├── models.py                # SeismicEvent, AppState, signatures
@@ -45,6 +46,7 @@ vigia-eew/
 │   │   ├── __init__.py         # RawMessage (raw wrapper, source→pipeline)
 │   │   ├── ws_emsc.py          # WSIngestor (keepalive, reconnection)
 │   │   ├── rest_usgs.py        # RESTReconciler (60 s poll, cursor)
+│   │   ├── catalogue.py        # reads a period from an FDSN catalogue, for the recovery (ADR-036)
 │   │   ├── rest_funvisis.py    # FUNVISISPoller (Venezuela-only local coverage, RF-38)
 │   │   └── rest_geofon.py      # GEOFONPoller (GFZ Potsdam fdsnws-event, text format, cursor, RF-39)
 │   ├── pipeline/
@@ -314,6 +316,7 @@ unaffected).
 | RF-15..RF-19 | `notify/alert_window.py`, `notify/flet_shell.py`, `notify/map_view.py` (ADR-030) | F4 |
 | RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
 | REQ-HIS-005, 007, 008 · REQ-MAP-006, 007 | `notify/history_view.py` (`HistoryList` owns filters and paging), `notify/history_map.py` (markers, selection), `notify/history_window.py`, `timeutil.py` (`local_day_bounds`), `history.py` (`verdicts`) (v1.1, ADR-032, ADR-033) | F10 |
+| REQ-HIS-010..013 | `backfill.py` (the recovery; joins by `pipeline/dedup.py::same_earthquake`), `ingest/catalogue.py` (windows, pages, one retry), `ingest/registry.py` (`SourceSpec.recovery`), `history.py` (`record_recovered`, `near`, two retentions), `config.py` (four keys), `cli.py` (`--backfill`), `wiring.py` and `notify/history_window.py` (the *Recover* action), `notify/history_map.py` (third style) (v1.1, ADR-036, ADR-037) | F13 |
 | REQ-TLP-001..008 | `notify/timelapse.py` (pure `Timeline`: steps, frames, dwell), `notify/timelapse_view.py` (play, pause, seek, speed, trail), `notify/history_window.py` (feeds and paints it), `notify/history_map.py` (`strengths`), `wiring.py` (timer, pause on an alert) (v1.1, ADR-035) | F12 |
 | REQ-HIS-009 | `history.py` (`HistoryQuery.reading`/`rank`, the per-earthquake statements, `arrivals`), `notify/history_view.py` (the switch, `arrivals_of`), `wiring.py` (hands over the network order) (v1.1, ADR-034) | F11 |
 | REQ-GUI-011..013 | `cli.py` (`--history`), `app.py`, `wiring.py`, `notify/navigation.py`, `notify/flet_shell.py`, `packaging/` (v1.1, ADR-031) | F9 |

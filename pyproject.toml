@@ -157,7 +157,7 @@ layers = [
     "vigia_eew.app",
     "vigia_eew.wiring",
     "vigia_eew.tui | vigia_eew.tray",
-    "vigia_eew.notify | vigia_eew.autostart",
+    "vigia_eew.notify | vigia_eew.autostart | vigia_eew.backfill",
     "vigia_eew.pipeline",
     "vigia_eew.ingest",
     "vigia_eew.simulation",
@@ -197,6 +197,26 @@ modules = [
     "vigia_eew.notify",
     "vigia_eew.autostart",
 ]
+
+# The recovery of the history reads catalogues and writes to the history file.
+# It must not be able to alert: an earthquake from a month ago cannot open a
+# window (REQ-HIS-011, ADR-036). So it may import none of what alerts, supervises
+# or remembers what was alerted. Direct imports only: it shares the normaliser
+# and the deduplicator's predicate, and those modules have imports of their own.
+[[tool.importlinter.contracts]]
+name = "The recovery of the history cannot alert"
+type = "forbidden"
+source_modules = ["vigia_eew.backfill"]
+forbidden_modules = [
+    "vigia_eew.notify",
+    "vigia_eew.supervisor",
+    "vigia_eew.state",
+    "vigia_eew.pipeline.processor",
+    "vigia_eew.pipeline.filter",
+    "vigia_eew.tray",
+    "vigia_eew.tui",
+]
+allow_indirect_imports = true
 
 # The timeline decides what a playback shows and is checked with no screen and no
 # clock (ADR-035). It stays that way only while it imports neither the toolkit nor

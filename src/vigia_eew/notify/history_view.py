@@ -181,6 +181,10 @@ class HistoryList:
         An unphrased reason is still shown. A row the product cannot put into
         words is a row somebody needs to see more, not less.
         """
+        if record.verdict == "recovered":
+            # Not a discard's reason: nobody decided anything about this row.
+            # It is the honest answer to "why was I not warned?" for it.
+            return t("history_reason_recovered", self._locale)
         if not record.reason:
             return ""
         key = REASONS.get(record.reason)

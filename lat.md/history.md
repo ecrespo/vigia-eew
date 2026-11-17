@@ -82,7 +82,8 @@ earthquake was then.
 
 ## Retention is where an admitted guess lives
 
-Entries older than the configured retention are removed when the agent opens the file.
+Entries older than the configured retention are removed when the agent opens the file. Recovered
+entries have a retention of their own: [[lat.md/history#Recovered is a verdict, not a column]].
 
 Ninety days is an **estimate, not a measurement**. Discards far outnumber alerts and the volume
 depends on global seismicity, so the figure is configurable from the start precisely because it is
@@ -92,6 +93,74 @@ Pruning happens at open rather than on a timer. A periodic task would have nothi
 the time and would still need supervising, restarting and shutting down; the history only grows
 while the agent runs, so bounding it at each start is equivalent with far less machinery — the
 same argument [[lat.md/state#Pruning happens where the state grows]] settled.
+
+## Recovered is a verdict, not a column
+
+An arrival read from a catalogue afterwards is stored with the verdict `recovered`, beside
+`alerted` and `discarded`. No column was added and the schema is still version 1 (ADR-037).
+
+The verdict column already answers *"what did the agent do with this arrival?"*, and *"it was not
+watching"* is an answer to that question, not a second question. A `provenance` column would
+allow *alerted and recovered*, a state REQ-HIS-011 forbids, and would need the first migration
+of a user's own record just to make it representable.
+
+Who may overwrite whom is decided by two statements in
+[[src/vigia_eew/history.py#HistoryStore]]. The live `record()` replaces the row of the same
+arrival, as it always did, so an arrival the agent later evaluates takes the agent's verdict.
+`record_recovered()` inserts with `DO NOTHING`: it can never replace what the agent decided at
+the time, which is the most valuable datum in the file.
+
+Recovered rows have **their own retention**, 365 days against 90 (decision D-5): recovering a
+year and losing it at the next start would not be a feature. One `DELETE` applies both cut-offs,
+told apart by the verdict, so changing one figure cannot touch the other kind of row. It is also
+how far back a recovery may ask — recovering what the next start deletes is not a feature either.
+
+One consequence nobody chose: an earthquake the agent alerted on **and** that was also recovered
+from another network loses its evaluated row at 90 days and keeps the recovered one. From then
+it reads as *recovered*. That is what two retentions mean; the remedy is `retention_days`.
+
+A v1.0 agent pointed at this file draws `recovered` as a discard, because an unknown verdict is
+drawn rather than dropped. Degraded on a downgrade, not broken — and bumping the schema to
+prevent it would make a downgrade lose the whole history to protect a label.
+
+*Received live* is one predicate, `received_live()`, for everything that measures the agent.
+
+## Recovery is a separate path that writes only to the history
+
+[[src/vigia_eew/backfill.py#recover]] completes the history from the networks' catalogues. It is
+not an ingestor, and almost all of its design is what it cannot do (ADR-036).
+
+The ingestors exist to alert: they feed the raw queue, and everything downstream of it can open
+a window. Feeding recovered events into that queue with a flag was rejected — every stage would
+have to honour the flag, and the one that forgot would alert on a month-old earthquake. So the
+recovery has its own path, imports none of the processor, the filter's verdict, the supervisor,
+the alert controller or the operating state, and an import contract fails if it ever does.
+
+[[src/vigia_eew/ingest/catalogue.py#fetch]] asks the same FDSN services the pollers poll, for a
+**period** instead of *"since my cursor"*: windows of thirty days, pages of a thousand, one
+retry, and payloads in the dialect each network's own translation already reads. Every source
+declares in the registry how its past is read or why it cannot be; FUNVISIS takes no dates, so
+the small local earthquakes only it catalogues are not recovered, and the outcome says so
+instead of letting an incomplete history look complete.
+
+What is asked for is the recovery's own circle, `[history] recovery_radius_km` and
+`recovery_min_magnitude`, not the alert's: a map of a region is wider than an alarm. The request
+carries the reference point, as the live polls to those same hosts always have; nothing of the
+history is sent anywhere.
+
+**One earthquake stays one.** An arrival of an earthquake the history already holds from another
+network takes its correlation id and points at the row that prevails, decided by the
+deduplicator's own predicate ([[lat.md/pipeline#Deduplication]]) with the configured thresholds.
+Networks are read in the user's order of preference, so the better-ranked one's row is the one
+left standing.
+
+That predicate was tuned for preliminary solutions minutes apart, and a catalogue holds revised
+ones. Measured on 2026-11-16, recovering thirty days into a copy of a real history: 75 arrivals,
+52 joined to a known earthquake, **none** left apart by magnitude alone. If that changes, the
+recovery's thresholds become their own constants.
+
+One network failing is reported and the others carry on. From the screen it runs on a worker
+thread with a connection of its own, and reports back on the UI loop.
 
 ## It does not leave the machine
 

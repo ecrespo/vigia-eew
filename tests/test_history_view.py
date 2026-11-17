@@ -1058,3 +1058,56 @@ def test_the_filters_have_a_signature_that_ignores_page_order_and_reading(
 
     listing.set_min_magnitude(5.0)
     assert listing.filter_signature != before
+
+
+# --- T-171 · recovered entries read as what they are (REQ-HIS-011, CA-117.4) ---------
+
+
+@pytest.fixture
+def mixed(tmp_path: Path) -> HistoryStore:
+    store = HistoryStore(tmp_path / "mixed.sqlite3")
+    store.open()
+    store.record(_record(source_event_id="a", correlation_id="q1"))
+    store.record(
+        _record(source_event_id="d", correlation_id="q2", verdict="discarded", reason="radius")
+    )
+    store.record_recovered(_record(source="USGS", source_event_id="r", correlation_id="q3"))
+    yield store
+    store.close()
+
+
+def test_a_recovered_entry_says_it_was_not_evaluated(mixed: HistoryStore) -> None:
+    """The honest answer to "why was I not warned?" for that row."""
+    listing = HistoryList(mixed, locale_code="en")
+
+    row = next(row for row in listing.rows if row.record.verdict == "recovered")
+
+    assert row.verdict == "Recovered"
+    assert row.reason == "Not evaluated: the agent was not watching"
+    assert HistoryList(mixed, locale_code="es").rows  # and it has a Spanish wording
+    spanish = next(
+        r for r in HistoryList(mixed, locale_code="es").rows if r.record.verdict == "recovered"
+    )
+    assert (spanish.verdict, spanish.reason) == (
+        "Recuperado",
+        "No evaluado: el agente no estaba vigilando",
+    )
+
+
+def test_the_three_verdicts_are_worded_differently(mixed: HistoryList) -> None:
+    listing = HistoryList(mixed, locale_code="en")
+
+    assert len({row.verdict for row in listing.rows}) == 3
+
+
+def test_the_verdict_filter_offers_recovered_and_isolates_it(mixed: HistoryStore) -> None:
+    from vigia_eew.notify.history_view import HistoryView
+
+    view = HistoryView(HistoryList(mixed, locale_code="en"), locale_code="en")
+    offered = {option.key: option.text for option in view._verdict.options}
+    assert offered["recovered"] == "Recovered"
+
+    view._verdict.value = "recovered"
+    view._apply_verdict()
+
+    assert [row.record.source_event_id for row in view.listing.rows] == ["r"]

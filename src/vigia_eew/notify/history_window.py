@@ -32,6 +32,10 @@ from vigia_eew.notify.presentation import VENEZUELA_ZONE
 from vigia_eew.notify.timelapse import PLAYBACK_SYMBOL_LIMIT, Frame
 from vigia_eew.notify.timelapse_view import TimelapseView, Timer
 
+#: Carries out a recovery of so many days and reports its outcome, line by
+#: line, when it ends -- or returns at once the reason it will not start.
+Recover = Callable[[int, Callable[[Sequence[str]], None]], str | None]
+
 #: Height of each pane -- the table with its filters, and the map. Raised from
 #: 520 when the filters went from two controls to five: the table was left
 #: with room for six rows.
@@ -65,7 +69,10 @@ class HistoryWindow:
         on_close: Callable[[], None] | None = None,
         rank: Sequence[str] = (),
         after: Timer | None = None,
+        on_recover: Recover | None = None,
     ) -> None:
+        self._locale = locale_code
+        self._on_recover = on_recover
         self.listing = HistoryList(store, locale_code=locale_code, zone=zone, rank=rank)
         #: The filters of the set the playback holds, or None before it has one.
         self._played_signature: tuple[Any, ...] | None = None
@@ -123,6 +130,7 @@ class HistoryWindow:
                 t("history_title", locale_code), size=20, weight=ft.FontWeight.BOLD, expand=True
             ),
         ]
+        header.extend(self._build_recovery())
         if on_close is not None:
             header.append(ft.IconButton(icon=ft.Icons.CLOSE, on_click=lambda _e: on_close()))
         self.view = ft.SafeArea(
@@ -136,6 +144,7 @@ class HistoryWindow:
                         bgcolor=ft.Colors.SURFACE_CONTAINER,
                         content=ft.Row(controls=header),
                     ),
+                    self._recovery_outcome,
                     ft.Container(
                         padding=16,
                         content=ft.ResponsiveRow(controls=panes, spacing=16, run_spacing=16),
@@ -145,11 +154,80 @@ class HistoryWindow:
         )
         self._redraw_map()
 
+    # --- Completing the history from the catalogues (REQ-HIS-010) ---
+
+    def _build_recovery(self) -> list[Any]:
+        """The *Recover* action: how many days, a button, and what came of it.
+
+        Only when somebody can carry it out. The screen does not recover
+        anything itself -- it could not, without a network library -- it asks
+        whoever built it, and is told the outcome later.
+
+        The field and the button go in the header, so that they cost the
+        table and the map no height; the outcome appears under it only once
+        there is one to show.
+        """
+        self.recover_button: Any = None
+        self.recover_status = ft.Text("", size=12, selectable=True, font_family="monospace")
+        self._recovery_outcome = ft.Container(
+            visible=False,
+            padding=ft.Padding.only(left=16, right=16, top=10),
+            content=self.recover_status,
+        )
+        if self._on_recover is None:
+            return []
+        loc = self._locale
+        self.recover_days = ft.TextField(
+            label=t("history_recover_days", loc),
+            value="30",
+            width=130,
+            dense=True,
+            keyboard_type=ft.KeyboardType.NUMBER,
+        )
+        self.recover_button = ft.OutlinedButton(
+            content=ft.Text(t("history_recover", loc)),
+            icon=ft.Icons.CLOUD_DOWNLOAD,
+            tooltip=t("history_recover_hint", loc),
+            on_click=lambda _e: self._recover(),
+        )
+        return [self.recover_days, self.recover_button]
+
+    def _say(self, text: str) -> None:
+        """Shows what became of the recovery under the header."""
+        self.recover_status.value = text
+        self._recovery_outcome.visible = bool(text)
+
+    def _recover(self) -> None:
+        """Asks for the days typed to be recovered. One recovery at a time."""
+        if self._on_recover is None:
+            return
+        try:
+            days = int((self.recover_days.value or "").strip())
+        except ValueError:
+            self._say(t("history_recover_invalid", self._locale))
+            return
+        self.recover_button.disabled = True
+        self._say(t("history_recover_running", self._locale))
+        refusal = self._on_recover(days, self._recovered)
+        if refusal is not None:
+            self._say(refusal)
+            self.recover_button.disabled = False
+
+    def _recovered(self, lines: Sequence[str]) -> None:
+        """The recovery has ended: say what each network gave, and read the file again."""
+        self._say("\n".join(lines))
+        self.recover_button.disabled = False
+        self.refresh()
+
     def refresh(self) -> None:
         """Redraws every view from the current filter, reading the file again."""
         # The agent writes while the screen is open: the set the playback
         # holds may no longer be what the same filters select.
         self._played_signature = None
+        # The list first: the table draws what the list holds, and without
+        # this it kept the page it had read before -- the map showed a
+        # recovered earthquake the table did not.
+        self.listing.refresh()
         self.table.refresh()
 
     def pause_playback(self) -> None:

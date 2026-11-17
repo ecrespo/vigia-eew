@@ -157,6 +157,7 @@ today_only = true
 [sources.emsc]
 enabled = true
 url = "wss://www.seismicportal.eu/standing_order/websocket"
+catalog_url = "https://www.seismicportal.eu/fdsnws/event/1/query"   # recovery only (v1.1)
 ping_interval_s = 15
 ping_timeout_s = 20
 backoff_max_s = 60
@@ -199,6 +200,13 @@ level = "INFO"
 file = "vigia-eew.log"
 max_bytes = 1048576
 backups = 3
+
+[history]
+enabled = true
+retention_days = 90               # entries the agent evaluated
+recovered_retention_days = 365    # entries recovered from the catalogues (v1.1, D-5)
+recovery_radius_km = 1000         # what a recovery asks for (v1.1, D-10)
+recovery_min_magnitude = 2.5
 ```
 
 ### 3.2 Pydantic definition (reference)
@@ -218,6 +226,7 @@ class Filter(BaseModel):
 class EMSCSource(BaseModel):
     enabled: bool = True
     url: str = "wss://www.seismicportal.eu/standing_order/websocket"
+    catalog_url: str = "https://www.seismicportal.eu/fdsnws/event/1/query"
     ping_interval_s: int = 15
     ping_timeout_s: int = 20
     backoff_max_s: int = 60
@@ -260,6 +269,13 @@ class LoggingCfg(BaseModel):
     max_bytes: int = 1_048_576
     backups: int = 3
 
+class History(BaseModel):
+    enabled: bool = True
+    retention_days: int = 90
+    recovered_retention_days: int = 365
+    recovery_radius_km: float = 1000.0
+    recovery_min_magnitude: float = 2.5
+
 class Settings(BaseModel):
     reference: ReferencePoint = ReferencePoint()
     filter: Filter = Filter()
@@ -271,7 +287,11 @@ class Settings(BaseModel):
     severity: Severity = Severity()
     notification: Notification = Notification()
     logging: LoggingCfg = LoggingCfg()
+    history: History = History()
 ```
+
+The history's own model — the `events` table, its indexes and the two retentions — is in
+`docs/v1/05-DATA-MODEL-DELTA.md` §3bis and `docs/v1.1/05-DATA-MODEL-DELTA.md` §2.
 
 ### 3.3 Config path resolution
 1. CLI flag `--config <path>` (highest priority).
