@@ -72,7 +72,7 @@ class Application:
         self._ctrl: AlertController | None = None
         self._exit_on_drain = False
         self._manual_reference = manual_reference
-        self._config_path = config_path
+        self.wiring.config_file = Path(config_path) if config_path is not None else None
         self._tray_icon: Any = None
         self._tui_app: Any = None
 
@@ -114,7 +114,7 @@ class Application:
     @property
     def _config_file(self) -> Path:
         """The file both ways into the configuration act on."""
-        return Path(self._config_path) if self._config_path is not None else default_config_path()
+        return self.wiring.config_file or default_config_path()
 
     def _after_acknowledge(self, _ev: SeismicEvent) -> None:
         """Closes the app once the queue has drained, where that applies (simulate)."""
@@ -184,10 +184,12 @@ class Application:
     def open_settings(self) -> None:
         """Opens the configuration panel alone, with no agent behind it (REQ-GUI-009)."""
         # @lat: [[configuration#A door into the panel that is not the tray]]
-        # Standalone: closing the panel -- the only screen -- ends the run.
-        self._in_window(
-            standalone=True, then=lambda shell: self.wiring.open_panel(shell, self._config_file)
-        )
+        self._in_window(standalone=True, then=lambda shell: self.wiring.navigate(shell, "panel"))
+
+    def open_history(self) -> None:
+        """Opens the history alone, with no agent behind it (REQ-GUI-011)."""
+        # @lat: [[notification#A door into every screen that is not the tray]]
+        self._in_window(standalone=True, then=self.wiring.open_history)
 
     def _in_window(self, *, standalone: bool, then: Callable[[Any], Any]) -> None:
         """Runs Flet until its window is gone; `then(shell)` fills it, on the UI loop."""
@@ -207,17 +209,17 @@ class Application:
         from vigia_eew.tui import VigiaTuiApp
 
         self._prepare(resolve_location=not simulate)
+        self._tui_app = VigiaTuiApp(
+            state=self._agent_state,
+            locale_code=self.wiring.locale,
+            on_start=self._inject_simulated_alert if simulate else None,
+            **self.wiring.tui_history(),
+        )
         if simulate:
-            self._tui_app = VigiaTuiApp(
-                state=self._agent_state,
-                locale_code=self.wiring.locale,
-                on_start=self._inject_simulated_alert,
-            )
             self._ctrl = self.wiring.build_tui_controller(
                 self._tui_app, on_acknowledge=self._after_acknowledge
             )
         else:
-            self._tui_app = VigiaTuiApp(state=self._agent_state, locale_code=self.wiring.locale)
             self._wire_tui(self._tui_app)
         self._log.info("tui_simulation_started" if simulate else "tui_started")
         self._tui_app.run()

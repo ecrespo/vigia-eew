@@ -20,7 +20,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from datetime import datetime
+from typing import Literal, NamedTuple
 
 from vigia_eew.config import Dedup
 from vigia_eew.geo import haversine_km
@@ -28,6 +29,33 @@ from vigia_eew.models import AlertedId, EventSignature, SeismicEvent
 from vigia_eew.state import StateStore
 
 DedupResult = Literal["new", "update", "duplicate", "supersede"]
+
+
+class Origin(NamedTuple):
+    """Where, when and how strong: what two reports of one earthquake agree on."""
+
+    lat: float
+    lon: float
+    time_utc: datetime
+    magnitude: float
+
+
+# @lat: [[pipeline#Deduplication]]
+def same_earthquake(cfg: Dedup, one: Origin, other: Origin) -> bool:
+    """True if two origins are the same earthquake per the heuristic (RF-09).
+
+    A function rather than a method because it has two callers that share
+    nothing else: the deduplicator, which decides whether to alert, and the
+    recovery of the history, which decides whether a catalogue's earthquake
+    is one already known. Two copies of the rule would be two answers to
+    "is this the same earthquake?".
+    """
+    distance = haversine_km(one.lat, one.lon, other.lat, other.lon)
+    delta_t = abs((one.time_utc - other.time_utc).total_seconds())
+    delta_mag = abs(one.magnitude - other.magnitude)
+    return (
+        distance <= cfg.distance_km and delta_t <= cfg.window_s and delta_mag <= cfg.magnitude_delta
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,14 +172,10 @@ class Deduplicator:
             return False
         return self._rank[arriving] < self._rank[alerted]
 
-    # @lat: [[pipeline#Deduplication]]
     def _matches(self, ev: SeismicEvent, signature: EventSignature) -> bool:
         """True if `ev` and `signature` are the same earthquake per the heuristic (RF-09)."""
-        distance = haversine_km(ev.lat, ev.lon, signature.lat, signature.lon)
-        delta_t = abs((ev.time_utc - signature.time_utc).total_seconds())
-        delta_mag = abs(ev.magnitude - signature.magnitude)
-        return (
-            distance <= self._cfg.distance_km
-            and delta_t <= self._cfg.window_s
-            and delta_mag <= self._cfg.magnitude_delta
+        return same_earthquake(
+            self._cfg,
+            Origin(ev.lat, ev.lon, ev.time_utc, ev.magnitude),
+            Origin(signature.lat, signature.lon, signature.time_utc, signature.magnitude),
         )

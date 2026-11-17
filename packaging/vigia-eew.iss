@@ -54,6 +54,8 @@ Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 [CustomMessages]
 en.SettingsShortcut=Settings
 es.SettingsShortcut=Configuración
+en.HistoryShortcut=History
+es.HistoryShortcut=Histórico
 en.AutostartTask=Start {#AppName} when I sign in
 es.AutostartTask=Iniciar {#AppName} al iniciar sesión
 en.DesktopTask=Create a desktop shortcut
@@ -73,6 +75,9 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
 ; The second entry is the point: on any session where the tray menu is not
 ; reachable, this is the way into the configuration panel.
 Name: "{group}\{#AppName} — {cm:SettingsShortcut}"; Filename: "{app}\{#AppExe}"; Parameters: "--settings"
+; And the third, for the same reason: the history used to be reachable only
+; from the tray menu (REQ-GUI-011).
+Name: "{group}\{#AppName} — {cm:HistoryShortcut}"; Filename: "{app}\{#AppExe}"; Parameters: "--history"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 

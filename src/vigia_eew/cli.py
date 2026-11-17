@@ -1,9 +1,10 @@
 """Console entry point `vigia-eew` (RF-26, RF-21).
 
-Starts the full agent (`vigia-eew`), the notification test (`--simulate`) or the
-configuration panel alone (`--settings`); accepts a config path (`--config`) and a
-quick check (`--check-config`).
-Autostart install/uninstall was added in Phase 6.
+Starts the full agent (`vigia-eew`), the notification test (`--simulate`), the
+configuration panel alone (`--settings`) or the history alone (`--history`);
+accepts a config path (`--config`) and a quick check (`--check-config`).
+Autostart install/uninstall was added in Phase 6, and `--backfill DAYS`, which
+completes the history from the networks' catalogues and exits, in v1.1.
 
 The application factory (`create_app`) is injectable so the CLI dispatch can be
 tested without starting the GUI or the network.
@@ -12,6 +13,7 @@ tested without starting the GUI or the network.
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -42,6 +44,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Opens the configuration panel on its own, without starting the agent.",
     )
     parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Opens the earthquake history on its own, without starting the agent.",
+    )
+    parser.add_argument(
+        "--backfill",
+        type=int,
+        metavar="DAYS",
+        help="Recovers the last DAYS days of earthquakes from the networks' catalogues "
+        "into the history, prints what each network gave, and exits. Never alerts.",
+    )
+    parser.add_argument(
         "--tui",
         action="store_true",
         help="Runs the headless terminal dashboard instead of the desktop GUI (RF-36).",
@@ -68,6 +82,34 @@ def _check_config(config_path: str | None) -> int:
         f"radius={cfg.filter.radius_km} km - min_mag={cfg.filter.min_magnitude}"
     )
     return 0
+
+
+def _backfill(config_path: str | None, days: int, recover: Callable[..., Any] | None) -> int:
+    """`--backfill DAYS`: complete the history from the catalogues, then exit.
+
+    The agent is not started and nothing here can alert (REQ-HIS-011). Exit
+    code 0 if at least one network was read, 1 if every network that could be
+    read failed -- or the history could not be opened -- and 2 if the period
+    is refused, which happens before any request is made.
+    """
+    # @lat: [[history#Recovery is a separate path that writes only to the history]]
+    from vigia_eew import backfill
+    from vigia_eew.i18n import resolve_locale
+
+    cfg = load_config(config_path)
+    locale = resolve_locale(cfg.notification.language)
+    try:
+        backfill.check_period(days, cfg)
+        outcomes = (recover or backfill.run)(cfg, days)
+    except backfill.PeriodRefused as refusal:
+        print(backfill.refusal_text(refusal, locale), file=sys.stderr)
+        return 2
+    except Exception as exc:  # noqa: BLE001 - said to the user instead of a traceback
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    for line in backfill.describe(outcomes, locale):
+        print(line)
+    return backfill.exit_code(outcomes)
 
 
 def _manage_autostart(*, install: bool, create_installer: Callable[[], Any] | None) -> int:
@@ -106,7 +148,12 @@ def _run_agent(args: argparse.Namespace, create_app: Callable[..., Any] | None) 
         cfg, manual_reference=has_manual_reference(args.config), config_path=args.config
     )
 
-    if args.settings:
+    if args.history:
+        # @lat: [[notification#A door into every screen that is not the tray]]
+        # First of all: with `--settings` too, the history opens and its
+        # navigation leads to the panel.
+        app.open_history()
+    elif args.settings:
         # Before the other modes on purpose: `--settings` is the door the
         # desktop entry knocks on, and it opens the panel and nothing else.
         app.open_settings()
@@ -124,6 +171,7 @@ def main(
     *,
     create_app: Callable[..., Any] | None = None,
     create_installer: Callable[[], Any] | None = None,
+    recover: Callable[..., Any] | None = None,
 ) -> int:
     """Console entry point. Returns a standard exit code.
 
@@ -137,6 +185,8 @@ def main(
         return _check_config(args.config)
     if args.install_autostart or args.uninstall_autostart:
         return _manage_autostart(install=args.install_autostart, create_installer=create_installer)
+    if args.backfill is not None:
+        return _backfill(args.config, args.backfill, recover)
     return _run_agent(args, create_app)
 
 

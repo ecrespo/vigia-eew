@@ -9,7 +9,7 @@ handling isn't duplicated across modules.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 Clock = Callable[[], datetime]
@@ -45,6 +45,37 @@ def local_midnight_ms(timezone: str, now: Clock) -> int | None:
     local_now = now().astimezone(tz)
     local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     return int(local_midnight.astimezone(UTC).timestamp() * 1000)
+
+
+def local_day_bounds(
+    first: date | None, last: date | None, timezone: str
+) -> tuple[datetime | None, datetime | None]:
+    """The UTC instants that bound a range of local calendar days, both inclusive.
+
+    The history's date filter (REQ-HIS-007): the user picks days where they
+    live, the history stores instants in UTC. `first` starts at its local
+    midnight; `last` ends one microsecond before the next one, so that the
+    bound can be used with `<=` and a day never claims the first instant of
+    the following day. Either side may be `None`, meaning open.
+
+    Raises `ValueError` if the range ends before it starts. An unknown
+    `timezone` falls back to UTC days rather than to no filter -- the same
+    fail-safe direction as the rest of this module: degrade, do not refuse.
+    """
+    if first is not None and last is not None and last < first:
+        raise ValueError(f"the period ends ({last}) before it starts ({first})")
+    zone: tzinfo
+    try:
+        zone = ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        zone = UTC
+
+    def midnight(day: date) -> datetime:
+        return datetime.combine(day, time.min, tzinfo=zone).astimezone(UTC)
+
+    since = None if first is None else midnight(first)
+    until = None if last is None else midnight(last + timedelta(days=1)) - timedelta(microseconds=1)
+    return since, until
 
 
 def floor_starttime_ms(cursor_ms: int | None, timezone: str, now: Clock) -> int | None:

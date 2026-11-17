@@ -33,6 +33,16 @@ def _isolate_user_config(monkeypatch, tmp_path):
         lambda: tmp_path / "vigia-eew" / "history.sqlite3",
     )
 
+    # A simulated alert records itself as the last drill in `state.json`
+    # (ADR-040). A test that shows one must never write to the user's.
+    from vigia_eew import state as state_module
+
+    monkeypatch.setattr(
+        state_module,
+        "default_state_path",
+        lambda: tmp_path / "vigia-eew" / "state.json",
+    )
+
 
 @pytest.fixture(autouse=True)
 def _no_desktop_client(monkeypatch):
@@ -127,9 +137,11 @@ class FakeShell:
         for _ms, callback in calls:
             callback()
 
-    def show_screen(self, key, title, view):
+    def show_screen(self, key, title, view, *, on_covered=None, on_uncovered=None):
         self.screen_key = key
         self.screens.append((key, title, view))
+        self.on_covered = on_covered
+        self.on_uncovered = on_uncovered
 
     def close_screen(self):
         self.screen_key = None

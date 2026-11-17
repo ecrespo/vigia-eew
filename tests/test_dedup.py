@@ -184,3 +184,24 @@ def test_register_prunes_stale_entries_before_saving(tmp_path):
     reloaded.load()
     assert not reloaded.already_alerted("ancient")
     assert reloaded.already_alerted("fresh-1")
+
+
+# --- T-170 · the predicate, shared with the recovery (ADR-036 §5) -------------------
+
+
+def test_the_heuristic_is_one_function_two_callers_can_use() -> None:
+    """The recovery joins arrivals by the rule the deduplicator alerts by."""
+    from datetime import timedelta
+
+    from vigia_eew.config import Dedup
+    from vigia_eew.pipeline.dedup import Origin, same_earthquake
+
+    cfg = Dedup()
+    when = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
+    here = Origin(lat=10.6, lon=-66.9, time_utc=when, magnitude=5.0)
+
+    assert same_earthquake(cfg, here, here)
+    assert same_earthquake(cfg, here, Origin(10.9, -66.9, when + timedelta(seconds=90), 5.5))
+    assert not same_earthquake(cfg, here, Origin(10.6, -66.9, when + timedelta(seconds=91), 5.0))
+    assert not same_earthquake(cfg, here, Origin(10.6, -66.9, when, 5.6))
+    assert not same_earthquake(cfg, here, Origin(12.0, -66.9, when, 5.0))  # ~155 km away

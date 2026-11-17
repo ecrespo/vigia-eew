@@ -112,3 +112,10 @@ fase de mapa vaya **después** de que ese smoke exista.
 **Alternativas evaluadas y descartadas:** un juego de teselas empaquetado —son gigabytes—, un
 servidor de teselas propio —un servicio que administrar—, y exportar a HTML para el navegador
 —sacaría la funcionalidad fuera del producto y rompería la operación headless.
+
+> **Nota de la v1.1.0 (2026-11-17).** Esta historia describe el mapa sobre un lienzo de Tk con
+> Pillow, que es como se especificó. Desde **ADR-030** el mapa se dibuja con `flet-map`, y la v1.1
+> lo cambió otra vez: los símbolos son marcadores con descripción al apuntarlos (ADR-033), el mapa
+> lee el conjunto filtrado entero y no la página (ADR-032), y tiene una reproducción (ADR-035). El
+> texto de arriba se conserva como registro de lo decidido entonces; lo vigente está en
+> [`docs/v1.1/`](../../v1.1/README.md) y en `lat.md/history.md`.

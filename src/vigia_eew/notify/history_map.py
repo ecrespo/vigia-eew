@@ -16,12 +16,16 @@ magnitude 6 is visibly bigger than a 3" and "alerted and discarded are told
 apart" checkable at all. `HistoryMap` turns the plan into `flet-map` layers
 and decides nothing itself; the tiles are fetched and cached by the map
 control, and a tile that fails flips the map into its "unavailable" notice.
+
+The symbols are **markers holding a control**, not painted circles
+([[lat.md/history#A symbol can be pointed at]]): a `CircleMarker` has neither
+a tooltip nor events, so it could not say which earthquake it was.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,8 +48,10 @@ __all__ = [
     "ATTRIBUTION",
     "DEFAULT_ZOOM",
     "DISCARDED_STYLE",
+    "LEGEND",
     "MAX_RADIUS",
     "MIN_RADIUS",
+    "RECOVERED_STYLE",
     "HistoryMap",
     "Marker",
     "MarkerStyle",
@@ -58,6 +64,15 @@ __all__ = [
 #: Where the map opens when the history has nothing to centre on.
 DEFAULT_ZOOM = 6
 
+#: How much larger the selected symbol is drawn, and how thick its ring, in
+#: pixels. Both, so that the selection reads without relying on a colour.
+SELECTED_GROWTH = 5
+RING = 2
+SELECTED_RING = 5
+
+#: "Leave the selection as it is": what `show` assumes when it is not told.
+_KEEP: Any = object()
+
 
 @dataclass(frozen=True, slots=True)
 class MarkerStyle:
@@ -65,13 +80,16 @@ class MarkerStyle:
 
     Colour is not the only difference, deliberately. An alert is filled and a
     discard is an outline, so the distinction survives a screenshot, a
-    printout, and a reader who cannot tell the two colours apart.
+    printout, and a reader who cannot tell the two colours apart. A recovered
+    arrival is an outline too, and square: three verdicts, three shapes.
     """
 
     fill: str
     outline: str
     filled: bool
     legend_key: str
+    #: A circle, or a square with barely rounded corners.
+    round: bool = True
 
 
 ALERTED_STYLE = MarkerStyle(
@@ -80,6 +98,20 @@ ALERTED_STYLE = MarkerStyle(
 DISCARDED_STYLE = MarkerStyle(
     fill="", outline="#5A6472", filled=False, legend_key="map_legend_discarded"
 )
+
+
+#: An arrival nobody evaluated: read from a catalogue afterwards (REQ-HIS-011).
+#: Hollow like a discard -- it did not alert either -- and square, because it
+#: is not a discard: the agent did not decide against it, it was not watching.
+RECOVERED_STYLE = MarkerStyle(
+    fill="", outline="#1565C0", filled=False, legend_key="map_legend_recovered", round=False
+)
+
+#: What the legend explains, in the order it lists them.
+LEGEND: tuple[MarkerStyle, ...] = (ALERTED_STYLE, DISCARDED_STYLE, RECOVERED_STYLE)
+
+#: The corner radius of a square symbol, in pixels.
+SQUARE_CORNER = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +123,11 @@ class Marker:
     radius: int
     style: MarkerStyle
     record: EventRecord
+    #: The one the user chose in the table, or pressed here (REQ-MAP-007).
+    selected: bool = False
+    #: How strongly it is drawn, from 0 to 1. Always 1 on the static map; a
+    #: playback draws an older earthquake weaker (REQ-TLP-005).
+    strength: float = 1.0
 
 
 def marker_style(verdict: str) -> MarkerStyle:
@@ -100,7 +137,11 @@ def marker_style(verdict: str) -> MarkerStyle:
     history, which is worse than drawing it in the more modest of the two
     styles.
     """
-    return ALERTED_STYLE if verdict == "alerted" else DISCARDED_STYLE
+    if verdict == "alerted":
+        return ALERTED_STYLE
+    if verdict == "recovered":
+        return RECOVERED_STYLE
+    return DISCARDED_STYLE
 
 
 def centre_of(
@@ -121,23 +162,41 @@ def centre_of(
     )
 
 
-def plan(records: Sequence[EventRecord]) -> list[Marker]:
+def plan(
+    records: Sequence[EventRecord],
+    *,
+    selected: int | None = None,
+    strengths: Mapping[int, float] | None = None,
+) -> list[Marker]:
     """Works out every symbol without touching a control.
 
     Every record is placed -- the map does not get to drop one the table is
-    showing (CA-112.6). Alerts go last so they are drawn over discards.
+    showing (CA-112.6). Alerts go last so they are drawn over discards, and
+    the selected one last of all.
+
+    `selected` is the id of the row the user chose. Its symbol is larger and
+    its ring thicker -- a difference of shape, like the one between an alert
+    and a discard, so that it does not rest on telling two colours apart.
+
+    `strengths` is how strongly to draw each row, by id; a row it does not
+    name is drawn in full. Which earthquake is how old is not decided here.
     """
-    markers = [
-        Marker(
-            latitude=record.latitude,
-            longitude=record.longitude,
-            radius=marker_radius(record.magnitude),
-            style=marker_style(record.verdict),
-            record=record,
+    strengths = strengths or {}
+    markers = []
+    for record in records:
+        chosen = selected is not None and record.id == selected
+        markers.append(
+            Marker(
+                latitude=record.latitude,
+                longitude=record.longitude,
+                radius=marker_radius(record.magnitude) + (SELECTED_GROWTH if chosen else 0),
+                style=marker_style(record.verdict),
+                record=record,
+                selected=chosen,
+                strength=strengths.get(record.id, 1.0) if record.id is not None else 1.0,
+            )
         )
-        for record in records
-    ]
-    return sorted(markers, key=lambda marker: marker.style.filled)
+    return sorted(markers, key=lambda marker: (marker.selected, marker.style.filled))
 
 
 # --- The control -------------------------------------------------------------------
@@ -158,13 +217,23 @@ class HistoryMap:
         locale_code: str = DEFAULT_LOCALE,
         zoom: int = DEFAULT_ZOOM,
         centre: tuple[float, float] | None = None,
+        on_select: Callable[[int], None] | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._locale = locale_code
         self._log = logger or logging.getLogger("vigia_eew.notify.history_map")
         self.available = True
         self.markers: list[Marker] = []
-        self._circles = fm.CircleLayer(circles=[])
+        self._describe: Callable[[EventRecord], str] | None = None
+        self._on_select = on_select
+        self._records: Sequence[EventRecord] = ()
+        self._selected: int | None = None
+        self._strengths: Mapping[int, float] | None = None
+        self._symbols = fm.MarkerLayer(markers=[])
+        #: Says so when the set is larger than what is drawn. Leaving
+        #: earthquakes off the map in silence would under-report the history,
+        #: the same reason an unknown verdict is still drawn.
+        self.truncation = ft.Text("", size=11, color="#5A6472", visible=False)
         self._notice = ft.Container(
             visible=False,
             bgcolor="#FFFFFFE6",
@@ -182,7 +251,7 @@ class HistoryMap:
             expand=True,
             initial_center=fm.MapLatitudeLongitude(*middle),
             initial_zoom=zoom,
-            layers=[tile_layer(on_error=self._tile_failed), self._circles, attribution_layer()],
+            layers=[tile_layer(on_error=self._tile_failed), self._symbols, attribution_layer()],
         )
         self.view = ft.Container(
             expand=True,
@@ -193,28 +262,88 @@ class HistoryMap:
                 controls=[
                     self.map,
                     ft.Container(left=8, top=8, content=self._legend()),
-                    ft.Container(alignment=ft.Alignment.CENTER, content=self._notice),
+                    # Fills the stack to centre the notice, so it must let the
+                    # pointer through: above the map, an ordinary container
+                    # this size takes every hover and press meant for a symbol.
+                    ft.TransparentPointer(
+                        content=ft.Container(alignment=ft.Alignment.CENTER, content=self._notice)
+                    ),
                 ],
             ),
         )
 
-    def show(self, records: Sequence[EventRecord]) -> None:
-        """Draws those arrivals. Called again whenever the filters change."""
-        self.markers = plan(records)
-        self._circles.circles = [
-            fm.CircleMarker(
-                coordinates=fm.MapLatitudeLongitude(marker.latitude, marker.longitude),
-                radius=marker.radius,
-                color=(
-                    ft.Colors.with_opacity(0.75, marker.style.fill)
-                    if marker.style.filled
-                    else ft.Colors.TRANSPARENT
+    def show(
+        self,
+        records: Sequence[EventRecord],
+        *,
+        total: int | None = None,
+        describe: Callable[[EventRecord], str] | None = None,
+        selected: Any = _KEEP,
+        strengths: Mapping[int, float] | None = None,
+    ) -> None:
+        """Draws those arrivals. Called again whenever the filters change.
+
+        `total` is how many the filter matches; when it is more than what was
+        handed over, the legend says how many of how many are on the map.
+
+        `describe` words an arrival for its tooltip (REQ-MAP-006). The map does
+        not word it itself: the list already has, for the table, and a second
+        wording would be a second chance to disagree.
+
+        `strengths` draws some of them weaker, by row id -- a frame of the
+        playback. It belongs to this call: showing again without it draws
+        everything in full.
+        """
+        self._describe = describe
+        self._records = records
+        self._strengths = strengths
+        if selected is not _KEEP:
+            self._selected = selected
+        self._draw()
+        cut_short = total is not None and total > len(records)
+        self.truncation.visible = cut_short
+        self.truncation.value = (
+            t("map_truncated", self._locale, shown=len(records), total=total) if cut_short else ""
+        )
+
+    def select(self, row_id: int | None) -> None:
+        """Highlights the symbol of that row, or none. The set drawn is unchanged."""
+        self._selected = row_id
+        self._draw()
+
+    def press(self, row_id: int) -> None:
+        """A symbol was pressed: say which row it stands for."""
+        if self._on_select is not None:
+            self._on_select(row_id)
+
+    def _draw(self) -> None:
+        self.markers = plan(self._records, selected=self._selected, strengths=self._strengths)
+        self._symbols.markers = [self._symbol(marker) for marker in self.markers]
+
+    def _symbol(self, marker: Marker) -> Any:
+        """One planned symbol as a control: a round container that can be pointed at."""
+        diameter = 2 * marker.radius
+        return fm.Marker(
+            coordinates=fm.MapLatitudeLongitude(marker.latitude, marker.longitude),
+            width=diameter,
+            height=diameter,
+            content=ft.Container(
+                opacity=marker.strength,
+                border_radius=marker.radius if marker.style.round else SQUARE_CORNER,
+                bgcolor=(
+                    ft.Colors.with_opacity(0.75, marker.style.fill) if marker.style.filled else None
                 ),
-                border_color=marker.style.outline,
-                border_stroke_width=2,
-            )
-            for marker in self.markers
-        ]
+                border=ft.Border.all(
+                    SELECTED_RING if marker.selected else RING, marker.style.outline
+                ),
+                tooltip=self._describe(marker.record) if self._describe is not None else None,
+                on_click=(
+                    (lambda _event, row_id=marker.record.id: self.press(row_id))
+                    if marker.record.id is not None
+                    else None
+                ),
+            ),
+        )
 
     def _tile_failed(self, event: Any) -> None:
         if self.available:
@@ -232,7 +361,7 @@ class HistoryMap:
                     ft.Container(
                         width=12,
                         height=12,
-                        border_radius=6,
+                        border_radius=6 if style.round else SQUARE_CORNER,
                         bgcolor=style.fill or None,
                         border=ft.Border.all(2, style.outline),
                     ),
@@ -247,9 +376,9 @@ class HistoryMap:
             content=ft.Column(
                 spacing=4,
                 controls=[
-                    entry(ALERTED_STYLE),
-                    entry(DISCARDED_STYLE),
+                    *(entry(style) for style in LEGEND),
                     ft.Text(t("map_legend_size", self._locale), size=11, color="#5A6472"),
+                    self.truncation,
                 ],
             ),
         )

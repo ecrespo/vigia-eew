@@ -184,8 +184,12 @@ def test_the_pillow_floor_is_its_security_floor() -> None:
     Pillow>=10.0 admitted 34 known advisories. The lockfile resolved a clean
     version, but the range is the only thing the published package declares,
     so it is what anyone installing from PyPI actually gets bounded by.
+
+    The floor follows the advisories, not the other way round: four more
+    were published against 12.x at the v1.1.0 cut -- two of them code
+    execution -- with fixes only in 13.0.0, so it moved a major.
     """
-    assert _declared_ranges()["pillow"] == ">=12.3.0,<13"
+    assert _declared_ranges()["pillow"] == ">=13.0.0,<14"
 
 
 def _locked_version(package: str) -> tuple[int, ...]:

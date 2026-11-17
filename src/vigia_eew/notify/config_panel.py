@@ -88,6 +88,7 @@ SECTION_TITLES: dict[str, str] = {
     "notification": "Notification",
     "logging": "Logging",
     "history": "History",
+    "drill": "Scheduled drill",
 }
 
 

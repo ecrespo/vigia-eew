@@ -14,13 +14,21 @@ from typing import Any
 import flet as ft
 
 from vigia_eew.i18n import DEFAULT_LOCALE, t
+from vigia_eew.models import LastDrill
 from vigia_eew.notify.about import about_info
+from vigia_eew.notify.presentation import VENEZUELA_ZONE
 from vigia_eew.notify.sound import assets_path
 
 
-def about_view(*, locale_code: str = DEFAULT_LOCALE, on_close: Callable[[], None]) -> Any:
+def about_view(
+    *,
+    locale_code: str = DEFAULT_LOCALE,
+    on_close: Callable[[], None],
+    last_drill: LastDrill | None = None,
+    zone: str = VENEZUELA_ZONE,
+) -> Any:
     """Builds the About content: icon, name, then each fact on its own line."""
-    info = about_info(locale_code=locale_code)
+    info = about_info(locale_code=locale_code, last_drill=last_drill, zone=zone)
     lines: list[Any] = []
     icon = assets_path() / "tray_icon.png"
     if icon.is_file():

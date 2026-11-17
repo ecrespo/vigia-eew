@@ -99,3 +99,78 @@ def test_the_tray_names_the_guarantee_of_this_session() -> None:
             text = t(f"tray_alert_{guarantee}", locale)
             assert text and not text.startswith("tray_alert_")
     assert "Wayland" in t("tray_alert_degraded", "en")
+
+
+# --- T-181 · a drill never costs a real alert (REQ-UX-009, V-09) -------------------
+#
+# The scheduled drill changed the alert queue, the component the guarantee
+# rests on. These are the two cases the Analyze asked to be pinned here.
+
+
+def _event(event_id: str, source: str = "EMSC"):
+    from datetime import UTC, datetime
+
+    from vigia_eew.models import SeismicEvent
+
+    return SeismicEvent(
+        id=event_id,
+        source=source,
+        magnitude=6.1,
+        mag_type="mw",
+        lat=10.6,
+        lon=-66.93,
+        depth_km=10.0,
+        time_utc=datetime(2026, 6, 28, 13, 39, tzinfo=UTC),
+        distance_km=15.0,
+        severity="critical",
+    )
+
+
+class _Window:
+    def __init__(self, data, severity, on_acknowledge):
+        self.data, self.on_acknowledge, self.closed = data, on_acknowledge, False
+
+    def refresh(self, data):
+        self.data = data
+
+    def close(self):
+        self.closed = True
+
+
+def _controller(windows: list):
+    from vigia_eew.notify.controller import AlertController
+
+    def create(data, severity, on_acknowledge):
+        windows.append(_Window(data, severity, on_acknowledge))
+        return windows[-1]
+
+    return AlertController(create_window=create)
+
+
+def test_a_due_drill_waits_until_the_real_alerts_are_gone() -> None:
+    """With a real alert shown or pending, a drill is not shown until the queue empties."""
+    windows: list[_Window] = []
+    ctrl = _controller(windows)
+    ctrl.enqueue(_event("first"))
+    ctrl.enqueue(_event("second"))
+
+    assert ctrl.offer_drill(_event("SIM-0001", "SIMULATED")) is False
+    windows[0].on_acknowledge()
+    assert ctrl.offer_drill(_event("SIM-0001", "SIMULATED")) is False  # one still on screen
+    assert [w.data.drill for w in windows] == [False, False]
+
+    windows[1].on_acknowledge()
+    assert ctrl.offer_drill(_event("SIM-0001", "SIMULATED")) is True
+    assert windows[-1].data.drill is True
+
+
+def test_a_real_alert_is_on_screen_without_the_drill_being_acknowledged() -> None:
+    windows: list[_Window] = []
+    ctrl = _controller(windows)
+    ctrl.offer_drill(_event("SIM-0001", "SIMULATED"))
+
+    ctrl.enqueue(_event("real"))
+
+    assert windows[0].closed is True
+    assert ctrl.alert_queue.current is not None and ctrl.alert_queue.current.id == "real"
+    assert windows[1].data.drill is False

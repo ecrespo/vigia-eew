@@ -19,18 +19,21 @@ import asyncio
 import logging
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from vigia_eew import geocode, geoloc, tray
+from vigia_eew import backfill, geocode, geoloc, tray
 from vigia_eew.agent_state import AgentState
 from vigia_eew.config import ReferencePoint, Settings
+from vigia_eew.drill import DrillScheduler
 from vigia_eew.history import HistoryStore, HistoryWriter
 from vigia_eew.i18n import resolve_locale, t
 from vigia_eew.ingest import RawMessage
 from vigia_eew.ingest.registry import (
     SOURCE_REGISTRY,
     IngestContext,
+    ordered_sources,
     priority_rank,
     validate_registry,
 )
@@ -45,6 +48,7 @@ from vigia_eew.pipeline.dedup import Deduplicator
 from vigia_eew.pipeline.filter import GeoFilter
 from vigia_eew.pipeline.normalize import Normalizer
 from vigia_eew.pipeline.processor import Processor
+from vigia_eew.simulation import simulated_event
 from vigia_eew.state import StateStore
 from vigia_eew.supervisor import Supervisor
 
@@ -87,10 +91,21 @@ class Wiring:
         self.locale = resolve_locale(cfg.notification.language)
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
+        #: The `config.toml` this run was given; the panel reached from the
+        #: navigation edits it. None means the default one.
+        self.config_file: Path | None = None
         self._panel: Any = None
         self._history_window: Any = None
+        #: Runs a job off the UI thread. A daemon thread by default; replaced
+        #: in tests, which run the job when they choose to.
+        self.in_background: Callable[[Callable[[], None]], None] = lambda job: threading.Thread(
+            target=job, name="vigia-backfill", daemon=True
+        ).start()
         self._history_store: HistoryStore | None = None
         self._history: HistoryWriter | None = None
+        #: Offers a drill to whichever controller was built, on its own
+        #: thread. None until one is: with no alert, there is nothing to test.
+        self._offer_drill: Callable[[], object] | None = None
 
     # --- Startup ---
 
@@ -197,7 +212,10 @@ class Wiring:
         if self._history is not None:
             return self._history
         try:
-            store = HistoryStore(retention_days=self.cfg.history.retention_days).open()
+            store = HistoryStore(
+                retention_days=self.cfg.history.retention_days,
+                recovered_retention_days=self.cfg.history.recovered_retention_days,
+            ).open()
         except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
             self._log.warning("history_unavailable type=%s detail=%s", type(exc).__name__, exc)
             return None
@@ -249,7 +267,38 @@ class Wiring:
         writer = self.build_history()
         if writer is not None:
             sup.add("history", writer.run)
+        # The agent testing itself (REQ-UX-007). Off by default, and only
+        # where there is an alert to test: a supervised task like the others,
+        # so it is restarted if it fails and stopped with the rest.
+        if self.cfg.drill.enabled and self._offer_drill is not None:
+            sup.add("drill", self.build_drill_scheduler().run)
         return sup
+
+    # @lat: [[notification#The agent tests itself, and says that it is a test]]
+    def build_drill_scheduler(self, *, now: Callable[[], datetime] | None = None) -> DrillScheduler:
+        """The task that offers a drill when one is due (ADR-040).
+
+        It decides *when*; the alert queue decides *whether* -- it refuses a
+        drill while notifications are paused or a real alert is on screen or
+        waiting, and a refused drill is still due at the next wake.
+        """
+
+        def last() -> datetime | None:
+            drill = self.state.last_drill()
+            return drill.presented_at if drill is not None else None
+
+        offer = self._offer_drill or (lambda: None)
+        return DrillScheduler(
+            interval_days=self.cfg.drill.interval_days,
+            last_drill=last,
+            offer=offer,
+            now=now,
+            logger=self._log,
+        )
+
+    def _drill_event(self) -> SeismicEvent:
+        """The event a drill shows: the one `--simulate` shows."""
+        return simulated_event(self.cfg.reference, self.cfg.severity)
 
     # --- Notification ---
 
@@ -281,6 +330,14 @@ class Wiring:
             reference_point=(self.cfg.reference.lat, self.cfg.reference.lon),
             state=self.agent_state,
             locale_code=self.locale,
+            # The zone the user configured, like every other reader of it:
+            # without this the alert said the time in Caracas wherever it ran.
+            # @lat: [[notification#The alert says the time in the configured zone]]
+            zone=self.cfg.notification.timezone,
+            # Every simulated alert -- the scheduled drill and `--simulate`
+            # alike -- leaves its record in `state.json` (ADR-040).
+            on_drill_presented=self.state.drill_presented,
+            on_drill_acknowledged=self.state.drill_acknowledged,
         )
 
     def _sound_effect(self) -> Callable[[SeverityLevel], None] | None:
@@ -304,7 +361,11 @@ class Wiring:
         """The desktop path: a Flet alert with its map, sound, and a desktop toast."""
         from vigia_eew.notify.alert_window import AlertWindow
 
-        toaster = Toaster(reference_name=self.cfg.reference.name, locale_code=self.locale)
+        toaster = Toaster(
+            reference_name=self.cfg.reference.name,
+            locale_code=self.locale,
+            zone=self.cfg.notification.timezone,
+        )
 
         def create_window(
             data: AlertData, severity: SeverityLevel, acknowledge: Callable[[], None]
@@ -326,12 +387,16 @@ class Wiring:
                     target=lambda: asyncio.run(toaster.notify(ev)), daemon=True
                 ).start()
 
-        return self.build_controller(
+        ctrl = self.build_controller(
             create_window,
             on_acknowledge=on_acknowledge,
             play_sound=self._sound_effect(),
             publish_toast=publish_toast,
         )
+        # The scheduler runs on the worker loop and the controller belongs to
+        # the UI one (ADR-006): the offer crosses on the shell's timer.
+        self._offer_drill = lambda: shell.after(0, lambda: ctrl.offer_drill(self._drill_event()))
+        return ctrl
 
     def build_tui_controller(
         self, tui_app: Any, *, on_acknowledge: Callable[[SeismicEvent], None]
@@ -350,6 +415,8 @@ class Wiring:
             publish_toast=None,
         )
         tui_app.bind_controller(ctrl)
+        # One loop for everything in the terminal: no thread to cross.
+        self._offer_drill = lambda: ctrl.offer_drill(self._drill_event())
         return ctrl
 
     # --- Tray ---
@@ -390,6 +457,57 @@ class Wiring:
         """Opens `config.toml` with the OS's associated application (RF-34)."""
         tray.open_config(path)
 
+    # --- Screens: history, panel, About -- each leads to the others (ADR-031) ---
+
+    def navigate(self, shell: Any, key: str) -> None:
+        """Goes to another screen from the navigation bar (REQ-GUI-012).
+
+        Nothing is discarded on the way: the panel and the history window
+        outlive the switch, so an unsaved edit is in its field and a filter is
+        still set when the user comes back.
+        """
+        # @lat: [[notification#Navigation is part of the screen]]
+        if key == "history":
+            self.open_history(shell)
+        elif key == "panel":
+            self.open_panel(shell, self._panel_path())
+        elif key == "about":
+            self.open_about(shell)
+
+    def _panel_path(self) -> Path:
+        """The file the panel edits: the one the run was given, or the default."""
+        if self.config_file is not None:
+            return self.config_file
+        from vigia_eew.config import default_config_path
+
+        return default_config_path()
+
+    def _show(
+        self,
+        shell: Any,
+        key: str,
+        title: str,
+        view: Any,
+        *,
+        on_covered: Callable[[], None] | None = None,
+    ) -> None:
+        """Hands a screen to the shell with the navigation above it.
+
+        `on_covered` is what the shell calls when an alert takes the window
+        from this screen.
+        """
+        from vigia_eew.notify.navigation import framed
+
+        if key != "history" and self._history_window is not None:
+            # Going elsewhere: a playback nobody is looking at stops redrawing.
+            self._history_window.pause_playback()
+        shell.show_screen(
+            key,
+            title,
+            framed(view, key, lambda chosen: self.navigate(shell, chosen), locale_code=self.locale),
+            on_covered=on_covered,
+        )
+
     def open_history(self, shell: Any) -> Any:
         """Opens the history screen (REQ-HIS-005). UI thread only, like the panel.
 
@@ -399,19 +517,37 @@ class Wiring:
         the mercy of a disk. Two connections to one SQLite file is what the
         engine is for.
 
-        A history that cannot be opened for reading leaves the entry doing
-        nothing and says so, which is the same best-effort rule the writer
-        follows -- nothing about the history may cost an alert.
-        """
-        from vigia_eew.notify.history_window import HistoryWindow
+        A history that cannot be opened for reading shows a notice saying so
+        and why (CA-113.3), which is the same best-effort rule the writer
+        follows -- nothing about the history may cost an alert. It used to do
+        nothing, which was enough while the tray was the only way in; a window
+        opened by `--history` has to show something.
 
-        if self._history_window is not None and shell.screen_key == "history":
+        The window outlives a trip to another screen: coming back shows the
+        same one, with its filter, re-read from the file.
+        """
+        from vigia_eew.notify.history_window import HistoryWindow, unavailable_view
+
+        title = t("history_title", self.locale)
+        if self._history_window is not None:
+            if shell.screen_key != "history":
+                self._history_window.refresh()
+                self._show(
+                    shell,
+                    "history",
+                    title,
+                    self._history_window.view,
+                    on_covered=self._history_window.pause_playback,
+                )
             return self._history_window
-        self._close_history_reader()
         try:
             store = HistoryStore(prune_on_open=False).open()
         except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
             self._log.warning("history_view_unavailable type=%s detail=%s", type(exc).__name__, exc)
+            view = unavailable_view(
+                str(exc), locale_code=self.locale, on_close=lambda: self._close_history(shell)
+            )
+            self._show(shell, "history", title, view)
             return None
         self._history_store = store
         window = HistoryWindow(
@@ -420,16 +556,88 @@ class Wiring:
             zone=self.cfg.notification.timezone,
             reference=(self.cfg.reference.lat, self.cfg.reference.lon),
             on_close=lambda: self._close_history(shell),
+            # The same order the deduplicator obeys: read per earthquake, a tie
+            # between two arrivals goes to the network the user ranked first.
+            rank=tuple(spec.source for spec in ordered_sources(self.cfg)),
+            # The playback steps on the shell's own timer and stops when an
+            # alert covers the screen (REQ-TLP-006).
+            after=shell.after,
+            on_recover=lambda days, report: self.recover_history(shell, days, report),
         )
-        shell.show_screen("history", t("history_title", self.locale), window.view)
         self._history_window = window
+        self._show(shell, "history", title, window.view, on_covered=window.pause_playback)
         return window
+
+    def tui_history(self) -> dict[str, Callable[..., Any]]:
+        """What the terminal dashboard is built with to reach the history.
+
+        The way to it, not the history itself: the dashboard opens a read
+        connection when asked and closes it on the way out.
+        """
+        return {"open_history": self.open_tui_history, "close_history": self.close_tui_history}
+
+    def open_tui_history(self) -> Any:
+        """Opens the history for the terminal dashboard and hands it the list (ADR-041).
+
+        The same `HistoryList` the window draws, so a filter means one thing
+        in both frontends -- with the same zone and the same order of trust --
+        and, like the window, through a read connection of its own that never
+        prunes. It raises when the file cannot be read: the dashboard says so
+        and carries on, which is not this method's to decide.
+        """
+        from vigia_eew.notify.history_list import HistoryList
+
+        self._close_history_reader()
+        store = HistoryStore(prune_on_open=False).open()
+        self._history_store = store
+        return HistoryList(
+            store,
+            locale_code=self.locale,
+            zone=self.cfg.notification.timezone,
+            rank=tuple(spec.source for spec in ordered_sources(self.cfg)),
+        )
+
+    def close_tui_history(self) -> None:
+        """Closes the terminal's read connection, when it leaves the history."""
+        self._close_history_reader()
+
+    def recover_history(
+        self, shell: Any, days: int, report: Callable[[list[str]], None]
+    ) -> str | None:
+        """Recovers `days` days for the history screen; returns a refusal, or None.
+
+        The catalogues are read on a worker thread -- a year is a few dozen
+        requests, and the window must keep answering -- with a history
+        connection of its own, and the outcome goes back to the screen on the
+        UI loop. Nothing on this path can alert (ADR-036): it does not go
+        through the queue, the pipeline or the controller.
+        """
+        try:
+            backfill.check_period(days, self.cfg)
+        except backfill.PeriodRefused as refusal:
+            return backfill.refusal_text(refusal, self.locale)
+
+        def job() -> None:
+            try:
+                lines = backfill.describe(backfill.run(self.cfg, days), self.locale)
+            except Exception as exc:  # noqa: BLE001 - said on the screen, never raised at it
+                self._log.warning(
+                    "history_recovery_failed type=%s detail=%s", type(exc).__name__, exc
+                )
+                lines = [t("backfill_failed", self.locale, detail=f"{type(exc).__name__}: {exc}")]
+            shell.after(0, lambda: report(lines))
+
+        self.in_background(job)
+        return None
 
     def _close_history(self, shell: Any) -> None:
         self._close_history_reader()
         shell.close_screen()
 
     def _close_history_reader(self) -> None:
+        if self._history_window is not None:
+            # The timer may still hold a step of the playback: make it stale.
+            self._history_window.pause_playback()
         if self._history_store is not None:
             self._history_store.close()
             self._history_store = None
@@ -441,17 +649,19 @@ class Wiring:
         Must be called on the UI thread -- `Application` schedules it, because
         the tray that asks for it runs on its own (ADR-006).
 
-        A second call while it is open brings back the panel that is already
+        A second call while it exists brings back the panel that is already
         there instead of building another. Two panels over one file would be
-        the external-edit conflict of CA-108.7 with itself.
+        the external-edit conflict of CA-108.7 with itself -- and, since the
+        navigation, bringing the same one back is what keeps an unsaved edit
+        across a trip to another screen (CA-113.5).
         """
         from vigia_eew.config_writer import ConfigWriter
         from vigia_eew.notify.config_panel import ConfigPanel, PanelModel
 
-        if self._panel is not None and shell.screen_key in ("panel", "about"):
-            self._show_panel(shell, self._panel)
+        if self._panel is not None:
+            if shell.screen_key != "panel":
+                self._show_panel(shell, self._panel)
             return self._panel
-        self._close_history_reader()
         panel = ConfigPanel(
             PanelModel(ConfigWriter(path)),
             on_about=lambda: self.open_about(shell, back=lambda: self._show_panel(shell, panel)),
@@ -462,9 +672,8 @@ class Wiring:
         self._show_panel(shell, panel)
         return panel
 
-    @staticmethod
-    def _show_panel(shell: Any, panel: Any) -> None:
-        shell.show_screen("panel", "Vigía-eew · Settings", panel.view)
+    def _show_panel(self, shell: Any, panel: Any) -> None:
+        self._show(shell, "panel", "Vigía-eew · Settings", panel.view)
 
     def _close_panel(self, shell: Any) -> None:
         self._panel = None
@@ -474,12 +683,17 @@ class Wiring:
         """Opens the About screen (REQ-GUI-010). UI thread only, like the panel.
 
         `back` is where its Close button returns to: the panel when it was
-        opened from there, nothing (the window hides) when from the tray.
+        opened from there, nothing (the window hides) otherwise.
         """
         from vigia_eew.notify.about_window import about_view
 
-        if back is None:
-            self._close_history_reader()
-        view = about_view(locale_code=ui_scale.PANEL_LOCALE, on_close=back or shell.close_screen)
-        shell.show_screen("about", t("about_title", ui_scale.PANEL_LOCALE), view)
+        view = about_view(
+            locale_code=ui_scale.PANEL_LOCALE,
+            on_close=back or shell.close_screen,
+            # Read when the screen is opened: `--simulate` may have recorded
+            # one from another process since this one started.
+            last_drill=self.state.last_drill(),
+            zone=self.cfg.notification.timezone,
+        )
+        self._show(shell, "about", t("about_title", ui_scale.PANEL_LOCALE), view)
         return view

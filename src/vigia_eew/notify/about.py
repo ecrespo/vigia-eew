@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 from vigia_eew import __version__
 from vigia_eew.i18n import DEFAULT_LOCALE, t
+from vigia_eew.models import LastDrill
+from vigia_eew.notify.presentation import VENEZUELA_ZONE, format_moment
 
 #: SPDX identifier of the licence in `LICENSE`, and the year and holder of the
 #: copyright line. Changing the file without changing these is the mismatch
@@ -36,6 +38,9 @@ class AboutInfo:
     license: str
     warranty: str
     url: str
+    #: When this machine last showed a drill and whether it was acknowledged
+    #: (REQ-UX-007) -- or that it never has.
+    last_drill: str = ""
 
     def rows(self) -> list[tuple[str, str]]:
         """Label/value pairs, in the order the window draws them."""
@@ -44,6 +49,7 @@ class AboutInfo:
             ("", self.description),
             (t("about_version", self._locale), self.version),
             (t("about_license", self._locale), self.license),
+            (t("about_last_drill", self._locale), self.last_drill),
             ("", self.copyright),
             ("", self.warranty),
             ("", self.url),
@@ -52,7 +58,22 @@ class AboutInfo:
     _locale: str = DEFAULT_LOCALE
 
 
-def about_info(*, locale_code: str = DEFAULT_LOCALE) -> AboutInfo:
+def describe_drill(
+    drill: LastDrill | None, *, locale_code: str = DEFAULT_LOCALE, zone: str = VENEZUELA_ZONE
+) -> str:
+    """The last drill in a phrase: when, and whether anybody acknowledged it."""
+    if drill is None:
+        return t("about_drill_never", locale_code)
+    key = "about_drill_acknowledged" if drill.acknowledged_at else "about_drill_unacknowledged"
+    return t(key, locale_code, when=format_moment(drill.presented_at, zone))
+
+
+def about_info(
+    *,
+    locale_code: str = DEFAULT_LOCALE,
+    last_drill: LastDrill | None = None,
+    zone: str = VENEZUELA_ZONE,
+) -> AboutInfo:
     """The application's own description, in `locale_code`."""
     return AboutInfo(
         name="Vigía-eew",
@@ -62,5 +83,6 @@ def about_info(*, locale_code: str = DEFAULT_LOCALE) -> AboutInfo:
         license=LICENSE_SPDX,
         warranty=t("about_warranty", locale_code),
         url=PROJECT_URL,
+        last_drill=describe_drill(last_drill, locale_code=locale_code, zone=zone),
         _locale=locale_code,
     )

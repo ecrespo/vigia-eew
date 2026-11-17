@@ -63,10 +63,11 @@ def test_every_field_in_the_schema_reaches_the_panel() -> None:
 
 
 def test_every_section_of_the_file_is_a_section_of_the_panel() -> None:
-    """HU-108 counted ten. `[history]` (F6) made eleven, and nobody edited
-    the panel to add it -- which is the whole of what ADR-020 promised."""
+    """HU-108 counted ten. `[history]` (F6) made eleven and `[drill]` (F16)
+    twelve, and nobody edited the panel to add either -- which is the whole
+    of what ADR-020 promised."""
     sections = describe()
-    assert len(sections) == 11
+    assert len(sections) == 12
     assert [s.key for s in sections][:2] == ["reference", "filter"]
     assert "history" in {s.key for s in sections}
 
@@ -554,7 +555,10 @@ def test_about_from_the_panel_returns_to_the_panel(tmp_path: Path, fake_shell) -
     close.on_click(None)
 
     assert fake_shell.screen_key == "panel"
-    assert fake_shell.screens[-1][2] is panel.view
+    # The shell is handed the panel under the navigation bar (REQ-GUI-012).
+    from vigia_eew.notify import navigation
+
+    assert navigation.screen_of(fake_shell.screens[-1][2]) is panel.view
 
 
 def _find_button(control, label: str):
@@ -571,3 +575,17 @@ def _find_button(control, label: str):
             elif child is not None:
                 stack.append(child)
     raise AssertionError(f"no {label!r} button")
+
+
+# --- T-167 · the recovery's keys reach the panel on their own (ADR-020) -----------
+
+
+def test_the_recovery_keys_are_in_the_panel_without_panel_code() -> None:
+    described = {field.path for section in describe() for field in section.fields}
+
+    assert {
+        "sources.emsc.catalog_url",
+        "history.recovered_retention_days",
+        "history.recovery_radius_km",
+        "history.recovery_min_magnitude",
+    } <= described

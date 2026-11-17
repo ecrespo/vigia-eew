@@ -248,3 +248,174 @@ def test_an_ordinary_update_of_an_unseen_event_still_alerts() -> None:
     queue.enqueue(_ev(id="e9", action="update"))
 
     assert [e.id for e in sink.shown] == ["e9"]
+
+
+# --- T-181 · a drill against a real alert (REQ-UX-009, ADR-040) --------------------
+#
+# The queue is the component "one alert, and it cannot be ignored" rests on.
+# Every test above this line is the specification of what must not move, and
+# they pass unchanged. What is added: a drill never delays or displaces a
+# real alert, and a real alert does not wait behind a drill.
+
+
+def _drill(id="SIM-0001") -> SeismicEvent:
+    return _ev(id).model_copy(update={"source": "SIMULATED"})
+
+
+def _drill_queue(sink: _Sink, dismissed: list[SeismicEvent]) -> AlertQueue:
+    return AlertQueue(
+        show=sink.shown.append,
+        update=sink.updated.append,
+        on_acknowledge=sink.acknowledged.append,
+        dismiss=dismissed.append,
+    )
+
+
+def test_an_empty_queue_is_idle() -> None:
+    assert _make_queue(_Sink()).idle is True
+
+
+def test_a_queue_showing_an_alert_is_not_idle() -> None:
+    q = _make_queue(_Sink())
+    q.enqueue(_ev("a"))
+
+    assert q.idle is False
+    q.acknowledge()
+    assert q.idle is True
+
+
+def test_a_paused_queue_holding_an_alert_is_not_idle() -> None:
+    q = _make_queue(_Sink())
+    q.pause()
+    q.enqueue(_ev("a"))
+
+    assert q.idle is False
+
+
+def test_a_drill_offered_to_an_idle_queue_is_shown() -> None:
+    """CA-120.1."""
+    sink = _Sink()
+    q = _make_queue(sink)
+
+    assert q.offer_drill(_drill()) is True
+    assert [e.id for e in sink.shown] == ["SIM-0001"]
+
+
+def test_a_drill_is_not_taken_while_a_real_alert_is_on_screen() -> None:
+    """CA-120.7: not shown, and not queued behind it either."""
+    sink = _Sink()
+    q = _make_queue(sink)
+    q.enqueue(_ev("real"))
+
+    assert q.offer_drill(_drill()) is False
+    assert q.pending == 0
+    q.acknowledge()
+    assert [e.id for e in sink.shown] == ["real"]  # nothing was waiting behind it
+
+
+def test_a_drill_is_not_taken_while_a_real_alert_is_queued() -> None:
+    sink = _Sink()
+    q = _make_queue(sink)
+    q.pause()
+    q.enqueue(_ev("real"))
+
+    assert q.offer_drill(_drill()) is False
+
+
+def test_a_drill_is_not_taken_while_notifications_are_paused() -> None:
+    """CA-120.10: postponed, not queued to ambush the user on resume."""
+    sink = _Sink()
+    q = _make_queue(sink)
+    q.pause()
+
+    assert q.offer_drill(_drill()) is False
+    q.resume()
+    assert sink.shown == []
+
+
+def test_a_real_alert_replaces_a_drill_without_waiting_for_it() -> None:
+    """CA-120.8."""
+    sink, dismissed = _Sink(), []
+    q = _drill_queue(sink, dismissed)
+    q.offer_drill(_drill())
+
+    q.enqueue(_ev("real"))
+
+    assert [e.id for e in sink.shown] == ["SIM-0001", "real"]
+    assert q.current is not None and q.current.id == "real"
+    assert [e.id for e in dismissed] == ["SIM-0001"]
+    assert sink.acknowledged == []  # nobody acknowledged the drill
+
+
+def test_the_drill_is_taken_off_before_the_real_alert_goes_on() -> None:
+    order: list[str] = []
+    q = AlertQueue(
+        show=lambda ev: order.append(f"show:{ev.id}"),
+        dismiss=lambda ev: order.append(f"dismiss:{ev.id}"),
+    )
+    q.offer_drill(_drill())
+
+    q.enqueue(_ev("real"))
+
+    assert order == ["show:SIM-0001", "dismiss:SIM-0001", "show:real"]
+
+
+def test_a_displaced_drill_does_not_come_back() -> None:
+    sink, dismissed = _Sink(), []
+    q = _drill_queue(sink, dismissed)
+    q.offer_drill(_drill())
+    q.enqueue(_ev("real"))
+
+    q.acknowledge()
+
+    assert q.idle is True
+    assert [e.id for e in sink.acknowledged] == ["real"]
+
+
+def test_a_real_alert_replaces_a_drill_even_while_paused() -> None:
+    """The drill goes; the real alert waits for the resume like any other."""
+    sink, dismissed = _Sink(), []
+    q = _drill_queue(sink, dismissed)
+    q.offer_drill(_drill())
+    q.pause()
+
+    q.enqueue(_ev("real"))
+
+    assert [e.id for e in dismissed] == ["SIM-0001"]
+    assert q.current is None and q.pending == 1
+    q.resume()
+    assert q.current is not None and q.current.id == "real"
+
+
+def test_a_real_alert_does_not_replace_another_real_alert() -> None:
+    sink, dismissed = _Sink(), []
+    q = _drill_queue(sink, dismissed)
+    q.enqueue(_ev("a"))
+
+    q.enqueue(_ev("b"))
+
+    assert dismissed == []
+    assert q.current is not None and q.current.id == "a"
+    assert q.pending == 1
+
+
+def test_a_second_drill_does_not_replace_the_one_on_screen() -> None:
+    sink, dismissed = _Sink(), []
+    q = _drill_queue(sink, dismissed)
+    q.offer_drill(_drill("SIM-1"))
+
+    q.enqueue(_drill("SIM-2"))  # what `--simulate` twice would do
+
+    assert dismissed == []
+    assert q.current is not None and q.current.id == "SIM-1"
+
+
+def test_a_drill_acknowledged_in_time_is_acknowledged_like_any_alert() -> None:
+    sink, dismissed = _Sink(), []
+    q = _drill_queue(sink, dismissed)
+    q.offer_drill(_drill())
+
+    q.acknowledge()
+
+    assert [e.id for e in sink.acknowledged] == ["SIM-0001"]
+    assert dismissed == []

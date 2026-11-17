@@ -18,6 +18,7 @@ class _FakeApp:
         self.executed = False
         self.tui_simulate: bool | None = None
         self.settings_opened = False
+        self.history_opened = False
         _FakeApp.created.append(self)
 
     def simulate(self):
@@ -31,6 +32,9 @@ class _FakeApp:
 
     def open_settings(self):
         self.settings_opened = True
+
+    def open_history(self):
+        self.history_opened = True
 
 
 def _create(cfg, **kwargs):
@@ -201,3 +205,183 @@ def test_settings_honours_an_explicit_config_path(tmp_path):
     rc = main(["--settings", "--config", str(path)], create_app=_create)
     assert rc == 0
     assert _FakeApp.created[-1].config_path == str(path)
+
+
+# --- Opening the history on its own (`--history`, REQ-GUI-011) ---
+
+
+def test_history_opens_the_history_without_starting_the_agent():
+    """CA-113.1: the history is a mode of its own, like the panel.
+
+    The tray menu was the only way in, and on GNOME/Wayland it may not open.
+    """
+    rc = main(["--history"], create_app=_create)
+    assert rc == 0
+    app = _FakeApp.created[-1]
+    assert app.history_opened is True
+    assert app.executed is False
+    assert app.simulated is False
+    assert app.settings_opened is False
+
+
+def test_history_wins_over_the_other_modes():
+    """Dispatched first: with `--settings` too, the navigation leads to the panel."""
+    main(["--history", "--settings", "--simulate"], create_app=_create)
+    app = _FakeApp.created[-1]
+    assert app.history_opened is True
+    assert app.settings_opened is False
+    assert app.simulated is False
+
+
+def test_help_lists_the_history_option(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"], create_app=_create)
+    assert "--history" in capsys.readouterr().out
+
+
+# --- Recovering the history (`--backfill DAYS`, REQ-HIS-010, 03 §2) ---------------
+
+
+def _outcomes(*statuses: str):
+    from vigia_eew.backfill import Outcome
+
+    names = ("EMSC", "USGS", "GEOFON")
+    made = [
+        Outcome(name, status, recovered=3 if status == "recovered" else 0, detail="HTTP 500")
+        for name, status in zip(names, statuses, strict=False)
+    ]
+    return [
+        *made,
+        Outcome(
+            "FUNVISIS",
+            "not_recoverable",
+            detail="the service offers no query by date",
+            reason_key="backfill_no_query_by_date",
+        ),
+    ]
+
+
+def test_backfill_recovers_and_prints_one_line_per_network(capsys):
+    asked: list = []
+
+    def recover(cfg, days):
+        asked.append((cfg.history.recovered_retention_days, days))
+        return _outcomes("recovered", "recovered", "failed")
+
+    rc = main(["--backfill", "90"], create_app=_create, recover=recover)
+
+    out = capsys.readouterr().out.splitlines()
+    assert rc == 0
+    assert asked == [(365, 90)]
+    assert _FakeApp.created == []  # the agent is not started
+    assert [line.split()[0] for line in out] == ["EMSC", "USGS", "GEOFON", "FUNVISIS"]
+    assert "no query by date" in out[3] or "consulta por fecha" in out[3]
+
+
+def test_backfill_exits_one_when_every_recoverable_network_failed(capsys):
+    rc = main(["--backfill", "30"], recover=lambda cfg, days: _outcomes("failed", "failed"))
+
+    assert rc == 1
+    assert len(capsys.readouterr().out.splitlines()) == 3
+
+
+def test_backfill_refuses_a_period_beyond_the_retention_naming_the_limit(capsys):
+    """CA-117.6: exit 2, on standard error, before any request."""
+    from vigia_eew.backfill import run
+
+    rc = main(["--backfill", "400"], recover=run)
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert captured.out == ""
+    assert "400" in captured.err and "365" in captured.err
+    assert "recovered_retention_days" in captured.err
+
+
+def test_backfill_needs_a_number_of_days():
+    with pytest.raises(SystemExit) as raised:
+        main(["--backfill", "soon"])
+    assert raised.value.code == 2
+
+
+def test_backfill_honours_an_explicit_config(tmp_path, capsys):
+    path = tmp_path / "config.toml"
+    path.write_text("[history]\nrecovered_retention_days = 10\n", encoding="utf-8")
+
+    rc = main(["--config", str(path), "--backfill", "11"], recover=lambda cfg, days: [])
+
+    assert rc == 2
+    assert "10" in capsys.readouterr().err
+
+
+def test_backfill_says_when_the_history_cannot_be_opened(capsys):
+    def recover(cfg, days):
+        raise OSError("read-only file system")
+
+    rc = main(["--backfill", "30"], recover=recover)
+
+    assert rc == 1
+    assert "read-only file system" in capsys.readouterr().err
+
+
+def test_help_lists_the_backfill_option(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert "--backfill" in capsys.readouterr().out
+
+
+def test_backfill_fills_an_empty_history_that_survives_a_restart(capsys, monkeypatch):
+    """T-171's exit: the real recovery, the real file, a fake network."""
+    from datetime import UTC, datetime, timedelta
+
+    import vigia_eew.backfill as backfill_module
+    from vigia_eew.history import HistoryStore
+
+    when = datetime.now(UTC) - timedelta(days=40)
+
+    class _Resp:
+        status_code = 200
+        text = ""
+        headers: dict = {}
+
+        def __init__(self, features):
+            self._features = features
+
+        def json(self):
+            return {"features": self._features}
+
+    class _Network:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+        async def get(self, url, *, params=None, timeout=None, headers=None):
+            inside = params["starttime"] <= when.strftime("%Y-%m-%dT%H:%M:%S") < params["endtime"]
+            if "seismicportal" not in url or not inside:
+                resp = _Resp([])
+                resp.status_code = 204
+                return resp
+            properties = {
+                "unid": "20261007_0000001",
+                "time": when.strftime("%Y-%m-%dT%H:%M:%S.0Z"),
+                "lat": 10.6,
+                "lon": -66.9,
+                "depth": 10.0,
+                "mag": 4.4,
+                "magtype": "mb",
+                "flynn_region": "NEAR COAST OF VENEZUELA",
+            }
+            return _Resp([{"id": "x", "properties": properties}])
+
+    monkeypatch.setattr(backfill_module.httpx, "AsyncClient", _Network)
+
+    rc = main(["--backfill", "90"])
+
+    out = capsys.readouterr().out.splitlines()
+    assert rc == 0
+    assert {line.split()[0] for line in out} == {"EMSC", "USGS", "GEOFON", "FUNVISIS"}
+    restarted = HistoryStore().open()  # prunes, as the agent does when it starts
+    assert [(row.source, row.verdict) for row in restarted.rows()] == [("EMSC", "recovered")]
+    restarted.close()

@@ -90,6 +90,16 @@ class SeismicEvent(BaseModel):
     #: arrivals carry different ids -- they come from different catalogues.
     supersedes: str | None = None
 
+    @property
+    def is_drill(self) -> bool:
+        """Whether this is a simulated alert rather than an earthquake (ADR-040).
+
+        The source already says it, so there is no flag to keep in step: an
+        event `--simulate` or the scheduled drill injected is one, and nothing
+        a network sent can be.
+        """
+        return self.source == "SIMULATED"
+
     @field_validator("time_utc", "lastupdate_utc")
     @classmethod
     def _validate_utc(cls, v: datetime | None) -> datetime | None:
@@ -168,6 +178,24 @@ class DetectedLocation(BaseModel):
         return _require_aware_utc(v)
 
 
+class LastDrill(BaseModel):
+    """The last simulated alert this machine showed (ADR-040).
+
+    Operating state -- *when did this machine last prove it can alert* -- and
+    not an earthquake, which is why it lives here and not in the history.
+    `acknowledged_at` stays None when nobody saw the drill out: a real alert
+    replaced it, or the agent stopped.
+    """
+
+    presented_at: datetime
+    acknowledged_at: datetime | None = None
+
+    @field_validator("presented_at", "acknowledged_at")
+    @classmethod
+    def _validate_utc(cls, v: datetime | None) -> datetime | None:
+        return _require_utc(v)
+
+
 class AppState(BaseModel):
     """Persisted agent state (RF-06, RF-10). See `state.py`."""
 
@@ -177,3 +205,6 @@ class AppState(BaseModel):
     alerted_ids: list[AlertedId] = Field(default_factory=list)
     recent_signatures: list[EventSignature] = Field(default_factory=list)
     detected_location: DetectedLocation | None = None
+    #: Absent until the first drill. Optional, so `version` stays at 1: a
+    #: state written before drills existed loads, and an older agent ignores it.
+    last_drill: LastDrill | None = None

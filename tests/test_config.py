@@ -188,3 +188,128 @@ def test_has_manual_reference_without_section(tmp_path):
 def test_has_manual_reference_no_path_and_no_user_file():
     # No --config and no user config.toml in this test environment -> not manual.
     assert has_manual_reference(None) is False
+
+
+# --- T-167 · the four keys of the recovery (REQ-HIS-010, REQ-HIS-013, D-5, D-10) ---
+
+
+def test_the_recovery_has_its_defaults() -> None:
+    cfg = Settings()
+
+    assert cfg.sources_emsc.catalog_url == "https://www.seismicportal.eu/fdsnws/event/1/query"
+    assert cfg.history.recovered_retention_days == 365
+    assert cfg.history.recovery_radius_km == 1000.0
+    assert cfg.history.recovery_min_magnitude == 2.5
+
+
+def test_a_config_written_before_the_recovery_loads_with_the_defaults(tmp_path) -> None:
+    """A v1.0 file names none of the four keys and must mean what it meant."""
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[sources.emsc]\nurl = "wss://example.org/ws"\n\n[history]\nretention_days = 30\n',
+        encoding="utf-8",
+    )
+
+    cfg = load_config(path)
+
+    assert cfg.sources_emsc.url == "wss://example.org/ws"
+    assert cfg.sources_emsc.catalog_url == "https://www.seismicportal.eu/fdsnws/event/1/query"
+    assert cfg.history.retention_days == 30
+    assert cfg.history.recovered_retention_days == 365
+
+
+def test_the_recovery_keys_are_read_from_the_file(tmp_path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[sources.emsc]\ncatalog_url = "https://example.org/fdsnws/event/1/query"\n\n'
+        "[history]\nrecovered_retention_days = 30\nrecovery_radius_km = 300\n"
+        "recovery_min_magnitude = 4.0\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(path)
+
+    assert cfg.sources_emsc.catalog_url == "https://example.org/fdsnws/event/1/query"
+    assert cfg.history.recovered_retention_days == 30
+    assert cfg.history.recovery_radius_km == 300.0
+    assert cfg.history.recovery_min_magnitude == 4.0
+
+
+def test_the_two_retentions_are_separate_keys(tmp_path) -> None:
+    """CA-117.10: changing either does not change the other."""
+    path = tmp_path / "config.toml"
+    path.write_text("[history]\nretention_days = 10\n", encoding="utf-8")
+
+    cfg = load_config(path)
+
+    assert (cfg.history.retention_days, cfg.history.recovered_retention_days) == (10, 365)
+
+
+def test_a_recovery_radius_of_nothing_is_refused(tmp_path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[history]\nrecovery_radius_km = 0\n", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+def test_the_example_file_declares_the_four_keys() -> None:
+    """The example is the documentation most users read."""
+    example = bundled_example()
+
+    for key in (
+        "catalog_url",
+        "recovered_retention_days",
+        "recovery_radius_km",
+        "recovery_min_magnitude",
+    ):
+        assert f"\n{key} = " in example, key
+
+
+# --- T-180 · [drill] (REQ-UX-007) --------------------------------------------------
+
+
+def test_the_scheduled_drill_is_off_by_default() -> None:
+    """CA-120.2: a window nobody asked for is not a good first contact."""
+    cfg = load_config()
+
+    assert cfg.drill.enabled is False
+    assert cfg.drill.interval_days == 30
+
+
+def test_the_drill_keys_are_read_from_the_file(tmp_path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[drill]\nenabled = true\ninterval_days = 7\n", encoding="utf-8")
+
+    cfg = load_config(path)
+
+    assert cfg.drill.enabled is True
+    assert cfg.drill.interval_days == 7
+
+
+def test_an_interval_of_no_days_is_refused(tmp_path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text("[drill]\ninterval_days = 0\n", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_config(path)
+
+
+def test_the_example_file_documents_the_drill_and_leaves_it_off(tmp_path) -> None:
+    text = bundled_example()
+    path = tmp_path / "config.toml"
+    path.write_text(text, encoding="utf-8")
+
+    assert "[drill]" in text
+    assert load_config(path).drill.enabled is False
+
+
+def test_the_drill_reaches_the_panel_like_any_other_section() -> None:
+    from vigia_eew.notify.config_panel import describe
+
+    sections = {section.key: section for section in describe()}
+
+    assert {field.path for field in sections["drill"].fields} == {
+        "drill.enabled",
+        "drill.interval_days",
+    }
