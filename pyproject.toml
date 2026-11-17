@@ -54,8 +54,10 @@ dependencies = [
     # API -- its major is the publication year, so a
     # ceiling would freeze the timezone rules themselves
     "pystray>=0.19.5,<0.20",      # system tray icon (RF-34/ADR-012)
-    "Pillow>=12.3.0,<13",         # tray icon image, pystray requirement (RF-34). Floor
-    # is the security floor: >=10.0 admitted 34 advisories
+    "Pillow>=13.0.0,<14",         # tray icon image, pystray requirement (RF-34). Floor
+    # is the security floor: >=10.0 admitted 34 advisories,
+    # and 12.x has four more (two code-execution) that are
+    # only fixed in 13.0.0 -- so the floor moved a major
     "textual>=8.2,<9",            # headless TUI dashboard (RF-36/ADR-013)
     "tomlkit>=0.13.3,<0.14",      # config writing that preserves the file's 46 comment
     # lines (REQ-CFG-009/ADR-019). `tomllib` stays the

@@ -68,6 +68,13 @@ the roadmap had promised since before 1.0.
 - **An alert while the terminal history is open** is logged on the dashboard instead of raising.
 - **Refreshing the history** re-reads the table as well as the map.
 
+### Security
+- **Pillow's floor moved to 13.0.0.** Four advisories were published against 12.x — two of them
+  code execution, in the JPEG encoder and the bundled libopenjp2 — and are fixed only in 13.0.0.
+  The range the package declares is now `>=13.0.0,<14`.
+- `certifi`, `filelock`, `msgpack`, `oauthlib` and `virtualenv` were lifted past their new
+  advisories in the lock file.
+
 ### Known limits
 - The countdown branch of the shaking estimate has never occurred with the current sources; it is
   verified with an injected clock only.
