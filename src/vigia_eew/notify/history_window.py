@@ -108,3 +108,55 @@ class HistoryWindow:
         """
         if getattr(self, "map", None) is not None:
             self.map.show(self.listing.records())  # type: ignore[union-attr]
+
+
+def unavailable_view(
+    reason: str,
+    *,
+    locale_code: str = DEFAULT_LOCALE,
+    on_close: Callable[[], None] | None = None,
+) -> Any:
+    """What the history screen shows when its file cannot be read (CA-113.3).
+
+    It says so and gives the reason as the store reported it: a file from a
+    newer version and a directory that cannot be read are different problems,
+    and the user is the one who has to tell them apart.
+    """
+    header: list[Any] = [
+        ft.Icon(ft.Icons.HISTORY, color=ft.Colors.PRIMARY),
+        ft.Text(t("history_title", locale_code), size=20, weight=ft.FontWeight.BOLD, expand=True),
+    ]
+    if on_close is not None:
+        header.append(ft.IconButton(icon=ft.Icons.CLOSE, on_click=lambda _e: on_close()))
+    return ft.SafeArea(
+        expand=True,
+        content=ft.Column(
+            expand=True,
+            controls=[
+                ft.Container(
+                    padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+                    bgcolor=ft.Colors.SURFACE_CONTAINER,
+                    content=ft.Row(controls=header),
+                ),
+                ft.Container(
+                    expand=True,
+                    alignment=ft.Alignment.CENTER,
+                    padding=24,
+                    content=ft.Column(
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=8,
+                        controls=[
+                            ft.Icon(ft.Icons.ERROR_OUTLINE, size=48, color="#5A6472"),
+                            ft.Text(
+                                t("history_unavailable", locale_code),
+                                size=18,
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                            ft.Text(reason, color="#5A6472", selectable=True),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    )

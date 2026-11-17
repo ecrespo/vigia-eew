@@ -15,12 +15,18 @@ Keywords=earthquake;seismic;quake;alert;sismo;terremoto;alerta;temblor;
 StartupNotify=false
 StartupWMClass=vigia-eew
 X-GNOME-UsesNotifications=true
-Actions=Settings;Simulate;
+Actions=Settings;History;Simulate;
 
 [Desktop Action Settings]
 Name=Settings
 Name[es]=Configuración
 Exec=vigia-eew --settings
+Icon=vigia-eew
+
+[Desktop Action History]
+Name=Earthquake history
+Name[es]=Histórico de sismos
+Exec=vigia-eew --history
 Icon=vigia-eew
 
 [Desktop Action Simulate]

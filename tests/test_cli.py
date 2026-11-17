@@ -18,6 +18,7 @@ class _FakeApp:
         self.executed = False
         self.tui_simulate: bool | None = None
         self.settings_opened = False
+        self.history_opened = False
         _FakeApp.created.append(self)
 
     def simulate(self):
@@ -31,6 +32,9 @@ class _FakeApp:
 
     def open_settings(self):
         self.settings_opened = True
+
+    def open_history(self):
+        self.history_opened = True
 
 
 def _create(cfg, **kwargs):
@@ -201,3 +205,35 @@ def test_settings_honours_an_explicit_config_path(tmp_path):
     rc = main(["--settings", "--config", str(path)], create_app=_create)
     assert rc == 0
     assert _FakeApp.created[-1].config_path == str(path)
+
+
+# --- Opening the history on its own (`--history`, REQ-GUI-011) ---
+
+
+def test_history_opens_the_history_without_starting_the_agent():
+    """CA-113.1: the history is a mode of its own, like the panel.
+
+    The tray menu was the only way in, and on GNOME/Wayland it may not open.
+    """
+    rc = main(["--history"], create_app=_create)
+    assert rc == 0
+    app = _FakeApp.created[-1]
+    assert app.history_opened is True
+    assert app.executed is False
+    assert app.simulated is False
+    assert app.settings_opened is False
+
+
+def test_history_wins_over_the_other_modes():
+    """Dispatched first: with `--settings` too, the navigation leads to the panel."""
+    main(["--history", "--settings", "--simulate"], create_app=_create)
+    app = _FakeApp.created[-1]
+    assert app.history_opened is True
+    assert app.settings_opened is False
+    assert app.simulated is False
+
+
+def test_help_lists_the_history_option(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"], create_app=_create)
+    assert "--history" in capsys.readouterr().out

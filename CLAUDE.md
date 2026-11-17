@@ -68,6 +68,8 @@ mypy src                                # type check (strict = true)
 
 vigia-eew --help
 vigia-eew --simulate                    # injects a simulated earthquake (M6.1 La Guaira), no network
+vigia-eew --settings                    # the configuration panel alone, no agent and no tray
+vigia-eew --history                     # the earthquake history alone, no agent and no tray
 vigia-eew --check-config                # validates config.toml and exits
 vigia-eew --install-autostart           # installs autostart (systemd/LaunchAgent/task) and exits
 ```
@@ -135,7 +137,8 @@ UI loop runs on the main thread, ingestion lives in asyncio on a separate worker
 `AsyncioUiBridge` (in `notify/queue.py`) crosses events between both via a thread-safe
 queue + `FletShell.after()`. Flet drives **one window per process**, so `notify/flet_shell.py`
 (`FletShell`) decides what it shows: an alert > the open screen (responsive config panel,
-history, About) > hidden (agent) / quit (`--simulate`, `--settings`). `Application` (`app.py`) wires all of this together; it exposes
+history, About — each carrying the navigation to the other two, `notify/navigation.py`) >
+hidden (agent) / quit (`--simulate`, `--settings`, `--history`). `Application` (`app.py`) wires all of this together; it exposes
 `execute()` (the full agent) and `simulate()` (injects the event from `simulation.py`
 without network, for `--simulate`).
 

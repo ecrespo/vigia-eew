@@ -243,3 +243,97 @@ def test_after_is_a_no_op_once_the_window_is_gone() -> None:
     page = _Page()
     shell = FletShell(page)  # no loop: nothing to schedule on
     shell.after(0, lambda: (_ for _ in ()).throw(AssertionError("ran")))
+
+
+# --- T-155 · a screen is told when an alert covers it (ADR-031, X-4) --------------
+
+
+def _watched(shell: FletShell, view: object = "HISTORY") -> list[str]:
+    seen: list[str] = []
+    shell.show_screen(
+        "history",
+        "History",
+        view,
+        on_covered=lambda: seen.append("covered"),
+        on_uncovered=lambda: seen.append("uncovered"),
+    )
+    return seen
+
+
+def test_a_screen_is_told_when_an_alert_takes_the_window_and_when_it_returns() -> None:
+    """What a playback pauses on: once each, in order (REQ-TLP-006)."""
+    shell = FletShell(_Page())
+    seen = _watched(shell)
+
+    view = _alert(shell)
+    assert seen == ["covered"]
+
+    shell.clear_alert(view)
+    assert seen == ["covered", "uncovered"]
+
+
+def test_a_second_alert_does_not_cover_the_screen_twice() -> None:
+    """The queue shows the next alert as the first is acknowledged."""
+    shell = FletShell(_Page())
+    seen = _watched(shell)
+
+    first = _alert(shell, "FIRST")
+    second = _alert(shell, "SECOND")
+    shell.clear_alert(first)  # not the one on screen any more
+    assert seen == ["covered"]
+
+    shell.clear_alert(second)
+    assert seen == ["covered", "uncovered"]
+
+
+def test_a_screen_opened_under_an_alert_is_born_covered() -> None:
+    page = _Page()
+    shell = FletShell(page)
+    view = _alert(shell)
+
+    seen = _watched(shell)
+
+    assert page.controls == ["ALERT"]
+    assert seen == ["covered"]
+    shell.clear_alert(view)
+    assert seen == ["covered", "uncovered"]
+    assert page.controls == ["HISTORY"]
+
+
+def test_a_screen_closed_under_an_alert_is_not_told_it_is_back() -> None:
+    shell = FletShell(_Page())
+    seen = _watched(shell)
+    view = _alert(shell)
+
+    shell.close_screen()
+    shell.clear_alert(view)
+
+    assert seen == ["covered"]
+
+
+def test_a_screen_that_does_not_ask_is_not_told() -> None:
+    """The callbacks are optional: the panel and About have nothing to pause."""
+    page = _Page()
+    shell = FletShell(page)
+    shell.show_screen("panel", "Settings", "PANEL")
+
+    view = _alert(shell)
+    shell.clear_alert(view)
+
+    assert page.controls == ["PANEL"]
+
+
+def test_a_callback_that_fails_does_not_cost_the_alert() -> None:
+    """Art. 1: nothing a screen does on being covered may keep the alert off."""
+    page = _Page()
+    shell = FletShell(page)
+
+    def explode() -> None:
+        raise RuntimeError("the playback could not pause")
+
+    shell.show_screen("history", "History", "HISTORY", on_covered=explode)
+
+    _alert(shell)
+
+    assert page.controls == ["ALERT"]
+    assert page.window.always_on_top is True

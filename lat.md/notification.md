@@ -63,6 +63,66 @@ Callbacks that may touch the UI (opening the panel, pausing) are marshalled back
 [[src/vigia_eew/agent_state.py#AgentState]] is the lock-protected snapshot those threads share.
 It is process-lifetime only and deliberately not persisted.
 
+## A door into every screen that is not the tray
+
+[[src/vigia_eew/app.py#Application]]`.open_history()` runs the history on its own — no ingestion,
+no bridge, no tray — and `vigia-eew --history` is that mode.
+
+It is the twin of `open_settings()` ([[configuration#A door into the panel that is not the tray]])
+and exists for the same reason: on GNOME/Wayland the packaged agent's tray menu does not open.
+
+v1.0 found that problem for the panel and solved it there. The history had been built two phases
+earlier, was tested, met its requirements at module level, and could not be opened on the
+maintainer's own desktop. REQ-GUI-011 is the rule that came out of it: **a screen reachable only
+from the tray does not exist for that user**, so every screen gets a command-line option and a
+launcher action, and `scripts/check_packaging_assets.py` fails a desktop entry that loses one.
+
+`--history` is dispatched before `--settings`. Given both, the history opens and the navigation
+leads to the panel; the other order would be as good, and one of them had to be written down.
+
+A history that cannot be read shows a notice with the store's own reason instead of an empty
+window. While the tray was the only way in, doing nothing on failure was enough. A window opened
+on purpose has to say why it has nothing to show.
+
+## Navigation is part of the screen
+
+[[src/vigia_eew/notify/navigation.py#framed]] puts the bar — history, settings, About — **inside
+each screen's view**. [[src/vigia_eew/wiring.py#Wiring]] composes it; the shell never sees it as
+anything but part of the screen it was handed.
+
+That placement is the design. [[src/vigia_eew/notify/flet_shell.py#FletShell]] renders the alert
+if there is one and the screen otherwise, so a bar that lives in the screen is absent whenever an
+alert has the window. A bar owned by the shell would have to be hidden under an alert by a
+condition, and a condition is what somebody removes by accident. REQ-GUI-013 is met by where the
+control is, not by a rule about when to show it.
+
+Switching screens discards nothing. The panel and the history window outlive a trip to another
+screen: an unsaved edit is still in its field, still marked unsaved, and a filter is still set.
+That is why there is no "save before leaving?" dialog — it would interrupt a move that loses
+nothing.
+
+The destination the user is on is disabled, not only tinted, following the rule the history map
+applies to alerts and discards: a difference that survives a screenshot and a reader who cannot
+tell two colours apart.
+
+## A screen is told when an alert covers it
+
+[[src/vigia_eew/notify/flet_shell.py#FletShell]] keeps the screen across an alert and renders the
+same object afterwards. `show_screen` takes two optional callbacks, `on_covered` and
+`on_uncovered`, and calls each once per change.
+
+The shell already preserved the screen; what it did not do was say so. A screen with something
+running — the history's playback — needs to stop when the alert takes the window, or a timer that
+keeps redrawing would be the one thing still competing with the alert. With the notice it pauses
+and is found where it was (REQ-TLP-006).
+
+The notice comes **after** the render, and a callback that raises is logged and swallowed. By the
+time a screen hears it has been covered the alert is already on the window, so nothing the screen
+does about it can keep the alert off.
+
+A screen opened while an alert is up is born covered. One closed while covered is never told it is
+back: there is nobody left to tell.
+
 ## Textual naming hazards
 
 Two method names in the TUI look arbitrary and are not; renaming them "for consistency" silently

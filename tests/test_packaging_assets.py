@@ -361,3 +361,79 @@ def test_the_desktop_entry_carries_the_settings_action() -> None:
     assert "Actions=" in entry
     assert "[Desktop Action Settings]" in entry
     assert "Exec=vigia-eew --settings" in entry
+
+
+# --- T-153 · the history is on the launcher of every packaged platform (REQ-GUI-011) ---
+
+
+def _desktop_groups(path: Path) -> dict[str, dict[str, str]]:
+    groups: dict[str, dict[str, str]] = {}
+    current = ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current = stripped[1:-1]
+            groups[current] = {}
+        elif "=" in stripped and current:
+            key, _, value = stripped.partition("=")
+            groups[current][key] = value
+    return groups
+
+
+def test_the_desktop_entry_declares_a_history_action() -> None:
+    """CA-113.2: the launcher offers the history, between the panel and the test."""
+    groups = _desktop_groups(PACKAGING / "vigia-eew.desktop")
+
+    assert groups["Desktop Entry"]["Actions"] == "Settings;History;Simulate;"
+    assert groups["Desktop Action History"]["Exec"] == "vigia-eew --history"
+    assert groups["Desktop Action History"]["Name[es]"]
+
+
+def test_an_entry_that_loses_the_history_action_is_reported(tmp_path: Path) -> None:
+    """The action is the door into the history where the tray menu never opens.
+
+    Losing it leaves a valid desktop file and an unreachable screen, which is
+    exactly the state v1.0 shipped in.
+    """
+    checker = _checker()
+    path = tmp_path / "vigia-eew.desktop"
+    _desktop(path, actions="Settings;")
+
+    problem = checker.desktop_problem(path)
+
+    assert problem is not None and "History" in problem
+
+
+def test_an_action_that_runs_the_wrong_thing_is_reported(tmp_path: Path) -> None:
+    checker = _checker()
+    path = tmp_path / "vigia-eew.desktop"
+    _desktop(path, actions="Settings;History;")
+    with path.open("a", encoding="utf-8") as entry:
+        entry.write("\n[Desktop Action History]\nName=History\nExec=vigia-eew --settings\n")
+
+    problem = checker.desktop_problem(path)
+
+    assert problem is not None and "--history" in problem
+
+
+def test_the_history_has_a_launcher_entry_of_its_own() -> None:
+    """Same reason the panel has one: GNOME hides actions behind a context menu."""
+    checker = _checker()
+    path = PACKAGING / "vigia-eew-history.desktop"
+
+    assert checker.desktop_problem(path) is None
+    assert _desktop_groups(path)["Desktop Entry"]["Exec"] == "vigia-eew --history"
+    assert "packaging/vigia-eew-history.desktop" in {asset.path for asset in checker.LAUNCHER}
+
+
+def test_the_linux_packages_install_the_history_entry() -> None:
+    script = (PACKAGING / "build_linux.sh").read_text(encoding="utf-8")
+    target = "/usr/share/applications/vigia-eew-history.desktop"
+    assert script.count(target) >= 2, "the .deb and the fpm paths both have to install it"
+
+
+def test_the_windows_installer_offers_a_way_into_the_history() -> None:
+    """The Start Menu shortcut with `--history` is the Windows desktop action."""
+    iss = (PACKAGING / "vigia-eew.iss").read_text(encoding="utf-8")
+    assert 'Parameters: "--history"' in iss
+    assert "en.HistoryShortcut=" in iss and "es.HistoryShortcut=" in iss

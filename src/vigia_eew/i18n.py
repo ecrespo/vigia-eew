@@ -74,7 +74,16 @@ _CATALOG: dict[str, dict[Locale, str]] = {
     # The history view (REQ-HIS-005). Its whole purpose is to answer "why was
     # I not warned about that one?", so the reason has to arrive as a phrase,
     # not as the pipeline's internal word for it.
+    # The navigation between screens (REQ-GUI-012): short, they sit on one bar.
+    "nav_history": {"en": "History", "es": "Histórico"},
+    "nav_settings": {"en": "Settings", "es": "Configuración"},
+    "nav_about": {"en": "About", "es": "Acerca de"},
     "history_title": {"en": "Earthquake history", "es": "Histórico de sismos"},
+    # CA-113.3: a window opened by `--history` has to say why it is empty.
+    "history_unavailable": {
+        "en": "The history is not available",
+        "es": "El histórico no está disponible",
+    },
     "history_column_time": {"en": "Local time", "es": "Hora local"},
     "history_column_magnitude": {"en": "Magnitude", "es": "Magnitud"},
     "history_column_place": {"en": "Place", "es": "Lugar"},

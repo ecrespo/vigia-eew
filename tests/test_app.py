@@ -496,6 +496,74 @@ def test_closing_the_panel_ends_the_process(tmp_path):
     assert page.window.prevent_close is False  # the window is being destroyed
 
 
+# --- `--history` · the history with no agent behind it (REQ-GUI-011) ---
+
+
+def test_open_history_runs_the_history_on_its_own_window(monkeypatch, tmp_path):
+    """CA-113.1: no ingestion, no tray, no bridge: one window showing the history."""
+    import vigia_eew.wiring as wiring_mod
+
+    opened = []
+    monkeypatch.setattr(wiring_mod.Wiring, "open_history", lambda self, shell: opened.append(shell))
+    page = _Page()
+    run_ui, ran = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+
+    app.open_history()
+
+    assert len(ran) == 1
+    assert opened == [app._shell]
+    assert app._shell.standalone is True  # closing the history ends the run
+    assert app._tray_icon is None
+
+
+def test_a_history_that_cannot_be_opened_says_so(monkeypatch, tmp_path):
+    """CA-113.3: a window with a notice and its reason, not an empty window."""
+    import vigia_eew.wiring as wiring_mod
+    from vigia_eew.history import HistoryTooNew
+
+    def refuse(self):
+        raise HistoryTooNew("written by a newer version")
+
+    monkeypatch.setattr(wiring_mod.HistoryStore, "open", refuse)
+    page = _Page()
+    run_ui, _ = _run_with(page)
+    app = Application(Settings(), config_path=tmp_path / "config.toml", run_ui=run_ui)
+
+    app.open_history()
+
+    assert app._shell.screen_key == "history"
+    texts = _texts_of(page.controls[0])
+    assert any("history is not available" in text.lower() for text in texts)
+    assert any("written by a newer version" in text for text in texts)
+
+
+def _texts_of(control) -> list[str]:
+    """Every string a tree of Flet controls would put on screen."""
+    found: list[str] = []
+    seen: set[int] = set()
+
+    def walk(node) -> None:
+        if node is None or id(node) in seen or isinstance(node, (str, int, float, bool)):
+            return
+        seen.add(id(node))
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+            return
+        for name in ("value", "text", "label", "tooltip"):
+            value = getattr(node, name, None)
+            if isinstance(value, str):
+                found.append(value)
+            else:
+                walk(value)
+        for name in ("content", "controls", "title", "actions", "destinations"):
+            walk(getattr(node, name, None))
+
+    walk(control)
+    return found
+
+
 def test_simulate_shows_the_alert_and_ends_once_acknowledged(tmp_path):
     page = _Page()
     run_ui, _ = _run_with(page)
@@ -553,3 +621,12 @@ def test_the_tray_is_built_with_the_about_entry(tmp_path):
     app._build_tray()
 
     assert callable(captured["open_about"])
+
+
+def test_the_panel_reached_from_the_navigation_edits_the_file_of_this_run(tmp_path):
+    """`--history --config X`, then Settings on the bar: it has to be X's panel."""
+    path = tmp_path / "otro.toml"
+
+    app = Application(Settings(), config_path=path)
+
+    assert app.wiring.config_file == path

@@ -51,6 +51,12 @@ class _Screen:
     key: str
     title: str
     view: Any
+    #: Called when an alert takes the window from this screen, and when it
+    #: gives it back. Optional: only a screen with something running -- a
+    #: playback -- has anything to do about it.
+    on_covered: Callable[[], None] | None = None
+    on_uncovered: Callable[[], None] | None = None
+    covered: bool = False
 
 
 class FletShell:
@@ -134,17 +140,57 @@ class FletShell:
         """Takes the window over for an alert (RF-15)."""
         self._alert = _Alert(view, configure, on_enter, bgcolor)
         self._render()
+        self._tell_screen()
 
     def clear_alert(self, view: Any) -> None:
         """Gives the window back once *that* alert was acknowledged."""
         if self._alert is not None and self._alert.view is view:
             self._alert = None
             self._render()
+            self._tell_screen()
 
-    def show_screen(self, key: str, title: str, view: Any) -> None:
-        """Opens a screen, replacing the one that was open, if any."""
-        self._screen = _Screen(key, title, view)
+    def show_screen(
+        self,
+        key: str,
+        title: str,
+        view: Any,
+        *,
+        on_covered: Callable[[], None] | None = None,
+        on_uncovered: Callable[[], None] | None = None,
+    ) -> None:
+        """Opens a screen, replacing the one that was open, if any.
+
+        The screen is kept across an alert and rendered again after it, as it
+        was. `on_covered` and `on_uncovered` tell it when that happens, so that
+        whatever it has running can stop and need not be restarted from zero
+        (REQ-TLP-006). A screen opened while an alert is up is born covered.
+        """
+        self._screen = _Screen(key, title, view, on_covered, on_uncovered)
         self._render()
+        self._tell_screen()
+
+    def _tell_screen(self) -> None:
+        """Tells the screen that it was covered or uncovered, once per change.
+
+        After `_render`, never before: the alert is on the window by the time
+        a screen hears about it, and a callback that fails is logged and
+        swallowed -- nothing a screen does may cost an alert (Art. 1).
+        """
+        # @lat: [[notification#A screen is told when an alert covers it]]
+        screen = self._screen
+        if screen is None:
+            return
+        covered = self._alert is not None
+        if covered == screen.covered:
+            return
+        screen.covered = covered
+        notify = screen.on_covered if covered else screen.on_uncovered
+        if notify is None:
+            return
+        try:
+            notify()
+        except Exception as exc:  # noqa: BLE001 - a screen must not take the alert down
+            self._log.warning("screen_notice_failed type=%s detail=%s", type(exc).__name__, exc)
 
     def close_screen(self) -> None:
         self._screen = None

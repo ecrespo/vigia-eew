@@ -554,7 +554,10 @@ def test_about_from_the_panel_returns_to_the_panel(tmp_path: Path, fake_shell) -
     close.on_click(None)
 
     assert fake_shell.screen_key == "panel"
-    assert fake_shell.screens[-1][2] is panel.view
+    # The shell is handed the panel under the navigation bar (REQ-GUI-012).
+    from vigia_eew.notify import navigation
+
+    assert navigation.screen_of(fake_shell.screens[-1][2]) is panel.view
 
 
 def _find_button(control, label: str):

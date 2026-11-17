@@ -60,6 +60,7 @@ vigia-eew/
 │   │   ├── alert_window.py     # undismissable Flet alert + policy (ADR-030)
 │   │   ├── map_view.py         # flet-map builders: epicentre pin/caption, camera (ADR-030)
 │   │   ├── flet_shell.py       # FletShell: the one window, alert > screen > hidden (ADR-030)
+│   │   ├── navigation.py       # the bar between history, settings and About (ADR-031)
 │   │   ├── queue.py            # AlertQueue + asyncio↔UI bridge
 │   │   ├── controller.py       # AlertController (queue + window + sound + toast)
 │   │   └── sound.py            # audio layer by severity
@@ -310,6 +311,7 @@ unaffected).
 | RF-14 | `notify/toast.py`, `notify/presentation.py` | F4 |
 | RF-15..RF-19 | `notify/alert_window.py`, `notify/flet_shell.py`, `notify/map_view.py` (ADR-030) | F4 |
 | RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
+| REQ-GUI-011..013 | `cli.py` (`--history`), `app.py`, `wiring.py`, `notify/navigation.py`, `notify/flet_shell.py`, `packaging/` (v1.1, ADR-031) | F9 |
 | RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |
 | RF-21 | `simulation.py`, `cli.py` (`--simulate`), `app.py` | F5 |
 | RF-22, RF-23 | `autostart/*` | F6 |

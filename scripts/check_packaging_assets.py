@@ -40,6 +40,14 @@ ICON_NAME = "vigia-eew"
 #: Keys without which a desktop entry installs cleanly and does nothing useful.
 _DESKTOP_REQUIRED_KEYS = ("Type", "Name", "Exec", "Icon")
 
+#: The actions the application's own entry has to offer, and what each runs.
+#: They are the way into the panel and the history on a session where the tray
+#: menu never opens (REQ-GUI-009, REQ-GUI-011): an entry that loses one is
+#: still a valid desktop file, and the screen behind it is unreachable.
+_REQUIRED_ACTIONS = {
+    "vigia-eew.desktop": {"Settings": "--settings", "History": "--history"},
+}
+
 
 #: Hicolor sizes the Linux packages install. 22 and 24 are the panel sizes
 #: GNOME and Xfce ask for; a theme that lacks them scales the nearest one.
@@ -72,6 +80,7 @@ REQUIRED: tuple[Asset, ...] = (
 LAUNCHER: tuple[Asset, ...] = (
     Asset("packaging/vigia-eew.desktop", "desktop"),
     Asset("packaging/vigia-eew-settings.desktop", "desktop"),
+    Asset("packaging/vigia-eew-history.desktop", "desktop"),
     Asset("packaging/icons/vigia-eew.svg", "svg"),
     Asset("packaging/icon.ico", "ico"),
     Asset("packaging/icon.icns", "icns"),
@@ -147,6 +156,12 @@ def desktop_problem(path: Path) -> str | None:
             return f"{path.name}: action {action} is declared with no group behind it"
         if "Exec" not in group or "Name" not in group:
             return f"{path.name}: action {action} has no Name/Exec"
+    for action, flag in _REQUIRED_ACTIONS.get(path.name, {}).items():
+        group = groups.get(f"Desktop Action {action}")
+        if group is None:
+            return f"{path.name}: no {action} action; that screen cannot be reached without a tray"
+        if flag not in group["Exec"].split():
+            return f"{path.name}: action {action} runs '{group['Exec']}', not {flag}"
     return None
 
 

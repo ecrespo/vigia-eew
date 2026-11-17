@@ -109,6 +109,10 @@ construir_deb_con_dpkg() {
     # configuration is what people are looking for after installing.
     install -Dm 0644 "$RAIZ/packaging/vigia-eew-settings.desktop" \
         "$raiz/usr/share/applications/vigia-eew-settings.desktop"
+    # The history gets the same (REQ-GUI-011): it was reachable only from the
+    # tray menu, which is the menu that does not open on GNOME/Wayland.
+    install -Dm 0644 "$RAIZ/packaging/vigia-eew-history.desktop" \
+        "$raiz/usr/share/applications/vigia-eew-history.desktop"
     instalar_iconos_hicolor "$raiz"
     escribir_hooks_deb "$raiz"
 
@@ -148,6 +152,7 @@ CONTROL
 # fpm takes `source=destination` pairs; the same files the dpkg path installs.
 MAPEOS_FPM=("$RAIZ/packaging/vigia-eew.desktop=/usr/share/applications/vigia-eew.desktop"
     "$RAIZ/packaging/vigia-eew-settings.desktop=/usr/share/applications/vigia-eew-settings.desktop"
+    "$RAIZ/packaging/vigia-eew-history.desktop=/usr/share/applications/vigia-eew-history.desktop"
     "$RAIZ/packaging/icons/vigia-eew.svg=/usr/share/icons/hicolor/scalable/apps/vigia-eew.svg")
 for lado in "${TAMANOS_ICONO[@]}"; do
     MAPEOS_FPM+=("$RAIZ/packaging/icons/vigia-eew-$lado.png=/usr/share/icons/hicolor/${lado}x${lado}/apps/vigia-eew.png")

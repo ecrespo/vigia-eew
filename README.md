@@ -134,7 +134,11 @@ You can also point at any file explicitly with `--config <path>`.
 
 ```bash
 vigia-eew --settings      # the configuration panel, on its own; no agent, no tray
+vigia-eew --history       # the earthquake history, on its own; no agent, no tray
 ```
+
+Either one opens a window with a bar that leads to the other and to *About*, so no screen
+depends on the tray menu.
 
 - The **panel** — every setting, with live validation and a reorderable list of seismic
   networks. Reach it with `vigia-eew --settings`, from the launcher entry's *Settings* action

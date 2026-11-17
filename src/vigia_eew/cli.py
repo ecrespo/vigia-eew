@@ -1,8 +1,8 @@
 """Console entry point `vigia-eew` (RF-26, RF-21).
 
-Starts the full agent (`vigia-eew`), the notification test (`--simulate`) or the
-configuration panel alone (`--settings`); accepts a config path (`--config`) and a
-quick check (`--check-config`).
+Starts the full agent (`vigia-eew`), the notification test (`--simulate`), the
+configuration panel alone (`--settings`) or the history alone (`--history`);
+accepts a config path (`--config`) and a quick check (`--check-config`).
 Autostart install/uninstall was added in Phase 6.
 
 The application factory (`create_app`) is injectable so the CLI dispatch can be
@@ -40,6 +40,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--settings",
         action="store_true",
         help="Opens the configuration panel on its own, without starting the agent.",
+    )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Opens the earthquake history on its own, without starting the agent.",
     )
     parser.add_argument(
         "--tui",
@@ -106,7 +111,12 @@ def _run_agent(args: argparse.Namespace, create_app: Callable[..., Any] | None) 
         cfg, manual_reference=has_manual_reference(args.config), config_path=args.config
     )
 
-    if args.settings:
+    if args.history:
+        # @lat: [[notification#A door into every screen that is not the tray]]
+        # First of all: with `--settings` too, the history opens and its
+        # navigation leads to the panel.
+        app.open_history()
+    elif args.settings:
         # Before the other modes on purpose: `--settings` is the door the
         # desktop entry knocks on, and it opens the panel and nothing else.
         app.open_settings()

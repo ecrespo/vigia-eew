@@ -87,6 +87,9 @@ class Wiring:
         self.locale = resolve_locale(cfg.notification.language)
         self._log = logger or logging.getLogger("vigia_eew.wiring")
         self._detect_location = detect_location or geoloc.detect_ip_location
+        #: The `config.toml` this run was given; the panel reached from the
+        #: navigation edits it. None means the default one.
+        self.config_file: Path | None = None
         self._panel: Any = None
         self._history_window: Any = None
         self._history_store: HistoryStore | None = None
@@ -388,6 +391,41 @@ class Wiring:
         """Opens `config.toml` with the OS's associated application (RF-34)."""
         tray.open_config(path)
 
+    # --- Screens: history, panel, About -- each leads to the others (ADR-031) ---
+
+    def navigate(self, shell: Any, key: str) -> None:
+        """Goes to another screen from the navigation bar (REQ-GUI-012).
+
+        Nothing is discarded on the way: the panel and the history window
+        outlive the switch, so an unsaved edit is in its field and a filter is
+        still set when the user comes back.
+        """
+        # @lat: [[notification#Navigation is part of the screen]]
+        if key == "history":
+            self.open_history(shell)
+        elif key == "panel":
+            self.open_panel(shell, self._panel_path())
+        elif key == "about":
+            self.open_about(shell)
+
+    def _panel_path(self) -> Path:
+        """The file the panel edits: the one the run was given, or the default."""
+        if self.config_file is not None:
+            return self.config_file
+        from vigia_eew.config import default_config_path
+
+        return default_config_path()
+
+    def _show(self, shell: Any, key: str, title: str, view: Any) -> None:
+        """Hands a screen to the shell with the navigation above it."""
+        from vigia_eew.notify.navigation import framed
+
+        shell.show_screen(
+            key,
+            title,
+            framed(view, key, lambda chosen: self.navigate(shell, chosen), locale_code=self.locale),
+        )
+
     def open_history(self, shell: Any) -> Any:
         """Opens the history screen (REQ-HIS-005). UI thread only, like the panel.
 
@@ -397,19 +435,31 @@ class Wiring:
         the mercy of a disk. Two connections to one SQLite file is what the
         engine is for.
 
-        A history that cannot be opened for reading leaves the entry doing
-        nothing and says so, which is the same best-effort rule the writer
-        follows -- nothing about the history may cost an alert.
-        """
-        from vigia_eew.notify.history_window import HistoryWindow
+        A history that cannot be opened for reading shows a notice saying so
+        and why (CA-113.3), which is the same best-effort rule the writer
+        follows -- nothing about the history may cost an alert. It used to do
+        nothing, which was enough while the tray was the only way in; a window
+        opened by `--history` has to show something.
 
-        if self._history_window is not None and shell.screen_key == "history":
+        The window outlives a trip to another screen: coming back shows the
+        same one, with its filter, re-read from the file.
+        """
+        from vigia_eew.notify.history_window import HistoryWindow, unavailable_view
+
+        title = t("history_title", self.locale)
+        if self._history_window is not None:
+            if shell.screen_key != "history":
+                self._history_window.refresh()
+                self._show(shell, "history", title, self._history_window.view)
             return self._history_window
-        self._close_history_reader()
         try:
             store = HistoryStore(prune_on_open=False).open()
         except Exception as exc:  # noqa: BLE001 - deliberate best-effort (REQ-HIS-002)
             self._log.warning("history_view_unavailable type=%s detail=%s", type(exc).__name__, exc)
+            view = unavailable_view(
+                str(exc), locale_code=self.locale, on_close=lambda: self._close_history(shell)
+            )
+            self._show(shell, "history", title, view)
             return None
         self._history_store = store
         window = HistoryWindow(
@@ -419,8 +469,8 @@ class Wiring:
             reference=(self.cfg.reference.lat, self.cfg.reference.lon),
             on_close=lambda: self._close_history(shell),
         )
-        shell.show_screen("history", t("history_title", self.locale), window.view)
         self._history_window = window
+        self._show(shell, "history", title, window.view)
         return window
 
     def _close_history(self, shell: Any) -> None:
@@ -439,17 +489,19 @@ class Wiring:
         Must be called on the UI thread -- `Application` schedules it, because
         the tray that asks for it runs on its own (ADR-006).
 
-        A second call while it is open brings back the panel that is already
+        A second call while it exists brings back the panel that is already
         there instead of building another. Two panels over one file would be
-        the external-edit conflict of CA-108.7 with itself.
+        the external-edit conflict of CA-108.7 with itself -- and, since the
+        navigation, bringing the same one back is what keeps an unsaved edit
+        across a trip to another screen (CA-113.5).
         """
         from vigia_eew.config_writer import ConfigWriter
         from vigia_eew.notify.config_panel import ConfigPanel, PanelModel
 
-        if self._panel is not None and shell.screen_key in ("panel", "about"):
-            self._show_panel(shell, self._panel)
+        if self._panel is not None:
+            if shell.screen_key != "panel":
+                self._show_panel(shell, self._panel)
             return self._panel
-        self._close_history_reader()
         panel = ConfigPanel(
             PanelModel(ConfigWriter(path)),
             on_about=lambda: self.open_about(shell, back=lambda: self._show_panel(shell, panel)),
@@ -460,9 +512,8 @@ class Wiring:
         self._show_panel(shell, panel)
         return panel
 
-    @staticmethod
-    def _show_panel(shell: Any, panel: Any) -> None:
-        shell.show_screen("panel", "Vigía-eew · Settings", panel.view)
+    def _show_panel(self, shell: Any, panel: Any) -> None:
+        self._show(shell, "panel", "Vigía-eew · Settings", panel.view)
 
     def _close_panel(self, shell: Any) -> None:
         self._panel = None
@@ -472,12 +523,10 @@ class Wiring:
         """Opens the About screen (REQ-GUI-010). UI thread only, like the panel.
 
         `back` is where its Close button returns to: the panel when it was
-        opened from there, nothing (the window hides) when from the tray.
+        opened from there, nothing (the window hides) otherwise.
         """
         from vigia_eew.notify.about_window import about_view
 
-        if back is None:
-            self._close_history_reader()
         view = about_view(locale_code=ui_scale.PANEL_LOCALE, on_close=back or shell.close_screen)
-        shell.show_screen("about", t("about_title", ui_scale.PANEL_LOCALE), view)
+        self._show(shell, "about", t("about_title", ui_scale.PANEL_LOCALE), view)
         return view
