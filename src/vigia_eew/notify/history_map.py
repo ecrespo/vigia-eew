@@ -25,7 +25,7 @@ a tooltip nor events, so it could not say which earthquake it was.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -106,6 +106,9 @@ class Marker:
     record: EventRecord
     #: The one the user chose in the table, or pressed here (REQ-MAP-007).
     selected: bool = False
+    #: How strongly it is drawn, from 0 to 1. Always 1 on the static map; a
+    #: playback draws an older earthquake weaker (REQ-TLP-005).
+    strength: float = 1.0
 
 
 def marker_style(verdict: str) -> MarkerStyle:
@@ -136,7 +139,12 @@ def centre_of(
     )
 
 
-def plan(records: Sequence[EventRecord], *, selected: int | None = None) -> list[Marker]:
+def plan(
+    records: Sequence[EventRecord],
+    *,
+    selected: int | None = None,
+    strengths: Mapping[int, float] | None = None,
+) -> list[Marker]:
     """Works out every symbol without touching a control.
 
     Every record is placed -- the map does not get to drop one the table is
@@ -146,7 +154,11 @@ def plan(records: Sequence[EventRecord], *, selected: int | None = None) -> list
     `selected` is the id of the row the user chose. Its symbol is larger and
     its ring thicker -- a difference of shape, like the one between an alert
     and a discard, so that it does not rest on telling two colours apart.
+
+    `strengths` is how strongly to draw each row, by id; a row it does not
+    name is drawn in full. Which earthquake is how old is not decided here.
     """
+    strengths = strengths or {}
     markers = []
     for record in records:
         chosen = selected is not None and record.id == selected
@@ -158,6 +170,7 @@ def plan(records: Sequence[EventRecord], *, selected: int | None = None) -> list
                 style=marker_style(record.verdict),
                 record=record,
                 selected=chosen,
+                strength=strengths.get(record.id, 1.0) if record.id is not None else 1.0,
             )
         )
     return sorted(markers, key=lambda marker: (marker.selected, marker.style.filled))
@@ -192,6 +205,7 @@ class HistoryMap:
         self._on_select = on_select
         self._records: Sequence[EventRecord] = ()
         self._selected: int | None = None
+        self._strengths: Mapping[int, float] | None = None
         self._symbols = fm.MarkerLayer(markers=[])
         #: Says so when the set is larger than what is drawn. Leaving
         #: earthquakes off the map in silence would under-report the history,
@@ -242,6 +256,7 @@ class HistoryMap:
         total: int | None = None,
         describe: Callable[[EventRecord], str] | None = None,
         selected: Any = _KEEP,
+        strengths: Mapping[int, float] | None = None,
     ) -> None:
         """Draws those arrivals. Called again whenever the filters change.
 
@@ -251,9 +266,14 @@ class HistoryMap:
         `describe` words an arrival for its tooltip (REQ-MAP-006). The map does
         not word it itself: the list already has, for the table, and a second
         wording would be a second chance to disagree.
+
+        `strengths` draws some of them weaker, by row id -- a frame of the
+        playback. It belongs to this call: showing again without it draws
+        everything in full.
         """
         self._describe = describe
         self._records = records
+        self._strengths = strengths
         if selected is not _KEEP:
             self._selected = selected
         self._draw()
@@ -274,7 +294,7 @@ class HistoryMap:
             self._on_select(row_id)
 
     def _draw(self) -> None:
-        self.markers = plan(self._records, selected=self._selected)
+        self.markers = plan(self._records, selected=self._selected, strengths=self._strengths)
         self._symbols.markers = [self._symbol(marker) for marker in self.markers]
 
     def _symbol(self, marker: Marker) -> Any:
@@ -285,6 +305,7 @@ class HistoryMap:
             width=diameter,
             height=diameter,
             content=ft.Container(
+                opacity=marker.strength,
                 border_radius=marker.radius,
                 bgcolor=(
                     ft.Colors.with_opacity(0.75, marker.style.fill) if marker.style.filled else None

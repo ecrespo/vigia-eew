@@ -61,6 +61,8 @@ vigia-eew/
 │   │   ├── map_view.py         # flet-map builders: epicentre pin/caption, camera (ADR-030)
 │   │   ├── flet_shell.py       # FletShell: the one window, alert > screen > hidden (ADR-030)
 │   │   ├── navigation.py       # the bar between history, settings and About (ADR-031)
+│   │   ├── timelapse.py        # the playback's timeline: pure, steps by earthquake (ADR-035)
+│   │   ├── timelapse_view.py   # the playback's controls: play, pause, seek, speed, trail
 │   │   ├── queue.py            # AlertQueue + asyncio↔UI bridge
 │   │   ├── controller.py       # AlertController (queue + window + sound + toast)
 │   │   └── sound.py            # audio layer by severity
@@ -312,6 +314,7 @@ unaffected).
 | RF-15..RF-19 | `notify/alert_window.py`, `notify/flet_shell.py`, `notify/map_view.py` (ADR-030) | F4 |
 | RF-18 | `notify/presentation.py`, `notify/alert_window.py` | F4 |
 | REQ-HIS-005, 007, 008 · REQ-MAP-006, 007 | `notify/history_view.py` (`HistoryList` owns filters and paging), `notify/history_map.py` (markers, selection), `notify/history_window.py`, `timeutil.py` (`local_day_bounds`), `history.py` (`verdicts`) (v1.1, ADR-032, ADR-033) | F10 |
+| REQ-TLP-001..008 | `notify/timelapse.py` (pure `Timeline`: steps, frames, dwell), `notify/timelapse_view.py` (play, pause, seek, speed, trail), `notify/history_window.py` (feeds and paints it), `notify/history_map.py` (`strengths`), `wiring.py` (timer, pause on an alert) (v1.1, ADR-035) | F12 |
 | REQ-HIS-009 | `history.py` (`HistoryQuery.reading`/`rank`, the per-earthquake statements, `arrivals`), `notify/history_view.py` (the switch, `arrivals_of`), `wiring.py` (hands over the network order) (v1.1, ADR-034) | F11 |
 | REQ-GUI-011..013 | `cli.py` (`--history`), `app.py`, `wiring.py`, `notify/navigation.py`, `notify/flet_shell.py`, `packaging/` (v1.1, ADR-031) | F9 |
 | RF-20 | `notify/queue.py`, `notify/controller.py` | F4 |

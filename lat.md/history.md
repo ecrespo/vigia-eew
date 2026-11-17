@@ -302,3 +302,60 @@ way; putting the wiring inside it would have been the first step to losing that.
 
 Sorting is the exception that proves the direction: order is a property of a table and a map has
 no rows to reorder, so sorting changes the table and leaves the map showing the same earthquakes.
+
+## The playback steps by earthquake, and a frame depends only on its step
+
+[[src/vigia_eew/notify/timelapse.py#Timeline]] turns a set of earthquakes into steps, one per
+instant something happened, and says what each step shows. It is pure: no toolkit, no clock.
+
+**By earthquake, not by a clock** (decision D-8). The map is redrawn when the next earthquake of
+the set happens and not in between. A fixed frame rate would redraw at a pace unrelated to the
+data — most frames identical to the last — and continuous fading between steps is a clock again.
+So intensity comes in a few discrete levels, worked out at each step from the earthquake's age in
+the history's own time, and speed is only how long a step stays on screen.
+
+`frame(i)` is a function of *i* and nothing else. Seeking to an earthquake and reaching it by
+playing are the same call, so they cannot come to show different things, and changing the speed
+cannot change what is shown. That is why every promise about order, seeking and fading is tested
+with no screen: the three invariants run over generated sets.
+
+A step stays on screen for the real gap to the next earthquake divided by the speed, held between
+`MIN_DWELL` and `MAX_DWELL`: a burst a second apart must still be seen, and a silent week must
+not look like a playback that stopped.
+
+Those limits and `PLAYBACK_SYMBOL_LIMIT` are **measured**, in `docs/v1.1/10-SPIKE-TIMELAPSE.md`:
+400 markers redraw in about 86 ms, inside a shortest step of 150 ms. Their product is the longest
+a playback of clamped steps can last, and it must stay at or under a minute. If a slower machine
+needs relief, lower the limit; do not raise the minimum.
+
+Two parts, split like the list and its view.
+[[src/vigia_eew/notify/timelapse_view.py#TimelapseView]] holds the controls and asks the shell's
+timer for one step at a time. A timer cannot take a step back, so pausing makes it stale instead:
+every play, pause, seek and reload starts a new generation, and a step that comes due under an
+old one does nothing. An import contract fails if the timeline ever imports the toolkit.
+
+## The playback is a third reading of one query
+
+[[src/vigia_eew/notify/history_window.py#HistoryWindow]] hands the playback the set the filters
+select; the playback has no query of its own (REQ-TLP-004).
+
+It reads the set **per earthquake** whatever the table is reading, so that none plays twice
+([[lat.md/history#Which arrival stands for an earthquake]]), and the most recent ones when there
+are more than it holds — whatever the table is sorted by — saying how many of how many.
+
+A change of filter replaces the set, and the playback lets go of the map. A change that leaves
+the set alone — a page turned, a column sorted, a row chosen — leaves the frame where it is. The
+window tells the two apart by comparing what the filters select, not by who called.
+
+It paints through the same [[src/vigia_eew/notify/history_map.py#HistoryMap]] the static set
+uses, each symbol drawn weaker by its age. The spike found markers fast enough, so there is no
+second painter, and a paused frame answers the pointer like the static map. It also means the
+"map unavailable" notice is inherited rather than rebuilt.
+
+The control holds a painter, not the map, so it has no way to pan or zoom: a playback that
+wandered the map would fetch tiles nobody decided to fetch (REQ-TLP-008, E-06).
+
+An alert pauses it. The wiring registers the window's pause with the shell
+([[lat.md/notification#A screen is told when an alert covers it]]); after the alert the screen is
+back as it was, paused on the same step. Leaving or closing the history pauses it too, since the
+timer would otherwise keep a playback nobody sees alive.

@@ -1024,3 +1024,37 @@ def test_per_arrival_a_chosen_row_lists_no_arrivals(twice: HistoryStore) -> None
     view.choose(view.listing.rows[0].record.id)
 
     assert view.arrivals.visible is False
+
+
+# --- T-166 · the set a playback reads (ADR-035 §6) ---------------------------------
+
+
+def test_the_whole_set_can_be_asked_for_per_earthquake_most_recent_first(
+    twice: HistoryStore,
+) -> None:
+    """Whatever the table is sorted by and however it is being read."""
+    listing = HistoryList(twice)
+    listing.sort_by("magnitude")
+    assert listing.reading == "arrival"
+
+    played = listing.everything(1, reading="earthquake", newest_first=True)
+
+    assert [record.correlation_id for record in played.records] == ["q1"]
+    assert played.total == 2  # earthquakes, not the table's three arrivals
+    assert played.truncated is True
+    assert listing.reading == "arrival"  # asking changed nothing
+
+
+def test_the_filters_have_a_signature_that_ignores_page_order_and_reading(
+    twice: HistoryStore,
+) -> None:
+    listing = HistoryList(twice, page_size=2)
+    before = listing.filter_signature
+
+    listing.next_page()
+    listing.sort_by("magnitude")
+    listing.set_reading("earthquake")
+    assert listing.filter_signature == before
+
+    listing.set_min_magnitude(5.0)
+    assert listing.filter_signature != before

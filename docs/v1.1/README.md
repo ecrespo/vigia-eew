@@ -45,7 +45,7 @@ that cannot be reached today.
 | 07 | [Tasks](07-TASKS.md) | T-152..T-182, each with its REQ, its CA and its "Done" | Draft |
 | 08 | [Analyze](08-ANALYZE.md) | Cross-artifact validation before any code: 15 findings | Draft |
 | 09 | [Estimate](09-ESTIMATE.md) | 90–165 hours, with assumptions and range | Draft |
-| 10 | Spike: timelapse | What one redraw costs | Written by T-163 |
+| 10 | [Spike: timelapse](10-SPIKE-TIMELAPSE.md) | What one redraw costs — verdict: viable with markers | Done |
 
 **All of it is draft.** The method asks for a human checkpoint between artifacts. The maintainer
 asked for the whole kit in one pass on 2026-11-16; the checkpoint is therefore one review of the
@@ -223,18 +223,20 @@ points. Wayland is still the product's biggest open risk and **this kit does not
 | **Specifications** | All ten artifacts in draft, with D-5 to D-9 applied |
 | **Constitution amendments** | None required |
 | **Pending decisions** | **None** — V-02 was resolved as D-10 |
-| **Unchecked assumptions** | **2** — P-2 (one redraw of the map; T-163) and P-5 (the system file dialog in the packaged binary; T-175). P-1 and P-3 are checked; P-4 is closed by D-9 |
+| **Unchecked assumptions** | **1** — P-5 (the system file dialog in the packaged binary; T-175). P-1, P-2 (measured by T-163) and P-3 are checked; P-4 is closed by D-9 |
 | **Requirements not closed** | **1** — REQ-TLP-007's bound and step limits, which T-163 sets |
 | **Estimate** | 90–165 hours for everything; 43–80 for the minimum cut (F9–F12) |
 | **Branch** | `feature/v1.1.0`, from `develop` |
-| **Implementation** | **F9, F10 and F11 done** (T-152..T-162), 2026-11-16. F12..F16 pending — progress in [07-TASKS](07-TASKS.md) |
+| **Implementation** | **F9..F12 done** (T-152..T-166), 2026-11-16. F13..F16 pending — progress in [07-TASKS](07-TASKS.md) |
 | **Verified against the file system** | `cli.py` has no `--history`; `vigia-eew.desktop` has `Actions=Settings;Simulate;`; `HistoryView` has two filters; `offset` is unused in the interface; `SCHEMA_VERSION = 1`; no trace of F-03 or F-13 in `src/` |
 | **Not verified** | The test suite was not run for this evaluation; the facts above come from reading the code. The P-1 trial ran on X11 under Xvfb, not on a Wayland session |
 
 ## Next step
 
-**F12, tasks T-163..T-166**, once the maintainer approves it: each phase waits for a go-ahead.
-It starts with the spike T-163, whose verdict can stop the phase.
+**F13, tasks T-167..T-171**, once the maintainer approves it: each phase waits for a go-ahead.
+
+Owed by the maintainer from F12: the playback observed on the packaged binary (T-166's last
+criterion), and a rerun of the spike on the real session (10 §7).
 
 ```bash
 vigia-eew --history    # today: "unrecognized arguments"

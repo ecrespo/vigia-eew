@@ -90,7 +90,7 @@ The full matrix is in [07-TASKS](07-TASKS.md). Summary by area:
 
 | # | Finding | Sev. | Phase it touches |
 |---|---|---|---|
-| V-01 | P-2 is open: one redraw of the map is unmeasured | 🔴 | F12 |
+| V-01 | P-2 was open: one redraw of the map was unmeasured — **closed by T-163** | 🟢 | F12 |
 | V-02 | Two recovery defaults were chosen by the design, not by the maintainer — **resolved, D-10** | 🟢 | F13 |
 | V-03 | A requirement worded for the user was verified on a module | 🟡 | process |
 | V-04 | A v1.0 agent reads a recovered row as a discard | 🟡 | F13 |
@@ -106,7 +106,11 @@ The full matrix is in [07-TASKS](07-TASKS.md). Summary by area:
 | V-14 | REQ-ALE-013's criterion named a case the contract cannot produce | 🟢 | F16 |
 | V-15 | `docs/v1/HU/HU-112` still describes the map on Tk and Pillow | ⚪ | — |
 
-### V-01 · P-2 is open 🔴
+### V-01 · P-2 is open — resolved 🟢
+
+> **Closed 2026-11-16 by T-163** ([10-SPIKE-TIMELAPSE](10-SPIKE-TIMELAPSE.md)): about 0.22 ms per
+> marker; `PLAYBACK_SYMBOL_LIMIT` = 400, `MIN_DWELL` = 0.15 s, `MAX_DWELL` = 2 s, `MAP_SYMBOL_LIMIT`
+> = 500 kept. Verdict: viable with markers. The text below is the finding as it was written.
 
 Nobody has measured what replacing the map's symbols costs, and ADR-033 made each symbol heavier.
 REQ-TLP-007's bound, the shortest step, and `MAP_SYMBOL_LIMIT` — already used in F10 — are numbers
@@ -304,9 +308,9 @@ None. T-182 cites Art. 9 rather than a requirement, as the cut task of v1.0 did.
 | Phase | Verdict |
 |---|---|
 | **F9 · Door** | ✅ **Done**, 2026-11-16 |
-| **F10 · Full query** | ✅ **Done**, 2026-11-16 — `MAP_SYMBOL_LIMIT` still provisional (V-01); the Wayland smoke (V-11) still owed |
-| **F11 · One earthquake** | ✅ Ready (V-07 is about expectations, not about the work) |
-| **F12 · Timelapse** | ⚠️ **T-163 first.** T-164 can follow it at once; T-165 and T-166 wait for its verdict |
+| **F10 · Full query** | ✅ **Done**, 2026-11-16 — `MAP_SYMBOL_LIMIT` confirmed by T-163; the Wayland smoke (V-11) still owed |
+| **F11 · One earthquake** | ✅ **Done**, 2026-11-16 |
+| **F12 · Timelapse** | ✅ **Done**, 2026-11-16 — spike verdict *viable with markers*; the observation on the packaged binary is owed |
 | **F13 · Depth** | ✅ Ready — V-02 resolved as D-10 |
 | **F14 · Figures and export** | ✅ Ready |
 | **F15 · TUI** | ✅ Ready |

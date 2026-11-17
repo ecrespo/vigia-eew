@@ -417,14 +417,30 @@ class Wiring:
 
         return default_config_path()
 
-    def _show(self, shell: Any, key: str, title: str, view: Any) -> None:
-        """Hands a screen to the shell with the navigation above it."""
+    def _show(
+        self,
+        shell: Any,
+        key: str,
+        title: str,
+        view: Any,
+        *,
+        on_covered: Callable[[], None] | None = None,
+    ) -> None:
+        """Hands a screen to the shell with the navigation above it.
+
+        `on_covered` is what the shell calls when an alert takes the window
+        from this screen.
+        """
         from vigia_eew.notify.navigation import framed
 
+        if key != "history" and self._history_window is not None:
+            # Going elsewhere: a playback nobody is looking at stops redrawing.
+            self._history_window.pause_playback()
         shell.show_screen(
             key,
             title,
             framed(view, key, lambda chosen: self.navigate(shell, chosen), locale_code=self.locale),
+            on_covered=on_covered,
         )
 
     def open_history(self, shell: Any) -> Any:
@@ -451,7 +467,13 @@ class Wiring:
         if self._history_window is not None:
             if shell.screen_key != "history":
                 self._history_window.refresh()
-                self._show(shell, "history", title, self._history_window.view)
+                self._show(
+                    shell,
+                    "history",
+                    title,
+                    self._history_window.view,
+                    on_covered=self._history_window.pause_playback,
+                )
             return self._history_window
         try:
             store = HistoryStore(prune_on_open=False).open()
@@ -472,9 +494,12 @@ class Wiring:
             # The same order the deduplicator obeys: read per earthquake, a tie
             # between two arrivals goes to the network the user ranked first.
             rank=tuple(spec.source for spec in ordered_sources(self.cfg)),
+            # The playback steps on the shell's own timer and stops when an
+            # alert covers the screen (REQ-TLP-006).
+            after=shell.after,
         )
         self._history_window = window
-        self._show(shell, "history", title, window.view)
+        self._show(shell, "history", title, window.view, on_covered=window.pause_playback)
         return window
 
     def _close_history(self, shell: Any) -> None:
@@ -482,6 +507,9 @@ class Wiring:
         shell.close_screen()
 
     def _close_history_reader(self) -> None:
+        if self._history_window is not None:
+            # The timer may still hold a step of the playback: make it stale.
+            self._history_window.pause_playback()
         if self._history_store is not None:
             self._history_store.close()
             self._history_store = None

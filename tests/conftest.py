@@ -127,9 +127,11 @@ class FakeShell:
         for _ms, callback in calls:
             callback()
 
-    def show_screen(self, key, title, view):
+    def show_screen(self, key, title, view, *, on_covered=None, on_uncovered=None):
         self.screen_key = key
         self.screens.append((key, title, view))
+        self.on_covered = on_covered
+        self.on_uncovered = on_uncovered
 
     def close_screen(self):
         self.screen_key = None

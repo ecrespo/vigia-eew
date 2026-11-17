@@ -326,7 +326,27 @@ class HistoryList:
         """
         return [row.record for row in self.rows]
 
-    def everything(self, limit: int) -> Everything:
+    @property
+    def filter_signature(self) -> tuple[Any, ...]:
+        """What the filters select, and nothing about how it is looked at.
+
+        Unchanged by turning a page, sorting or switching the reading. A view
+        that holds the set -- the playback -- compares it to know whether the
+        set it holds is still the one the filters select.
+        """
+        query = self.query
+        return (
+            query.since,
+            query.until,
+            query.min_magnitude,
+            query.max_distance_km,
+            query.verdict,
+            query.sources,
+        )
+
+    def everything(
+        self, limit: int, *, reading: str | None = None, newest_first: bool = False
+    ) -> Everything:
         """The whole filtered set in the table's order, up to `limit` of it.
 
         The table pages; a map does not. A map that drew only the page would
@@ -334,9 +354,19 @@ class HistoryList:
         (REQ-MAP-004) would have come to mean "the same 150 rows". So the views
         that draw the set -- the map, and later the playback -- read this, and
         say so when `limit` cut it short.
+
+        `reading` asks for the set in a reading other than the table's, and
+        `newest_first` for the most recent of it whatever the table is sorted
+        by: the playback reads earthquakes, and when there are too many it
+        plays the latest (ADR-035). Neither changes what the table shows.
         """
         request = _replace(self.query, limit=limit, offset=0)
-        return Everything(self._store.query(request), self.total)
+        if newest_first:
+            request = _replace(request, order_by="occurred_at", descending=True)
+        if reading is None or reading == self.query.reading:
+            return Everything(self._store.query(request), self.total)
+        request = _replace(request, reading=reading)
+        return Everything(self._store.query(request), self._store.count(request))
 
     def row_for(self, record: EventRecord) -> Row:
         """That record as the table words it, for a view that shows one entry."""

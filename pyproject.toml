@@ -142,6 +142,8 @@ ignore_missing_imports = true  # no published stubs/py.typed (RF-34)
 
 [tool.importlinter]
 root_package = "vigia_eew"
+# Needed to forbid a third-party import by name (the toolkit, below).
+include_external_packages = true
 
 # Capas, de arriba abajo. Una capa solo puede importar las que tiene debajo, y los
 # módulos separados por "|" están en la misma capa: tampoco pueden importarse entre
@@ -194,6 +196,23 @@ modules = [
     "vigia_eew.ingest",
     "vigia_eew.notify",
     "vigia_eew.autostart",
+]
+
+# The timeline decides what a playback shows and is checked with no screen and no
+# clock (ADR-035). It stays that way only while it imports neither the toolkit nor
+# anything that draws: this is the contract that fails if it does.
+[[tool.importlinter.contracts]]
+name = "The playback's timeline is pure"
+type = "forbidden"
+source_modules = ["vigia_eew.notify.timelapse"]
+forbidden_modules = [
+    "flet",
+    "flet_map",
+    "vigia_eew.notify.timelapse_view",
+    "vigia_eew.notify.history_map",
+    "vigia_eew.notify.history_view",
+    "vigia_eew.notify.history_window",
+    "vigia_eew.notify.flet_shell",
 ]
 
 [tool.bandit]

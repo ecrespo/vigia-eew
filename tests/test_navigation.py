@@ -276,3 +276,111 @@ def test_the_history_is_handed_the_configured_order_of_networks(wiring, fake_she
     expected = tuple(spec.source for spec in ordered_sources(wiring.cfg))
     assert expected  # the registry is not empty
     assert window.listing.query.rank == expected
+
+
+# --- T-166 · an alert interrupts the playback (REQ-TLP-006, CA-116.10) -----------
+
+
+def _a_week_of_history() -> None:
+    """Seven earthquakes in the history file the wiring will open."""
+    from datetime import UTC, datetime, timedelta
+
+    from vigia_eew.history import EventRecord
+
+    when = datetime.now(UTC) - timedelta(days=10)
+    from vigia_eew.history import HistoryStore
+
+    store = HistoryStore(prune_on_open=False).open()
+    for day in range(7):
+        moment = when + timedelta(days=day)
+        store.record(
+            EventRecord(
+                correlation_id=f"q{day}",
+                source="EMSC",
+                source_event_id=f"e{day}",
+                occurred_at=moment,
+                recorded_at=moment,
+                latitude=10.5,
+                longitude=-66.9,
+                depth_km=10.0,
+                magnitude=4.0,
+                region="TEST",
+                distance_km=30.0,
+                verdict="discarded",
+                reason="magnitude",
+            )
+        )
+    store.close()
+
+
+def test_the_history_is_handed_the_shell_s_timer(wiring, fake_shell) -> None:
+    """The playback advances on `FletShell.after`, the timer the shell already has."""
+    _a_week_of_history()
+    window = wiring.open_history(fake_shell)
+
+    window.playback.play()
+
+    assert len(fake_shell.after_calls) == 1
+    fake_shell.run_pending()
+    assert window.playback.step == 1
+
+
+def test_the_shell_is_told_how_to_pause_the_playback(wiring, fake_shell) -> None:
+    _a_week_of_history()
+    window = wiring.open_history(fake_shell)
+    window.playback.play()
+
+    fake_shell.on_covered()
+
+    assert window.playback.playing is False
+
+
+def test_an_alert_during_the_playback_takes_the_window_and_pauses_it(wiring) -> None:
+    """CA-116.10: the alert is all the window holds; the playback waits where it was."""
+    from vigia_eew.notify.flet_shell import FletShell
+
+    _a_week_of_history()
+    page = _Page()
+    shell = FletShell(page)
+    window = wiring.open_history(shell)
+    shown = page.controls[0]
+    window.playback.seek(3)
+    window.playback.play()
+    assert window.playback.playing is True
+
+    alert = _alerted(shell)
+
+    assert page.controls == [alert]
+    assert page.window.visible is True
+    assert window.playback.playing is False
+    assert window.playback.step == 3
+
+    shell.clear_alert(alert)
+
+    assert page.controls == [shown]
+    assert window.playback.playing is False  # shown again, paused
+    assert window.playback.step == 3
+
+
+def test_leaving_the_history_pauses_the_playback(wiring, fake_shell) -> None:
+    """A playback nobody is looking at has no reason to keep redrawing."""
+    _a_week_of_history()
+    window = wiring.open_history(fake_shell)
+    window.playback.play()
+
+    _buttons(fake_shell.screens[-1][2])["panel"].on_click(None)
+
+    assert window.playback.playing is False
+
+
+def test_closing_the_history_stops_the_playback(wiring, fake_shell) -> None:
+    """A step already asked of the timer must find nothing left to advance."""
+    _a_week_of_history()
+    window = wiring.open_history(fake_shell)
+    window.playback.play()
+
+    wiring._close_history(fake_shell)
+    fake_shell.run_pending()
+
+    assert window.playback.playing is False
+    assert window.playback.step == 0

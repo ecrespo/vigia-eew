@@ -539,3 +539,262 @@ def test_the_window_hands_the_list_the_order_of_trust(twice: HistoryStore) -> No
     window = HistoryWindow(twice, rank=("USGS", "EMSC"))
 
     assert window.listing.query.rank == ("USGS", "EMSC")
+
+
+# --- T-166 · the playback, a third reading of the same query (HU-116) --------------
+
+
+class _Timer:
+    """Stands in for `FletShell.after`: queues, and runs on demand."""
+
+    def __init__(self) -> None:
+        self.pending: list = []
+
+    def __call__(self, ms: int, action) -> None:
+        self.pending.append(action)
+
+    def tick(self) -> bool:
+        if not self.pending:
+            return False
+        self.pending.pop(0)()
+        return True
+
+    def run_out(self) -> None:
+        for _ in range(2000):
+            if not self.tick():
+                return
+        raise AssertionError("the playback never stopped scheduling")
+
+
+@pytest.fixture
+def month(tmp_path: Path) -> HistoryStore:
+    """Thirty earthquakes, one a day, magnitudes 3.0 to 5.9; the last came by two networks."""
+    from dataclasses import replace
+
+    store = HistoryStore(tmp_path / "month.sqlite3", prune_on_open=False)
+    store.open()
+    for day in range(30):
+        base = _record(magnitude=3.0 + day / 10, event_id=f"d{day:02d}")
+        store.record(replace(base, occurred_at=_WHEN + timedelta(days=day)))
+    again = replace(
+        _record(magnitude=5.9, event_id="d29-usgs", verdict="discarded"),
+        source="USGS",
+        correlation_id="tr-d29",
+        reason="duplicate",
+        occurred_at=_WHEN + timedelta(days=29),
+    )
+    store.record(again)
+    yield store
+    store.close()
+
+
+def _playing_window(store: HistoryStore, **kwargs):
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    timer = _Timer()
+    return HistoryWindow(store, after=timer, zone="UTC", **kwargs), timer
+
+
+def _magnitudes_on_map(window) -> list[float]:
+    return sorted(round(m.record.magnitude, 1) for m in window.map.markers)
+
+
+def test_without_a_timer_there_is_no_playback(month: HistoryStore) -> None:
+    """Nothing could advance it; the screen is the table and the map, as before."""
+    from vigia_eew.notify.history_window import HistoryWindow
+
+    assert HistoryWindow(month).playback is None
+
+
+def test_without_a_map_there_is_no_playback(month: HistoryStore) -> None:
+    window, _timer = _playing_window(month, with_map=False)
+
+    assert window.playback is None
+
+
+def test_the_playback_reads_the_filtered_set_per_earthquake(month: HistoryStore) -> None:
+    """ADR-035 §6: thirty-one arrivals in the table, thirty earthquakes to play."""
+    window, _timer = _playing_window(month)
+
+    assert window.listing.total == 31
+    assert len(window.playback.timeline) == 30
+
+
+def test_until_it_is_played_the_map_shows_the_whole_set(month: HistoryStore) -> None:
+    window, timer = _playing_window(month)
+
+    assert len(window.map.markers) == 31
+    assert timer.pending == []
+
+
+def test_a_frame_reaches_the_map_with_its_strengths(month: HistoryStore) -> None:
+    """Three days of fading, an earthquake a day: three symbols, the newest in full."""
+    window, _timer = _playing_window(month)
+
+    window.playback.seek(10)
+
+    by_age = sorted(window.map.markers, key=lambda m: m.record.occurred_at, reverse=True)
+    assert len(by_age) == 3
+    assert by_age[0].strength == 1.0
+    assert by_age[0].strength > by_age[1].strength > by_age[2].strength > 0.0
+
+
+def test_the_filter_governs_what_is_played(month: HistoryStore) -> None:
+    """CA-116.8: no frame holds an earthquake the filter left out."""
+    window, timer = _playing_window(month)
+    window.table._magnitude.value = "5"
+    window.table._apply_magnitude()
+    assert len(window.playback.timeline) == 10
+
+    window.playback.trail_switch.value = True
+    window.playback.trail_switch.on_change(None)
+    window.playback.play()
+    seen: list[float] = []
+    while timer.tick():
+        seen.extend(_magnitudes_on_map(window))
+
+    assert seen and min(seen) >= 5.0
+
+
+def test_changing_the_filter_replaces_the_set_being_played(month: HistoryStore) -> None:
+    """CA-116.8: the old playback stops, and the map shows what the filter selects."""
+    window, timer = _playing_window(month)
+    window.playback.play()
+    timer.tick()
+
+    window.table._magnitude.value = "5.5"
+    window.table._apply_magnitude()
+    timer.run_out()
+
+    assert window.playback.playing is False
+    assert window.playback.engaged is False
+    assert len(window.playback.timeline) == 5
+    assert _magnitudes_on_map(window) == [5.5, 5.6, 5.7, 5.8, 5.9, 5.9]  # the set, per arrival
+
+
+def test_stopping_shows_the_whole_set_again(month: HistoryStore) -> None:
+    window, _timer = _playing_window(month)
+    window.playback.seek(4)
+    assert len(window.map.markers) < 31
+
+    window.playback.stop()
+
+    assert len(window.map.markers) == 31
+    assert all(marker.strength == 1.0 for marker in window.map.markers)
+
+
+def test_turning_the_page_or_sorting_leaves_the_frame_on_the_map(month, monkeypatch) -> None:
+    """Neither changes the set, so neither may take the map from the playback."""
+    from vigia_eew.notify import history_view
+
+    monkeypatch.setattr(history_view, "TABLE_ROW_LIMIT", 10)
+    window, _timer = _playing_window(month)
+    window.playback.seek(10)
+    frame = [m.record.id for m in window.map.markers]
+
+    window.table._turn(+1)
+    window.table._sort("magnitude")
+
+    assert [m.record.id for m in window.map.markers] == frame
+    assert window.playback.step == 10
+
+
+def test_choosing_a_row_during_the_playback_keeps_the_frame(month: HistoryStore) -> None:
+    window, _timer = _playing_window(month)
+    window.playback.seek(10)
+    in_frame = window.map.markers[0].record.id
+
+    window.table.choose(in_frame)
+
+    assert len(window.map.markers) == 3
+    assert [m.record.id for m in window.map.markers if m.selected] == [in_frame]
+
+
+def test_a_set_too_large_plays_the_most_recent_and_says_so(month, monkeypatch) -> None:
+    """CA-116.11 -- and the pause control still answers."""
+    from vigia_eew.notify import history_window
+
+    monkeypatch.setattr(history_window, "PLAYBACK_SYMBOL_LIMIT", 10)
+    window, timer = _playing_window(month)
+    window.table._sort("magnitude")  # the table's order is not the playback's
+
+    playback = window.playback
+    assert len(playback.timeline) == 10
+    assert playback.timeline.period[0] == _WHEN + timedelta(days=20)
+    assert playback.notice.visible is True
+    assert "10" in playback.notice.value and "30" in playback.notice.value
+
+    playback.play()
+    timer.tick()
+    playback.play_button.on_click(None)
+    assert playback.playing is False
+
+
+def test_playing_does_not_move_the_map(month: HistoryStore, monkeypatch) -> None:
+    """CA-116.12: same centre, same zoom, and nothing that moves a map was called."""
+    import flet_map as fm
+
+    moved: list[str] = []
+    for mover in ("move_to", "center_on", "zoom_to", "zoom_in", "zoom_out", "rotate_from"):
+        monkeypatch.setattr(
+            fm.Map, mover, lambda self, *a, _name=mover, **k: moved.append(_name), raising=True
+        )
+    window, timer = _playing_window(month, reference=(10.28, -67.85), zoom=7)
+    the_map = window.map.map
+    before = (the_map.initial_center, the_map.initial_zoom)
+
+    window.playback.play()
+    timer.run_out()
+
+    assert window.playback.step == 29
+    assert (the_map.initial_center, the_map.initial_zoom) == before
+    assert moved == []
+
+
+def test_without_tiles_the_playback_says_the_map_is_unavailable(month: HistoryStore) -> None:
+    """CA-116.13: it is the same map, so it is the same notice."""
+    window, timer = _playing_window(month)
+    window.map._tile_failed(object())
+
+    window.playback.play()
+    timer.tick()
+
+    assert window.map._notice.visible is True
+    assert window.map.markers  # and the symbols are still played
+
+
+def test_nothing_to_play_disables_the_control(month: HistoryStore) -> None:
+    """CA-116.14."""
+    window, _timer = _playing_window(month)
+
+    window.table._magnitude.value = "9"
+    window.table._apply_magnitude()
+
+    assert window.playback.play_button.disabled is True
+    assert window.playback.period.value == "Nothing to play"
+
+
+def test_the_window_can_be_told_to_pause(month: HistoryStore) -> None:
+    """What the shell calls when an alert covers the screen (REQ-TLP-006)."""
+    window, timer = _playing_window(month)
+    window.playback.play()
+    timer.tick()
+
+    window.pause_playback()
+    timer.run_out()
+
+    assert window.playback.playing is False
+    assert window.playback.step == 1
+
+
+def test_refreshing_the_screen_reads_the_set_to_play_again(month: HistoryStore) -> None:
+    """The agent writes while the screen is open; coming back sees what it wrote."""
+    from dataclasses import replace
+
+    window, _timer = _playing_window(month)
+    new = replace(_record(magnitude=4.0, event_id="late"), occurred_at=_WHEN + timedelta(days=40))
+    month.record(new)
+
+    window.refresh()
+
+    assert len(window.playback.timeline) == 31

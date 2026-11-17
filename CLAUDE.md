@@ -137,7 +137,9 @@ UI loop runs on the main thread, ingestion lives in asyncio on a separate worker
 `AsyncioUiBridge` (in `notify/queue.py`) crosses events between both via a thread-safe
 queue + `FletShell.after()`. Flet drives **one window per process**, so `notify/flet_shell.py`
 (`FletShell`) decides what it shows: an alert > the open screen (responsive config panel,
-history, About — each carrying the navigation to the other two, `notify/navigation.py`) >
+history — with its map and a playback of it, `notify/timelapse.py` pure and
+`notify/timelapse_view.py` the control — and About, each carrying the navigation to the other
+two, `notify/navigation.py`) >
 hidden (agent) / quit (`--simulate`, `--settings`, `--history`). `Application` (`app.py`) wires all of this together; it exposes
 `execute()` (the full agent) and `simulate()` (injects the event from `simulation.py`
 without network, for `--simulate`).

@@ -23,8 +23,7 @@
 > **First batch: T-152 to T-155.** Run, review, adjust, and only then go on. F9 does not touch the
 > schema, the configuration or the pipeline, and it is verified with one command.
 >
-> **F9, F10 and F11 are done** (2026-11-16): gate green. Next batch: **F12**, which starts with
-> the spike **T-163** — its verdict can stop the phase.
+> **F9, F10, F11 and F12 are done** (2026-11-16): gate green. Next batch: **F13, T-167..T-171**.
 
 ## A constraint on every task
 
@@ -230,7 +229,7 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 
 ## F12 · The history in motion
 
-### [ ] T-163 · Spike: what one redraw costs
+### [x] T-163 · Spike: what one redraw costs — 2026-11-16
 - **What**: measure, on the real client, the time to replace the map layer's symbols for N = 50,
   100, 200, 400, 800 — with markers and with circles — and write the verdict.
 - **REQ**: REQ-TLP-007 · **Closes**: P-2
@@ -243,8 +242,14 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
 - **Note**: **this task delivers a document and a decision, not product code.** If the verdict is
   *not viable*, T-165 and T-166 are not started (06 §3, stop rule).
 - **Hours**: 3–6
+- **Verdict**: **viable with markers** — [10-SPIKE-TIMELAPSE](10-SPIKE-TIMELAPSE.md). About 0.22 ms
+  per marker and 0.08 per circle, linear. `PLAYBACK_SYMBOL_LIMIT` = 400, `MIN_DWELL` = 0.15 s,
+  `MAX_DWELL` = 2 s, `MAP_SYMBOL_LIMIT` = 500 kept; 400 × 0.15 s = 60 s. Script:
+  `scripts/spike_timelapse.py`.
+- **Owed**: measured under Xvfb with software rendering, without tiles. A rerun on the real
+  session is the maintainer's (10 §7).
 
-### [ ] T-164 · The timeline
+### [x] T-164 · The timeline — 2026-11-16
 - **What**: `notify/timelapse.py`, pure: steps, `frame`, intensity by age, `dwell`, `step_at`.
 - **REQ**: REQ-TLP-001, REQ-TLP-002, REQ-TLP-005, REQ-TLP-007 · **CA**: CA-116.1, CA-116.4,
   CA-116.5, CA-116.6, CA-116.9 · **ADR**: ADR-035
@@ -256,8 +261,12 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   contract fails if it does.
 - **lat.md**: `history.md` — D-8, and why a frame depends only on its step.
 - **Hours**: 4–7
+- **As built**: `Timeline`, `Frame`, `LEVELS` (four intensities), `SPEEDS`, `DEFAULT_FADE` = 3 days
+  — a judgement, not a measurement. The contract *The playback's timeline is pure* forbids `flet`
+  and `flet_map`, which needed `include_external_packages`; it was seen to fail on an import of
+  the toolkit.
 
-### [ ] T-165 · The playback control
+### [x] T-165 · The playback control — 2026-11-16
 - **What**: `notify/timelapse_view.py`: play, pause, a slider over the steps, speed, trail switch,
   the instant in local time and the period; advancing with `FletShell.after()`.
 - **REQ**: REQ-TLP-002, REQ-TLP-003, REQ-TLP-007 · **CA**: CA-116.2, CA-116.3, CA-116.7, CA-116.14
@@ -268,8 +277,11 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   after pause no further frame is painted; the label is the frame's instant in the configured zone;
   with an empty set the play control is disabled.
 - **Hours**: 5–9
+- **As built**: `TimelapseView` holds a painter and the shell's timer, never the map. **Added to
+  the design**: a *stop* control that hands the map back to the static set — without it the only
+  way out of a playback was to change a filter. Resuming repaints the step it resumes from.
 
-### [ ] T-166 · A third reading of the same query
+### [x] T-166 · A third reading of the same query — 2026-11-16
 - **What**: the playback inside `HistoryWindow`, fed by `HistoryList.everything()` in the earthquake
   reading; a filter change replaces the set; the bound's notice; pause on `on_covered`; the map's
   unavailable notice inherited; no call that moves the map.
@@ -283,6 +295,17 @@ it and change nothing else, and each asserts the existing alert tests unchanged 
   whole playback the map's centre and zoom are unchanged; thirty days of the local history play in
   under a minute at the top speed, observed on the packaged binary.
 - **Hours**: 4–7
+- **As built**: the playback sits under the map and paints through `HistoryMap` (`strengths`). The
+  window tells a change of set from a change of view by `HistoryList.filter_signature`. Leaving or
+  closing the history pauses it too. The alert test lives in `tests/test_navigation.py`, beside the
+  other tests that put an alert over a screen, not in `test_presentation_guarantee.py`. Also
+  touched: `history_view.py` (`everything(reading=, newest_first=)`), `wiring.py`.
+- **Observed on the real client** (X11 under Xvfb): filtered to 1 000 km, the playback runs, shows
+  the instant in local time and the period, fades older symbols, and a paused frame does not
+  change.
+- **Owed**: *thirty days in under a minute on the packaged binary* was **not** observed — no
+  binary was built. By construction a set of up to 400 earthquakes takes at most 60 s of clamped
+  steps; the observation is the maintainer's.
 
 ---
 

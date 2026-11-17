@@ -432,3 +432,66 @@ def test_the_notice_is_still_shown_over_the_map_when_a_tile_fails() -> None:
 
     assert holder.content.content is map_view._notice
     assert map_view._notice.visible is True
+
+
+# --- T-166 · a symbol can be drawn weaker (REQ-TLP-005) -----------------------------
+
+
+def _numbered(row_id: int, *, magnitude: float) -> EventRecord:
+    """A record as the store returns it: with the id of its row."""
+    from dataclasses import replace
+
+    return replace(_record(magnitude=magnitude, event_id=f"e-{row_id}"), id=row_id)
+
+
+def test_a_symbol_is_drawn_at_full_strength_unless_told_otherwise() -> None:
+    (marker,) = plan([_numbered(7, magnitude=4.0)])
+
+    assert marker.strength == 1.0
+
+
+def test_the_plan_carries_the_strength_each_earthquake_was_given() -> None:
+    records = [_numbered(7, magnitude=4.0), _numbered(8, magnitude=5.0)]
+
+    markers = plan(records, strengths={7: 0.45})
+
+    assert {marker.record.id: marker.strength for marker in markers} == {7: 0.45, 8: 1.0}
+
+
+def test_a_weaker_symbol_is_a_more_transparent_control() -> None:
+    from vigia_eew.notify.history_map import HistoryMap
+
+    map_view = HistoryMap()
+    records = [_numbered(7, magnitude=4.0), _numbered(8, magnitude=5.0)]
+
+    map_view.show(records, strengths={7: 0.45})
+
+    opacity = {
+        marker.record.id: symbol.content.opacity
+        for marker, symbol in zip(map_view.markers, _symbols(map_view), strict=True)
+    }
+    assert opacity == {7: 0.45, 8: 1.0}
+
+
+def test_showing_without_strengths_forgets_the_ones_of_a_frame() -> None:
+    from vigia_eew.notify.history_map import HistoryMap
+
+    map_view = HistoryMap()
+    records = [_numbered(7, magnitude=4.0)]
+    map_view.show(records, strengths={7: 0.45})
+
+    map_view.show(records)
+
+    assert [marker.strength for marker in map_view.markers] == [1.0]
+
+
+def test_selecting_keeps_the_strengths_of_the_frame_on_screen() -> None:
+    from vigia_eew.notify.history_map import HistoryMap
+
+    map_view = HistoryMap()
+    map_view.show([_numbered(7, magnitude=4.0)], strengths={7: 0.45})
+
+    map_view.select(7)
+
+    (marker,) = map_view.markers
+    assert (marker.selected, marker.strength) == (True, 0.45)

@@ -1,7 +1,7 @@
-"""The history screen: one filter, two readings of it (REQ-MAP-004, CA-112.6).
+"""The history screen: one filter, three readings of it (REQ-MAP-004, REQ-TLP-004).
 
-The table and the map answer the same question in two ways, so there is one
-filter and both obey it. A map still showing symbols the table has filtered
+The table, the map and the playback answer the same question in three ways,
+so there is one filter and all of them obey it. A map still showing symbols the table has filtered
 away is not a second opinion -- it is the product contradicting itself on one
 screen.
 
@@ -29,21 +29,29 @@ from vigia_eew.notify import ui_scale
 from vigia_eew.notify.history_map import DEFAULT_ZOOM, HistoryMap, centre_of
 from vigia_eew.notify.history_view import HistoryList, HistoryView
 from vigia_eew.notify.presentation import VENEZUELA_ZONE
+from vigia_eew.notify.timelapse import PLAYBACK_SYMBOL_LIMIT, Frame
+from vigia_eew.notify.timelapse_view import TimelapseView, Timer
 
 #: Height of each pane -- the table with its filters, and the map. Raised from
 #: 520 when the filters went from two controls to five: the table was left
 #: with room for six rows.
 MAP_HEIGHT = 680
 
-#: Symbols the map draws at once. **Provisional**: it is the figure the map
-#: happened to draw in v1.0 (the list loaded 500 rows), not a measurement.
-#: Nobody has measured what a redraw costs, and since the symbols became
-#: markers each one is heavier. T-163 measures it and replaces this number.
+#: Symbols the static map draws at once. **Measured**: a redraw costs about
+#: 0.22 ms per marker, so this many take some 110 ms -- and the static map is
+#: redrawn when a filter changes, not on a timer
+#: (docs/v1.1/10-SPIKE-TIMELAPSE.md §5). The playback has its own, lower
+#: bound, `PLAYBACK_SYMBOL_LIMIT`, because it redraws once per step.
 MAP_SYMBOL_LIMIT = 500
 
 
 class HistoryWindow:
-    """The table beside the map, both reading the same query."""
+    """The table beside the map, with the playback under it, all reading one query.
+
+    `after` is the shell's timer. With it -- and with a map -- the screen has
+    a playback; without either there is nothing to advance it or to draw it
+    on, and the screen is the table and the map.
+    """
 
     def __init__(
         self,
@@ -56,8 +64,11 @@ class HistoryWindow:
         with_map: bool = True,
         on_close: Callable[[], None] | None = None,
         rank: Sequence[str] = (),
+        after: Timer | None = None,
     ) -> None:
         self.listing = HistoryList(store, locale_code=locale_code, zone=zone, rank=rank)
+        #: The filters of the set the playback holds, or None before it has one.
+        self._played_signature: tuple[Any, ...] | None = None
         # The map opens on the user's reference point when there is one: the
         # history is worldwide, and the midpoint of earthquakes in Alaska and
         # Georgia is the Atlantic. Without one it falls back to the midpoint
@@ -68,6 +79,17 @@ class HistoryWindow:
                 locale_code=locale_code, zoom=zoom, centre=centre, on_select=self._symbol_pressed
             )
             if with_map
+            else None
+        )
+        self.playback = (
+            TimelapseView(
+                paint=self._paint_frame,
+                after=after,
+                on_stop=self._draw_set,
+                locale_code=locale_code,
+                zone=zone,
+            )
+            if self.map is not None and after is not None
             else None
         )
         self.table = HistoryView(
@@ -82,10 +104,18 @@ class HistoryWindow:
             )
         ]
         if self.map is not None:
-            panes.append(
-                ft.Container(
-                    col=ui_scale.HISTORY_MAP_COLUMNS, height=MAP_HEIGHT, content=self.map.view
+            beside: Any = self.map.view
+            if self.playback is not None:
+                beside = ft.Column(
+                    expand=True,
+                    spacing=8,
+                    controls=[
+                        ft.Container(expand=True, content=self.map.view),
+                        self.playback.view,
+                    ],
                 )
+            panes.append(
+                ft.Container(col=ui_scale.HISTORY_MAP_COLUMNS, height=MAP_HEIGHT, content=beside)
             )
         header: list[Any] = [
             ft.Icon(ft.Icons.HISTORY, color=ft.Colors.PRIMARY),
@@ -116,15 +146,47 @@ class HistoryWindow:
         self._redraw_map()
 
     def refresh(self) -> None:
-        """Redraws both views from the current filter."""
+        """Redraws every view from the current filter, reading the file again."""
+        # The agent writes while the screen is open: the set the playback
+        # holds may no longer be what the same filters select.
+        self._played_signature = None
         self.table.refresh()
+
+    def pause_playback(self) -> None:
+        """Stops the playback advancing, where it is.
+
+        What the shell is told to call when an alert covers the screen
+        (REQ-TLP-006): the alert takes the window, and a timer that kept
+        stepping underneath would leave the user somewhere else when they
+        come back.
+        """
+        if self.playback is not None:
+            self.playback.pause()
 
     def _redraw_map(self) -> None:
         """Called by the table whenever what it shows has changed.
 
         One direction only: the list decides the set and the map follows it.
+
+        While the playback has the map, a change that leaves the set alone --
+        a page turned, a column sorted, a row chosen -- leaves the frame on
+        it. A change of filter replaces the set, and the playback lets go.
         """
         if getattr(self, "map", None) is None:
+            return
+        playback = getattr(self, "playback", None)  # not there yet while it is being built
+        same_set = self.listing.filter_signature == self._played_signature
+        if playback is not None and playback.engaged and same_set:
+            table = getattr(self, "table", None)
+            self.map.select(None if table is None else table.selected)  # type: ignore[union-attr]
+            return
+        self._draw_set()
+        if playback is not None and not same_set:
+            self._load_playback(playback)
+
+    def _draw_set(self) -> None:
+        """Draws the whole filtered set on the map: the static reading."""
+        if self.map is None:
             return
         # The whole filtered set, not the table's page (ADR-032): turning a
         # page must not move the map.
@@ -140,11 +202,43 @@ class HistoryWindow:
             # The filter removed it: a highlight on something no longer shown
             # would point at nothing.
             table.selected = chosen = None
-        self.map.show(  # type: ignore[union-attr]
+        self.map.show(
             everything.records,
             total=everything.total,
             describe=lambda record: self.listing.row_for(record).summary,
             selected=chosen,
+        )
+
+    # --- The playback: a third reading of the same query (REQ-TLP-004) ---
+
+    def _load_playback(self, playback: TimelapseView) -> None:
+        """Hands the playback the set the filters select, per earthquake.
+
+        Per earthquake whatever the table is reading, so that none plays
+        twice; and the most recent ones when there are more than it holds,
+        whatever the table is sorted by. It has no query of its own.
+        """
+        # @lat: [[history#The playback is a third reading of one query]]
+        played = self.listing.everything(
+            PLAYBACK_SYMBOL_LIMIT, reading="earthquake", newest_first=True
+        )
+        self._played_signature = self.listing.filter_signature
+        playback.load(played.records, total=played.total)
+
+    def _paint_frame(self, frame: Frame) -> None:
+        """Draws one frame of the playback, through the map the static set uses.
+
+        The same markers, so a paused frame answers the pointer like the
+        static map does. Nothing here moves the map (REQ-TLP-008).
+        """
+        if self.map is None:
+            return
+        self.map.show(
+            [record for record, _strength in frame.symbols],
+            describe=lambda record: self.listing.row_for(record).summary,
+            strengths={
+                record.id: strength for record, strength in frame.symbols if record.id is not None
+            },
         )
 
     # --- The table and the map point at the same thing (REQ-MAP-007) ---
