@@ -8,8 +8,13 @@ of that is checked on a fake page: no Flet client, no display.
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
+import sys
 import threading
 from types import SimpleNamespace
+
+import pytest
 
 from vigia_eew.notify.flet_shell import FletShell
 
@@ -337,3 +342,28 @@ def test_a_callback_that_fails_does_not_cost_the_alert() -> None:
 
     assert page.controls == ["ALERT"]
     assert page.window.always_on_top is True
+
+
+# --- Termination ------------------------------------------------------------------
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="no POSIX signal handlers on Windows")
+def test_sigterm_ends_the_run_like_closing_the_window() -> None:
+    """`systemctl stop`, a logout, `kill`: the agent quits instead of ignoring it."""
+    page = _Page()
+
+    async def scenario() -> None:
+        shell = FletShell(page, loop=asyncio.get_running_loop())
+        assert shell.quit_on_terminate() is True
+        _alert(shell)  # even with an alert up: termination is not the user's X
+        os.kill(os.getpid(), signal.SIGTERM)
+        await asyncio.sleep(0.05)
+
+    asyncio.run(scenario())
+
+    assert page.window.prevent_close is False
+    assert any(getattr(t, "__name__", "") == "_destroy" for t in page.tasks)
+
+
+def test_without_a_loop_there_is_nothing_to_install_a_handler_on() -> None:
+    assert FletShell(_Page()).quit_on_terminate() is False
